@@ -17,68 +17,21 @@
     </div>
 
     <div class="home-layout">
-      <!-- Calendar Section -->
-      <section class="calendar-section">
-        <el-card class="tech-card calendar-card" shadow="hover">
+      <!-- Milk Dragon Animation Section -->
+      <section class="animation-section">
+        <el-card class="tech-card animation-card" shadow="hover">
           <div class="card-header">
             <div class="header-left">
               <div class="card-title">
-                <el-icon class="icon-pulse"><Calendar /></el-icon>
-                <span>公共假日管理</span>
+                <el-icon class="icon-pulse"><MagicStick /></el-icon>
+                <span>体素花园</span>
               </div>
-              <div class="card-subtitle">当前选择：{{ selectedDateLabel }}</div>
+              <div class="card-subtitle">放松一下，看看奶龙</div>
             </div>
-            <el-button
-              size="small"
-              :type="manualHolidayActive ? 'warning' : 'primary'"
-              class="glow-button"
-              @click="handleManualHolidayToggle"
-            >
-              {{ manualHolidayActive ? '取消标记' : '标记为假日' }}
-            </el-button>
           </div>
 
-          <div class="calendar-shell">
-            <el-calendar
-              v-model="calendarDate"
-              :fullscreen="false"
-              @panel-change="handlePanelChange"
-            >
-              <template #date-cell="{ data }">
-                <div
-                  class="date-cell"
-                  :class="{
-                    'date-cell--selected': data.isSelected,
-                    'date-cell--manual': isManualHoliday(data.day),
-                    'date-cell--today': isToday(data.day)
-                  }"
-                  @click.stop="handleDateSelect(data.day)"
-                >
-                  <span class="date-cell__number">{{ formatDayNumber(data.day) }}</span>
-                  <div v-if="isManualHoliday(data.day)" class="date-dot"></div>
-                </div>
-              </template>
-            </el-calendar>
-          </div>
-
-          <div class="calendar-footer">
-            <div v-if="manualHolidayList.length" class="holiday-list">
-              <span class="list-label">已标记假日:</span>
-              <div class="tags-scroll">
-                <el-tag
-                  v-for="item in manualHolidayList"
-                  :key="item"
-                  size="small"
-                  effect="dark"
-                  class="tech-tag"
-                >
-                  {{ formatHolidayDate(item) }}
-                </el-tag>
-              </div>
-            </div>
-            <div v-else class="empty-hint">
-              暂无自定义假日，点击日期可快速添加
-            </div>
+          <div class="animation-shell">
+            <MilkDragon />
           </div>
         </el-card>
       </section>
@@ -136,20 +89,21 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Calendar, Odometer, ArrowRight } from '@element-plus/icons-vue'
+import { Odometer, ArrowRight, MagicStick } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
-import { useManualHolidays } from '@/composables/useManualHolidays'
+import MilkDragon from '@/components/MilkDragon.vue'
 
 export default {
   name: 'Home',
   components: {
     TaskCard,
     TaskForm,
-    Calendar,
+    MilkDragon,
     Odometer,
-    ArrowRight
+    ArrowRight,
+    MagicStick
   },
   setup() {
     const router = useRouter()
@@ -157,19 +111,6 @@ export default {
     const loading = ref(false)
     const showTaskForm = ref(false)
     const editingTask = ref(null)
-
-    const {
-      calendarDate,
-      selectedDateLabel,
-      manualHolidayList,
-      manualHolidayActive,
-      formatDayNumber,
-      isManualHoliday,
-      handleManualHolidayToggle,
-      handleDateSelect,
-      handlePanelChange,
-      initManualHolidays
-    } = useManualHolidays()
 
     const greeting = computed(() => {
       const hour = new Date().getHours()
@@ -186,16 +127,6 @@ export default {
         weekday: 'long' 
       })
     })
-
-    const isToday = (dateStr) => {
-      const today = new Date().toISOString().split('T')[0]
-      return dateStr === today
-    }
-
-    const formatHolidayDate = (dateStr) => {
-      const date = new Date(dateStr)
-      return `${date.getMonth() + 1}/${date.getDate()}`
-    }
 
     const loadTodayTasks = async ({ showSpinner = true } = {}) => {
       if (showSpinner) {
@@ -264,27 +195,15 @@ export default {
 
     onMounted(async () => {
       await loadTodayTasks()
-      await initManualHolidays()
     })
 
     return {
-      calendarDate,
-      selectedDateLabel,
-      manualHolidayList,
-      manualHolidayActive,
       todayTasks,
       loading,
       showTaskForm,
       editingTask,
       greeting,
       currentDateDisplay,
-      formatDayNumber,
-      isManualHoliday,
-      isToday,
-      formatHolidayDate,
-      handleManualHolidayToggle,
-      handlePanelChange,
-      handleDateSelect,
       goToTaskList,
       handleToggleStatus,
       handleEdit,
@@ -344,7 +263,7 @@ export default {
 /* Layout Grid */
 .home-layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 450px 1fr; /* 调整左侧宽度以适应动画 */
   gap: 32px;
   align-items: start;
 }
@@ -402,123 +321,12 @@ export default {
   color: var(--secondary-color);
 }
 
-/* Calendar Specifics */
-.calendar-shell {
-  margin: 0 -10px;
-}
-
-:deep(.el-calendar) {
-  background: transparent;
-  --el-calendar-border: none;
-}
-
-:deep(.el-calendar__header) {
-  padding: 0 10px 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-:deep(.el-calendar__title) {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-:deep(.el-calendar__body) {
-  padding: 12px 0;
-}
-
-:deep(.el-calendar-table td) {
-  border: none;
-}
-
-:deep(.el-calendar-table td.is-selected) {
-  background: transparent;
-}
-
-.date-cell {
-  height: 42px;
-  width: 42px;
-  margin: 0 auto;
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  color: var(--text-secondary);
-}
-
-.date-cell:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-}
-
-.date-cell--selected {
-  background: var(--primary-color) !important;
-  color: #fff !important;
-  box-shadow: var(--glow-primary);
-}
-
-.date-cell--today {
-  border: 1px solid var(--primary-color);
-}
-
-.date-cell--manual {
-  background: rgba(139, 92, 246, 0.15);
-  color: var(--secondary-color);
-}
-
-.date-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background-color: var(--secondary-color);
-  position: absolute;
-  bottom: 4px;
-  box-shadow: 0 0 4px var(--secondary-color);
-}
-
-.calendar-footer {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
-}
-
-.holiday-list {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.list-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.tags-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.tags-scroll::-webkit-scrollbar {
-  height: 2px;
-}
-
-.tech-tag {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid var(--border-color);
-  color: var(--secondary-color);
-}
-
-.empty-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-  font-style: italic;
+/* Animation Section Specifics */
+.animation-shell {
+  margin: 0 -20px -20px; /* 抵消 padding */
+  border-radius: 0 0 24px 24px;
+  overflow: hidden;
+  min-height: 400px;
 }
 
 /* Tasks Section */
@@ -558,12 +366,12 @@ export default {
   100% { opacity: 1; transform: scale(1); }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
   .home-layout {
     grid-template-columns: 1fr;
   }
   
-  .calendar-section {
+  .animation-section {
     order: 2;
   }
 }
