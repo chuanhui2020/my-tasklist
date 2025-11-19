@@ -1,74 +1,84 @@
 <template>
-  <el-card class="task-card" :class="{ 'task-completed': task.status === 'done' }">
-    <template #header>
-      <div class="task-header">
+  <el-card 
+    class="task-card" 
+    :class="{ 
+      'task-completed': task.status === 'done',
+      'task-overdue': isOverdue && task.status !== 'done'
+    }"
+  >
+    <div class="card-glow"></div>
+    <div class="task-header">
+      <div class="title-section">
+        <div class="status-indicator" :class="task.status"></div>
         <span class="task-title" :class="{ 'completed-title': task.status === 'done' }">
           {{ task.title }}
         </span>
-        <el-tag :type="task.status === 'done' ? 'success' : 'warning'" size="small">
-          {{ task.status === 'done' ? '已完成' : '待完成' }}
-        </el-tag>
       </div>
-    </template>
+      <el-tag 
+        :type="task.status === 'done' ? 'success' : 'warning'" 
+        size="small"
+        effect="dark"
+        class="status-tag"
+      >
+        {{ task.status === 'done' ? '已完成' : '进行中' }}
+      </el-tag>
+    </div>
     
     <div class="task-content">
       <p v-if="task.description" class="task-description">
         {{ task.description }}
       </p>
       
-      <div class="task-dates">
-        <div v-if="task.due_date" class="due-date">
+      <div class="task-meta">
+        <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
           <el-icon><Calendar /></el-icon>
-          <span>截止: {{ formatDate(task.due_date) }}</span>
-          <el-tag 
-            v-if="isOverdue" 
-            type="danger" 
-            size="small"
-            style="margin-left: 8px;"
-          >
-            已过期
-          </el-tag>
+          <span>{{ formatDate(task.due_date) }}</span>
+          <span v-if="isOverdue" class="overdue-badge">!</span>
         </div>
-        <div class="created-date">
+        <div class="meta-item">
           <el-icon><Clock /></el-icon>
-          <span>创建: {{ formatDateTime(task.created_at) }}</span>
+          <span>{{ formatDateTime(task.created_at) }}</span>
         </div>
       </div>
     </div>
     
-    <template #footer>
-      <div class="task-actions">
-        <el-button 
-          :type="task.status === 'done' ? 'info' : 'success'"
-          size="small"
-          @click="$emit('toggle-status', task)"
-        >
-          <el-icon>
-            <Check v-if="task.status === 'pending'" />
-            <RefreshLeft v-else />
-          </el-icon>
-          {{ task.status === 'done' ? '标记未完成' : '标记完成' }}
-        </el-button>
-        
-        <el-button 
-          type="primary" 
-          size="small" 
-          @click="$emit('edit', task)"
-        >
-          <el-icon><Edit /></el-icon>
-          编辑
-        </el-button>
-        
-        <el-button 
-          type="danger" 
-          size="small" 
-          @click="$emit('delete', task)"
-        >
-          <el-icon><Delete /></el-icon>
-          删除
-        </el-button>
-      </div>
-    </template>
+    <div class="task-actions">
+      <el-button 
+        :type="task.status === 'done' ? 'info' : 'success'"
+        size="small"
+        circle
+        plain
+        @click="$emit('toggle-status', task)"
+        :title="task.status === 'done' ? '标记未完成' : '标记完成'"
+      >
+        <el-icon>
+          <Check v-if="task.status === 'pending'" />
+          <RefreshLeft v-else />
+        </el-icon>
+      </el-button>
+      
+      <el-button 
+        type="primary" 
+        size="small" 
+        circle
+        plain
+        @click="$emit('edit', task)"
+        title="编辑"
+      >
+        <el-icon><Edit /></el-icon>
+      </el-button>
+      
+      <el-button 
+        type="danger" 
+        size="small" 
+        circle
+        plain
+        @click="$emit('delete', task)"
+        title="删除"
+      >
+        <el-icon><Delete /></el-icon>
+      </el-button>
+    </div>
   </el-card>
 </template>
 
@@ -107,7 +117,12 @@ export default {
     
     const formatDateTime = (dateTimeString) => {
       const date = new Date(dateTimeString)
-      return date.toLocaleString('zh-CN')
+      return date.toLocaleString('zh-CN', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
     }
     
     return {
@@ -121,79 +136,162 @@ export default {
 
 <style scoped>
 .task-card {
-  height: fit-content;
-  transition: all 0.3s ease;
+  position: relative;
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
 
 .task-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg), var(--glow-primary);
+  border-color: rgba(6, 182, 212, 0.3) !important;
 }
 
-.task-completed {
-  background-color: #f0f9ff;
-  border-color: #67c23a;
+.card-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.task-card:hover .card-glow {
+  opacity: 1;
 }
 
 .task-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.title-section {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  flex: 1;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.status-indicator.pending {
+  background-color: var(--accent-warning);
+  box-shadow: 0 0 8px var(--accent-warning);
+}
+
+.status-indicator.done {
+  background-color: var(--accent-success);
+  box-shadow: 0 0 8px var(--accent-success);
 }
 
 .task-title {
   font-weight: 600;
   font-size: 16px;
-  color: #303133;
-  flex: 1;
-  margin-right: 10px;
+  color: var(--text-primary);
+  line-height: 1.4;
 }
 
 .completed-title {
+  color: var(--text-muted);
   text-decoration: line-through;
-  color: #909399;
+}
+
+.status-tag {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
 }
 
 .task-content {
-  padding: 10px 0;
+  margin-bottom: 16px;
 }
 
 .task-description {
-  color: #606266;
-  margin-bottom: 15px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 12px;
   line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.task-dates {
+.task-meta {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.due-date,
-.created-date {
+.meta-item {
   display: flex;
   align-items: center;
-  gap: 5px;
-  color: #909399;
-  font-size: 14px;
+  gap: 4px;
+}
+
+.text-danger {
+  color: var(--accent-danger);
+}
+
+.overdue-badge {
+  background: var(--accent-danger);
+  color: white;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 10px;
 }
 
 .task-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
 }
 
-@media (max-width: 768px) {
-  .task-actions {
-    flex-direction: column;
-  }
-  
-  .task-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
+:deep(.el-button.is-circle) {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+:deep(.el-button.is-circle:hover) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+/* Completed State Overrides */
+.task-completed {
+  opacity: 0.8;
+}
+
+.task-completed:hover {
+  opacity: 1;
+  border-color: var(--accent-success) !important;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+
+.task-completed .card-glow {
+  background: var(--accent-success);
 }
 </style>

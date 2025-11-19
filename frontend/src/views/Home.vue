@@ -1,20 +1,40 @@
 ﻿<template>
   <div class="home-wrapper">
+    <!-- Hero Section -->
+    <div class="hero-section">
+      <div class="hero-content">
+        <h1 class="hero-title text-gradient">
+          <span class="greeting">{{ greeting }}</span>, 欢迎回来
+        </h1>
+        <p class="hero-subtitle">
+          今日待办 <span class="highlight-count">{{ todayTasks.length }}</span> 项 · 
+          <span class="date-display">{{ currentDateDisplay }}</span>
+        </p>
+      </div>
+      <div class="hero-decoration">
+        <div class="pulse-circle"></div>
+      </div>
+    </div>
+
     <div class="home-layout">
+      <!-- Calendar Section -->
       <section class="calendar-section">
-        <el-card class="calendar-card" shadow="hover">
-          <div class="calendar-header">
-            <div>
-              <div class="calendar-title">公共假日管理</div>
-              <div class="calendar-subtitle">当前选择：{{ selectedDateLabel }}</div>
+        <el-card class="tech-card calendar-card" shadow="hover">
+          <div class="card-header">
+            <div class="header-left">
+              <div class="card-title">
+                <el-icon class="icon-pulse"><Calendar /></el-icon>
+                <span>公共假日管理</span>
+              </div>
+              <div class="card-subtitle">当前选择：{{ selectedDateLabel }}</div>
             </div>
             <el-button
               size="small"
               :type="manualHolidayActive ? 'warning' : 'primary'"
-              class="calendar-action"
+              class="glow-button"
               @click="handleManualHolidayToggle"
             >
-              {{ manualHolidayActive ? '取消标记' : '标记为公共假日' }}
+              {{ manualHolidayActive ? '取消标记' : '标记为假日' }}
             </el-button>
           </div>
 
@@ -29,60 +49,67 @@
                   class="date-cell"
                   :class="{
                     'date-cell--selected': data.isSelected,
-                    'date-cell--manual': isManualHoliday(data.day)
+                    'date-cell--manual': isManualHoliday(data.day),
+                    'date-cell--today': isToday(data.day)
                   }"
                   @click.stop="handleDateSelect(data.day)"
                 >
                   <span class="date-cell__number">{{ formatDayNumber(data.day) }}</span>
-                  <span v-if="isManualHoliday(data.day)" class="date-cell__tag">假日</span>
+                  <div v-if="isManualHoliday(data.day)" class="date-dot"></div>
                 </div>
               </template>
             </el-calendar>
           </div>
 
-          <div class="calendar-footnote">
-            <p>提示：点击日期即可切换，标记后以暖黄色高亮显示。</p>
-            <div v-if="manualHolidayList.length" class="calendar-list">
-              <div class="calendar-list__title">本年已标记的公共假日</div>
-              <div class="calendar-list__tags">
+          <div class="calendar-footer">
+            <div v-if="manualHolidayList.length" class="holiday-list">
+              <span class="list-label">已标记假日:</span>
+              <div class="tags-scroll">
                 <el-tag
                   v-for="item in manualHolidayList"
                   :key="item"
                   size="small"
-                  effect="plain"
+                  effect="dark"
+                  class="tech-tag"
                 >
-                  {{ item }}
+                  {{ formatHolidayDate(item) }}
                 </el-tag>
               </div>
             </div>
-            <div v-else class="calendar-empty">
-              暂无自定义公共假日，选择日期后点击上方按钮即可添加。
+            <div v-else class="empty-hint">
+              暂无自定义假日，点击日期可快速添加
             </div>
           </div>
         </el-card>
       </section>
 
+      <!-- Tasks Section -->
       <section class="tasks-section">
-        <el-card class="tasks-card" shadow="hover">
+        <el-card class="tech-card tasks-card" shadow="hover">
           <template #header>
-            <div class="tasks-header">
-              <div>
-                <div class="tasks-title">今日任务概览</div>
-                <div class="tasks-subtitle">聚焦今日待办，保持节奏</div>
+            <div class="card-header">
+              <div class="header-left">
+                <div class="card-title">
+                  <el-icon class="icon-spin"><Odometer /></el-icon>
+                  <span>今日任务</span>
+                </div>
+                <div class="card-subtitle">保持专注，高效完成</div>
               </div>
-              <el-button type="primary" @click="goToTaskList">查看全部任务</el-button>
+              <el-button text class="view-all-btn" @click="goToTaskList">
+                查看全部 <el-icon><ArrowRight /></el-icon>
+              </el-button>
             </div>
           </template>
 
           <div v-if="loading" class="tasks-loading">
-            <el-skeleton :rows="4" animated />
+            <div class="loading-spinner"></div>
           </div>
 
           <div v-else-if="todayTasks.length === 0" class="tasks-empty">
-            <el-empty description="今天的安排暂时为空" />
+            <el-empty description="今日无待办任务" :image-size="120" />
           </div>
 
-          <div v-else class="tasks-list">
+          <div v-else class="tasks-grid">
             <TaskCard
               v-for="task in todayTasks"
               :key="task.id"
@@ -106,9 +133,10 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Calendar, Odometer, ArrowRight } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
@@ -118,7 +146,10 @@ export default {
   name: 'Home',
   components: {
     TaskCard,
-    TaskForm
+    TaskForm,
+    Calendar,
+    Odometer,
+    ArrowRight
   },
   setup() {
     const router = useRouter()
@@ -139,6 +170,32 @@ export default {
       handlePanelChange,
       initManualHolidays
     } = useManualHolidays()
+
+    const greeting = computed(() => {
+      const hour = new Date().getHours()
+      if (hour < 6) return '夜深了'
+      if (hour < 12) return '早上好'
+      if (hour < 18) return '下午好'
+      return '晚上好'
+    })
+
+    const currentDateDisplay = computed(() => {
+      return new Date().toLocaleDateString('zh-CN', { 
+        month: 'long', 
+        day: 'numeric', 
+        weekday: 'long' 
+      })
+    })
+
+    const isToday = (dateStr) => {
+      const today = new Date().toISOString().split('T')[0]
+      return dateStr === today
+    }
+
+    const formatHolidayDate = (dateStr) => {
+      const date = new Date(dateStr)
+      return `${date.getMonth() + 1}/${date.getDate()}`
+    }
 
     const loadTodayTasks = async ({ showSpinner = true } = {}) => {
       if (showSpinner) {
@@ -185,7 +242,8 @@ export default {
     const handleDelete = async (task) => {
       try {
         await ElMessageBox.confirm('确定要删除这个任务吗？', '确认删除', {
-          type: 'warning'
+          type: 'warning',
+          customClass: 'tech-message-box'
         })
         await api.deleteTask(task.id)
         await loadTodayTasks({ showSpinner: false })
@@ -218,8 +276,12 @@ export default {
       loading,
       showTaskForm,
       editingTask,
+      greeting,
+      currentDateDisplay,
       formatDayNumber,
       isManualHoliday,
+      isToday,
+      formatHolidayDate,
       handleManualHolidayToggle,
       handlePanelChange,
       handleDateSelect,
@@ -235,221 +297,274 @@ export default {
 
 <style scoped>
 .home-wrapper {
-  max-width: 1500px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 40px 32px 60px;
+  padding: 20px 40px 60px;
 }
 
+/* Hero Section */
+.hero-section {
+  margin-bottom: 40px;
+  position: relative;
+  padding: 20px 0;
+}
+
+.hero-title {
+  font-size: 36px;
+  font-weight: 800;
+  margin: 0 0 10px;
+  letter-spacing: -1px;
+}
+
+.greeting {
+  color: var(--primary-color);
+  text-shadow: var(--glow-primary);
+}
+
+.hero-subtitle {
+  font-size: 16px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.highlight-count {
+  color: var(--secondary-color);
+  font-weight: 700;
+  font-size: 20px;
+  text-shadow: var(--secondary-glow);
+}
+
+.date-display {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* Layout Grid */
 .home-layout {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 380px 1fr;
   gap: 32px;
   align-items: start;
 }
 
-.calendar-card {
-  border-radius: 20px;
-  overflow: hidden;
-  background: linear-gradient(160deg, #fef6e7 0%, #ffffff 70%);
-  box-shadow: 0 15px 35px rgba(255, 193, 7, 0.15);
+/* Tech Card Styles */
+.tech-card {
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--shadow-lg) !important;
+  border-radius: 24px;
+  overflow: visible;
+  position: relative;
 }
 
-.calendar-header {
+.tech-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+}
+
+.card-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 12px;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
-.calendar-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #d48806;
+.card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.calendar-subtitle {
-  font-size: 13px;
-  color: #8c8c8c;
-  margin-top: 6px;
+.card-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  margin-left: 28px; /* Align with text start */
 }
 
+.icon-pulse {
+  animation: pulse 3s infinite;
+  color: var(--primary-color);
+}
+
+.icon-spin {
+  color: var(--secondary-color);
+}
+
+/* Calendar Specifics */
 .calendar-shell {
-  position: relative;
-  width: 100%;
-  padding: 12px;
+  margin: 0 -10px;
 }
 
 :deep(.el-calendar) {
   background: transparent;
+  --el-calendar-border: none;
 }
 
 :deep(.el-calendar__header) {
-  padding: 0 8px 12px;
-  font-size: 13px;
-  color: #595959;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
+  padding: 0 10px 12px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-:deep(.el-calendar__header span) {
-  flex: 1;
-  text-align: center;
-  font-weight: 500;
-}
-
-:deep(.el-calendar__header .el-button-group) {
-  order: 1;
-  display: flex;
-  gap: 6px;
-}
-
-:deep(.el-calendar__header .el-button-group .el-button) {
-  font-size: 12px;
-  padding: 4px 10px;
+:deep(.el-calendar__title) {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 :deep(.el-calendar__body) {
-  padding: 0 6px 12px;
-}
-
-:deep(.el-calendar-table) {
-  table-layout: fixed;
+  padding: 12px 0;
 }
 
 :deep(.el-calendar-table td) {
-  width: calc(100% / 7);
-  height: 0;
-  padding-bottom: calc(100% / 7);
-  position: relative;
+  border: none;
 }
 
-:deep(.el-calendar-day) {
-  position: absolute;
-  inset: 6px;
-  padding: 0;
+:deep(.el-calendar-table td.is-selected) {
+  background: transparent;
 }
 
 .date-cell {
-  width: 100%;
-  height: 100%;
-  border-radius: 14px;
+  height: 42px;
+  width: 42px;
+  margin: 0 auto;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 6px;
-  transition: all 0.2s ease;
+  justify-content: center;
   cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  color: var(--text-secondary);
 }
 
-.date-cell::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 20%;
-  height: 20%;
-  transform: translate(-50%, -50%) scale(0);
-  border-radius: 50%;
-  background-color: rgba(82, 196, 26, 0.45);
-  opacity: 0;
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.date-cell:hover::before {
-  transform: translate(-50%, -50%) scale(1);
-  opacity: 1;
+.date-cell:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
 }
 
 .date-cell--selected {
-  box-shadow: inset 0 0 0 2px rgba(64, 158, 255, 0.45);
+  background: var(--primary-color) !important;
+  color: #fff !important;
+  box-shadow: var(--glow-primary);
+}
+
+.date-cell--today {
+  border: 1px solid var(--primary-color);
 }
 
 .date-cell--manual {
-  background-color: rgba(82, 196, 26, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(47, 160, 10, 0.6);
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--secondary-color);
 }
 
-.date-cell__number {
-  font-size: 15px;
-  font-weight: 600;
+.date-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--secondary-color);
+  position: absolute;
+  bottom: 4px;
+  box-shadow: 0 0 4px var(--secondary-color);
 }
 
-.date-cell__tag {
-  display: none;
+.calendar-footer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
 }
 
-.calendar-footnote {
-  margin-top: 18px;
-  font-size: 12px;
-  color: #8c8c8c;
-  line-height: 1.6;
-}
-
-.calendar-list {
-  margin-top: 12px;
-  padding: 14px;
-  background-color: rgba(255, 214, 102, 0.18);
-  border-radius: 14px;
-}
-
-.calendar-list__title {
-  font-weight: 500;
-  color: #ad6800;
-  margin-bottom: 8px;
-}
-
-.calendar-list__tags {
+.holiday-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.calendar-empty {
-  margin-top: 12px;
-  color: #bfbfbf;
-}
-
-.tasks-card {
-  border-radius: 20px;
-}
-
-.tasks-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 
-.tasks-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: #1f1f1f;
+.list-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.tasks-subtitle {
-  font-size: 13px;
-  color: #8c8c8c;
-  margin-top: 6px;
+.tags-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
-.tasks-loading,
-.tasks-empty {
-  padding: 36px 12px;
+.tags-scroll::-webkit-scrollbar {
+  height: 2px;
 }
 
-.tasks-list {
+.tech-tag {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  color: var(--secondary-color);
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  font-style: italic;
+}
+
+/* Tasks Section */
+.tasks-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
 }
 
-@media (max-width: 1100px) {
+.view-all-btn {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.view-all-btn:hover {
+  color: var(--primary-color);
+  text-shadow: var(--glow-primary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(6, 182, 212, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s ease-in-out infinite;
+  margin: 40px auto;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 1024px) {
   .home-layout {
     grid-template-columns: 1fr;
+  }
+  
+  .calendar-section {
+    order: 2;
   }
 }
 </style>
