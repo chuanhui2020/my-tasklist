@@ -1,67 +1,28 @@
 ﻿<template>
   <div class="tasks-wrapper">
     <div class="layout">
-      <aside class="layout-calendar">
-        <el-card class="calendar-card" shadow="hover">
-          <div class="calendar-header">
-            <div>
-              <div class="calendar-title">公共假日管理</div>
-              <div class="calendar-subtitle">当前选择：{{ selectedDateLabel }}</div>
-            </div>
-            <el-button
-              size="small"
-              :type="manualHolidayActive ? 'warning' : 'primary'"
-              class="calendar-action"
-              @click="handleManualHolidayToggle"
-            >
-              {{ manualHolidayActive ? '取消标记' : '标记为公共假日' }}
-            </el-button>
-          </div>
-
-          <div class="calendar-shell">
-            <el-calendar
-              v-model="calendarDate"
-              :fullscreen="false"
-              @panel-change="handlePanelChange"
-            >
-              <template #date-cell="{ data }">
-                <div
-                  class="date-cell"
-                  :class="{
-                    'date-cell--selected': data.isSelected,
-                    'date-cell--manual': isManualHoliday(data.day)
-                  }"
-                  @click.stop="handleDateSelect(data.day)"
-                >
-                  <span class="date-cell__number">{{ formatDayNumber(data.day) }}</span>
-                  <span v-if="isManualHoliday(data.day)" class="date-cell__tag">假日</span>
-                </div>
-              </template>
-            </el-calendar>
-          </div>
-
-          <div class="calendar-footnote">
-            <p>点击任意日期可切换，点击“标记为公共假日”即可保存到服务器。</p>
-            <div v-if="manualHolidayList.length" class="calendar-list">
-              <div class="calendar-list__title">本年公共假日</div>
-              <div class="calendar-list__tags">
-                <el-tag
-                  v-for="item in manualHolidayList"
-                  :key="item"
-                  size="small"
-                  effect="plain"
-                >
-                  {{ item }}
-                </el-tag>
+      <!-- 奶龙动画区域 -->
+      <aside class="layout-sidebar">
+        <el-card class="tech-card animation-card" shadow="hover">
+          <div class="card-header">
+            <div class="header-left">
+              <div class="card-title">
+                <el-icon class="icon-pulse"><MagicStick /></el-icon>
+                <span>体素花园</span>
               </div>
+              <div class="card-subtitle">放松一下，看看奶龙</div>
             </div>
-            <div v-else class="calendar-empty">尚未标记公共假日，马上来规划吧。</div>
+          </div>
+
+          <div class="animation-shell">
+            <MilkDragon />
           </div>
         </el-card>
       </aside>
 
+      <!-- 任务列表主区域 -->
       <main class="layout-content">
-        <el-card class="toolbar-card" shadow="never">
+        <el-card class="tech-card toolbar-card" shadow="never">
           <div class="toolbar">
             <div class="filters">
               <el-select v-model="statusFilter" placeholder="筛选状态" style="width: 140px;">
@@ -83,19 +44,22 @@
           </div>
         </el-card>
 
-        <el-card class="task-card" shadow="hover">
+        <el-card class="tech-card task-card" shadow="hover">
           <template #header>
             <div class="task-header">
               <div>
-                <div class="task-title">任务列表</div>
+                <div class="task-title">
+                  <el-icon class="icon-spin"><Odometer /></el-icon>
+                  任务列表
+                </div>
                 <div class="task-subtitle">当前筛选：{{ statusFilterLabel }} · 排序依据：{{ sortByLabel }}</div>
               </div>
-              <el-tag v-if="tasks.length" size="small" effect="plain">{{ tasks.length }} 项</el-tag>
+              <el-tag v-if="tasks.length" size="small" effect="dark" class="tech-tag">{{ tasks.length }} 项</el-tag>
             </div>
           </template>
 
           <div v-if="loading" class="task-loading">
-            <el-skeleton :rows="6" animated />
+            <div class="loading-spinner"></div>
           </div>
 
           <div v-else-if="tasks.length === 0" class="task-empty">
@@ -128,18 +92,21 @@
 <script>
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, MagicStick, Odometer } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
-import { useManualHolidays } from '@/composables/useManualHolidays'
+import MilkDragon from '@/components/MilkDragon.vue'
 
 export default {
   name: 'TaskList',
   components: {
     TaskCard,
     TaskForm,
-    Plus
+    MilkDragon,
+    Plus,
+    MagicStick,
+    Odometer
   },
   setup() {
     const tasks = ref([])
@@ -148,19 +115,6 @@ export default {
     const sortBy = ref('due_date')
     const showTaskForm = ref(false)
     const editingTask = ref(null)
-
-    const {
-      calendarDate,
-      selectedDateLabel,
-      manualHolidayList,
-      manualHolidayActive,
-      formatDayNumber,
-      isManualHoliday,
-      handleManualHolidayToggle,
-      handleDateSelect,
-      handlePanelChange,
-      initManualHolidays
-    } = useManualHolidays()
 
     const statusFilterLabel = computed(() => {
       if (statusFilter.value === 'pending') return '待完成'
@@ -241,7 +195,6 @@ export default {
 
     onMounted(async () => {
       await loadTasks()
-      await initManualHolidays()
     })
 
     return {
@@ -253,15 +206,6 @@ export default {
       editingTask,
       statusFilterLabel,
       sortByLabel,
-      calendarDate,
-      selectedDateLabel,
-      manualHolidayList,
-      manualHolidayActive,
-      formatDayNumber,
-      isManualHoliday,
-      handleManualHolidayToggle,
-      handleDateSelect,
-      handlePanelChange,
       showCreateForm,
       handleToggleStatus,
       handleEdit,
@@ -274,186 +218,83 @@ export default {
 
 <style scoped>
 .tasks-wrapper {
-  max-width: 1560px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 40px 32px 60px;
 }
 
 .layout {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 450px 1fr;
   gap: 32px;
   align-items: start;
 }
 
-.calendar-card {
-  border-radius: 20px;
-  background: linear-gradient(160deg, #fef6e7 0%, #ffffff 70%);
-  overflow: hidden;
-  box-shadow: 0 15px 35px rgba(255, 193, 7, 0.15);
-}
-
-.calendar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-
-.calendar-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #d48806;
-}
-
-.calendar-subtitle {
-  font-size: 13px;
-  color: #8c8c8c;
-  margin-top: 6px;
-}
-
-.calendar-shell {
+/* Tech Card Styles */
+.tech-card {
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--shadow-lg) !important;
+  border-radius: 24px;
+  overflow: visible;
   position: relative;
-  width: 100%;
-  padding: 12px;
+  color: var(--text-primary);
 }
 
-:deep(.el-calendar) {
-  background: transparent;
-}
-
-:deep(.el-calendar__header) {
-  padding: 0 8px 12px;
-  font-size: 13px;
-  color: #595959;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-}
-
-:deep(.el-calendar__header span) {
-  flex: 1;
-  text-align: center;
-  font-weight: 500;
-}
-
-:deep(.el-calendar__header .el-button-group) {
-  order: 1;
-  display: flex;
-  gap: 6px;
-}
-
-:deep(.el-calendar__header .el-button-group .el-button) {
-  font-size: 12px;
-  padding: 4px 10px;
-}
-
-:deep(.el-calendar__body) {
-  padding: 0 6px 12px;
-}
-
-:deep(.el-calendar-table) {
-  table-layout: fixed;
-}
-
-:deep(.el-calendar-table td) {
-  width: calc(100% / 7);
-  height: 0;
-  padding-bottom: calc(100% / 7);
-  position: relative;
-}
-
-:deep(.el-calendar-day) {
-  position: absolute;
-  inset: 6px;
-  padding: 0;
-}
-
-.date-cell {
-  width: 100%;
-  height: 100%;
-  border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 6px;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.date-cell::before {
+.tech-card::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 20%;
-  height: 20%;
-  transform: translate(-50%, -50%) scale(0);
-  border-radius: 50%;
-  background-color: rgba(82, 196, 26, 0.45);
-  opacity: 0;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
 }
 
-.date-cell:hover::before {
-  transform: translate(-50%, -50%) scale(1);
-  opacity: 1;
-}
-
-.date-cell--selected {
-  box-shadow: inset 0 0 0 2px rgba(64, 158, 255, 0.45);
-}
-
-.date-cell--manual {
-  background-color: rgba(82, 196, 26, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(47, 160, 10, 0.6);
-}
-
-.date-cell__number {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.date-cell__tag {
-  display: none;
-}
-
-.calendar-footnote {
-  margin-top: 18px;
-  font-size: 12px;
-  color: #8c8c8c;
-  line-height: 1.6;
-}
-
-.calendar-list {
-  margin-top: 12px;
-  padding: 14px;
-  background-color: rgba(255, 214, 102, 0.18);
-  border-radius: 14px;
-}
-
-.calendar-list__title {
-  font-weight: 500;
-  color: #ad6800;
-  margin-bottom: 8px;
-}
-
-.calendar-list__tags {
+.card-header, .task-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
-.calendar-empty {
-  margin-top: 12px;
-  color: #bfbfbf;
+.card-title, .task-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
+.card-subtitle, .task-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  margin-left: 28px;
+}
+
+.icon-pulse {
+  animation: pulse 3s infinite;
+  color: var(--primary-color);
+}
+
+.icon-spin {
+  color: var(--secondary-color);
+}
+
+/* Animation Section */
+.animation-shell {
+  margin: 0 -20px -20px;
+  border-radius: 0 0 24px 24px;
+  overflow: hidden;
+  min-height: 400px;
+}
+
+/* Toolbar */
 .toolbar-card {
-  border-radius: 20px;
+  margin-bottom: 20px;
 }
 
 .toolbar {
@@ -471,27 +312,9 @@ export default {
   flex-wrap: wrap;
 }
 
+/* Task Card */
 .task-card {
-  border-radius: 20px;
-  margin-top: 20px;
-}
-
-.task-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.task-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: #1f1f1f;
-}
-
-.task-subtitle {
-  font-size: 13px;
-  color: #8c8c8c;
-  margin-top: 6px;
+  margin-top: 0;
 }
 
 .task-loading,
@@ -501,19 +324,42 @@ export default {
 
 .task-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(6, 182, 212, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s ease-in-out infinite;
+  margin: 40px auto;
+}
+
+.tech-tag {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 @media (max-width: 1200px) {
   .layout {
     grid-template-columns: 1fr;
   }
-}
-
-@media (max-width: 992px) {
-  .task-grid {
-    grid-template-columns: 1fr;
+  
+  .layout-sidebar {
+    order: 2;
   }
 }
 </style>
