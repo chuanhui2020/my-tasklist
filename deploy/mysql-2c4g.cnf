@@ -1,0 +1,74 @@
+# MySQL配置优化 - 2C4G服务器
+# 在 /etc/mysql/mysql.conf.d/mysqld.cnf 中添加以下配置
+
+[mysqld]
+# 基础配置
+user = mysql
+pid-file = /var/run/mysqld/mysqld.pid
+socket = /var/run/mysqld/mysqld.sock
+port = 3306
+basedir = /usr
+datadir = /var/lib/mysql
+tmpdir = /tmp
+
+# 内存优化（适配4G内存服务器）
+innodb_buffer_pool_size = 1G      # 约25%的内存用于InnoDB缓冲池
+key_buffer_size = 256M             # MyISAM索引缓冲
+table_open_cache = 400            # 表缓存
+sort_buffer_size = 2M             # 排序缓冲
+read_buffer_size = 128K           # 读缓冲
+read_rnd_buffer_size = 256K       # 随机读缓冲
+myisam_sort_buffer_size = 64M     # MyISAM排序缓冲
+thread_cache_size = 16            # 线程缓存
+
+# 连接数优化（2核心服务器）
+max_connections = 200             # 最大连接数
+max_user_connections = 150        # 单用户最大连接数
+thread_stack = 256K               # 线程栈大小
+
+# InnoDB优化
+innodb_file_per_table = 1         # 每表一个文件
+innodb_flush_log_at_trx_commit = 1
+innodb_log_buffer_size = 16M      # 日志缓冲
+innodb_log_file_size = 128M       # 日志文件大小
+innodb_flush_method = O_DIRECT    # 直接I/O
+innodb_lock_wait_timeout = 50     # 锁等待超时
+
+# 查询缓存
+query_cache_type = 1              # 启用查询缓存
+query_cache_size = 128M           # 查询缓存大小
+query_cache_limit = 2M            # 单个查询结果缓存限制
+
+# 慢查询日志
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2               # 超过2秒记录慢查询
+
+# 错误日志
+log_error = /var/log/mysql/error.log
+
+# 二进制日志（可选，用于主从复制）
+# log_bin = /var/log/mysql/mysql-bin.log
+# binlog_format = ROW
+# expire_logs_days = 7
+
+# 字符集
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init-connect = 'SET NAMES utf8mb4'
+
+# 其他优化
+tmp_table_size = 64M              # 临时表大小
+max_heap_table_size = 64M         # 内存表大小
+join_buffer_size = 2M             # 连接缓冲
+bulk_insert_buffer_size = 16M     # 批量插入缓冲
+
+# 网络超时
+wait_timeout = 600                # 连接等待超时
+interactive_timeout = 600         # 交互超时
+
+[mysql]
+default-character-set = utf8mb4
+
+[client]
+default-character-set = utf8mb4

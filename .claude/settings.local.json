@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Read(/D:\\root\\home\\my-tasklist/**)",
+      "Bash(python3 -c:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

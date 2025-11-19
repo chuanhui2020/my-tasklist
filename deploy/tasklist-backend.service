@@ -1,0 +1,47 @@
+[Unit]
+Description=Task List Backend Application
+Documentation=https://github.com/your-username/my-tasklist
+After=network.target mysql.service
+Wants=mysql.service
+RequiresMountsFor=/opt/tasklist
+
+[Service]
+Type=exec
+User=root
+Group=root
+WorkingDirectory=/opt/tasklist/backend
+
+# 环境变量
+Environment=PATH=/opt/tasklist/backend/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=FLASK_ENV=production
+Environment=PYTHONPATH=/opt/tasklist/backend
+Environment=PYTHONUNBUFFERED=1
+
+# 执行命令
+ExecStart=/opt/tasklist/backend/venv/bin/gunicorn --config gunicorn.conf.py app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# 重启策略
+Restart=always
+RestartSec=3
+StartLimitInterval=60
+StartLimitBurst=3
+
+# 进程管理
+KillMode=mixed
+TimeoutStopSec=10
+TimeoutStartSec=30
+
+# 安全设置（适配root用户和2C4G服务器）
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=/opt/tasklist /var/log/tasklist /var/run/tasklist /tmp /dev/shm
+
+# 资源限制（2C4G服务器优化）
+LimitNOFILE=32768
+LimitNPROC=16384
+# 限制内存使用不超过1.5G（为系统和其他服务保留内存）
+MemoryMax=1536M
+
+[Install]
+WantedBy=multi-user.target

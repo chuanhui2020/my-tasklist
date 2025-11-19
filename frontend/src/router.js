@@ -1,0 +1,53 @@
+﻿import { createRouter, createWebHistory } from 'vue-router'
+import Home from './views/Home.vue'
+import TaskList from './views/TaskList.vue'
+import Login from './views/Login.vue'
+import AdminUsers from './views/AdminUsers.vue'
+
+const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: Login
+  },
+  {
+    path: '/',
+    name: 'Home',
+    component: Home,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/tasks',
+    name: 'TaskList',
+    component: TaskList,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: AdminUsers,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('tasklist_token')
+  if (to.meta.requiresAuth && !token) {
+    return next({ path: '/login', query: { redirect: to.fullPath } })
+  }
+  if (to.meta.requiresAdmin) {
+    const stored = localStorage.getItem('tasklist_user')
+    const user = stored ? JSON.parse(stored) : null
+    if (!user || user.role !== 'admin') {
+      return next('/')
+    }
+  }
+  return next()
+})
+
+export default router
