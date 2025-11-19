@@ -9,7 +9,6 @@
         </div>
         <div v-if="isAuthenticated" class="nav-area">
           <nav class="custom-nav">
-            <router-link to="/" class="nav-link" active-class="active">首页</router-link>
             <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
             <router-link v-if="isAdmin" to="/admin/users" class="nav-link" active-class="active">用户管理</router-link>
           </nav>
@@ -44,7 +43,7 @@ const { state: authState, isAuthenticated, isAdmin, clearAuth } = useAuth()
 
 const goHome = () => {
   if (isAuthenticated.value) {
-    router.push('/')
+    router.push('/tasks')
   } else {
     router.push('/login')
   }

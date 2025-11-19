@@ -1,5 +1,5 @@
 ﻿import { createRouter, createWebHistory } from 'vue-router'
-import Home from './views/Home.vue'
+
 import TaskList from './views/TaskList.vue'
 import Login from './views/Login.vue'
 import AdminUsers from './views/AdminUsers.vue'
@@ -12,9 +12,7 @@ const routes = [
   },
   {
     path: '/',
-    name: 'Home',
-    component: Home,
-    meta: { requiresAuth: true }
+    redirect: '/tasks'
   },
   {
     path: '/tasks',
