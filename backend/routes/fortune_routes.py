@@ -222,6 +222,42 @@ def generate_with_gemini(prompt):
         print(f"{'='*60}\n")
         raise Exception(f"Gemini API request error: {str(e)}")
 
+def log_ai_transaction(service, model, request_data, response_data, status_code, duration):
+    """记录 AI 交互日志到文件"""
+    import os
+    import json
+    import time
+    from datetime import datetime
+    
+    # 确保日志目录存在
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
+    # 日志文件名：ai_requests_YYYY-MM-DD.log
+    log_file = os.path.join(log_dir, f"ai_requests_{datetime.now().strftime('%Y-%m-%d')}.log")
+    
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    log_entry = {
+        "timestamp": timestamp,
+        "service": service,
+        "model": model,
+        "status_code": status_code,
+        "duration": f"{duration:.2f}s",
+        "request": request_data,
+        "response": response_data
+    }
+    
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {service} ({model}) - Status: {status_code} - Time: {duration:.2f}s\n")
+            f.write("-" * 80 + "\n")
+            f.write(json.dumps(log_entry, ensure_ascii=False, indent=2))
+            f.write("\n" + "=" * 80 + "\n\n")
+    except Exception as e:
+        print(f"❌ 写入日志文件失败: {e}")
+
 def generate_with_compatible_api(fortune_number):
     """
     使用兼容 OpenAI 格式的 API (DeepSeek, SiliconFlow, Zhipu, Moonshot 等)
@@ -230,6 +266,8 @@ def generate_with_compatible_api(fortune_number):
     import json
     import os
     import time
+    
+    start_time = time.time()
     
     api_key = os.environ.get('AI_API_KEY')
     base_url = os.environ.get('AI_BASE_URL', 'https://api.deepseek.com')
@@ -282,6 +320,9 @@ def generate_with_compatible_api(fortune_number):
         "stream": False
     }
 
+    response_data = None
+    status_code = 0
+    
     try:
         print("\n发送请求中...")
         # 修正 URL 拼接逻辑
@@ -295,16 +336,25 @@ def generate_with_compatible_api(fortune_number):
         
         response = requests.post(url, headers=headers, json=payload, timeout=60)
         
-        print(f"📥 响应状态码: {response.status_code}")
+        status_code = response.status_code
+        print(f"📥 响应状态码: {status_code}")
         
-        if response.status_code != 200:
+        try:
+            response_data = response.json()
+        except:
+            response_data = response.text
+        
+        # 记录日志
+        duration = time.time() - start_time
+        log_ai_transaction("Compatible API", model, payload, response_data, status_code, duration)
+        
+        if status_code != 200:
             print(f"\n❌ API 调用失败")
-            print(f"状态码: {response.status_code}")
+            print(f"状态码: {status_code}")
             print(f"错误信息: {response.text}")
             return None
             
-        result = response.json()
-        content = result['choices'][0]['message']['content']
+        content = response_data['choices'][0]['message']['content']
         
         print(f"\n📜 AI 生成的原始内容:")
         print("-" * 60)
@@ -327,7 +377,12 @@ def generate_with_compatible_api(fortune_number):
         return fortune_data
 
     except Exception as e:
+        duration = time.time() - start_time
         print(f"\n❌ AI 生成异常: {str(e)}")
+        
+        # 记录异常日志
+        log_ai_transaction("Compatible API", model, payload, {"error": str(e)}, status_code, duration)
+        
         import traceback
         traceback.print_exc()
         return None
