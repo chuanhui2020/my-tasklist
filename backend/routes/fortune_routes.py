@@ -284,22 +284,24 @@ def generate_with_compatible_api(fortune_number):
     print(f"🧠 Model: {model}")
     
     prompt = f"""
-    你是一位精通周易、通过灵签指点迷津的老法师。
-    现在求签者抽到了第 {fortune_number} 签。
+    你是一位精通周易、通過靈籤指點迷津的老法師。
+    現在求籤者抽到了第 {fortune_number} 籤。
     
-    请根据这个签号，生成一支灵签。
+    請根據這個籤號，生成一支靈籤。
     
-    必须严格按照以下 JSON 格式返回，不要包含任何 markdown 格式标记（如 ```json ... ```）：
+    **重要：所有返回的文字必須使用繁體中文（Traditional Chinese）。**
+    
+    必須嚴格按照以下 JSON 格式返回，不要包含任何 markdown 格式標記（如 ```json ... ```）：
     {{
-        "type": "签的吉凶类型 (如: 上上籤, 中平籤, 下下籤)",
-        "typeText": "签的吉凶类型中文 (如: 上上籤)",
-        "poem": "四句七言签诗",
-        "interpretation": "对签诗的详细白话解说，包含运势分析",
+        "type": "籤的吉凶類型 (如: 上上籤, 中平籤, 下下籤)",
+        "typeText": "籤的吉凶類型中文 (如: 上上籤)",
+        "poem": "四句七言籤詩 (繁體)",
+        "interpretation": "對籤詩的詳細白話解說，包含運勢分析 (繁體)",
         "advice": [
-            {{ "label": "事业", "value": "简短建议" }},
-            {{ "label": "财运", "value": "简短建议" }},
-            {{ "label": "感情", "value": "简短建议" }},
-            {{ "label": "健康", "value": "简短建议" }}
+            {{ "label": "事業", "value": "簡短建議 (繁體)" }},
+            {{ "label": "財運", "value": "簡短建議 (繁體)" }},
+            {{ "label": "感情", "value": "簡短建議 (繁體)" }},
+            {{ "label": "健康", "value": "簡短建議 (繁體)" }}
         ]
     }}
     """
@@ -312,7 +314,7 @@ def generate_with_compatible_api(fortune_number):
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "你是一位智慧的解签大师，输出必须是纯 JSON 格式。"},
+            {"role": "system", "content": "你是一位智慧的解籤大師，輸出必須是純 JSON 格式，且所有內容必須使用繁體中文。"},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.7,
