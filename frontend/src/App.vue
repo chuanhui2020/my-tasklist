@@ -1,37 +1,37 @@
-﻿<template>
-  <div id="app">
-    <div class="background-glow"></div>
-    <el-container class="app-container">
-      <el-header class="app-header">
-        <div class="brand" @click="goHome">
-          <span class="brand-icon">⚡</span>
-          任务日程中心
-        </div>
-        <div v-if="isAuthenticated" class="nav-area">
-          <nav class="custom-nav">
-            <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
-            <router-link to="/change-password" class="nav-link" active-class="active">修改密码</router-link>
-            <router-link v-if="isAdmin" to="/admin/users" class="nav-link" active-class="active">用户管理</router-link>
-          </nav>
-          <div class="user-box">
-            <span class="user-name">{{ authState.user?.username }}</span>
-            <el-button type="primary" plain size="small" class="logout-btn" @click="handleLogout">退出</el-button>
+﻿  <template>
+    <div id="app">
+      <div class="background-glow"></div>
+      <el-container class="app-container">
+        <el-header class="app-header">
+          <div class="brand" @click="goHome">
+            <span class="brand-icon">⚡</span>
+            任务日程中心
           </div>
-        </div>
-        <div v-else class="nav-area">
-          <el-button type="primary" size="small" @click="goLogin">登录</el-button>
-        </div>
-      </el-header>
-      <el-main class="app-main">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </el-main>
-    </el-container>
-  </div>
-</template>
+          <div v-if="isAuthenticated" class="nav-area">
+            <nav class="custom-nav">
+              <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
+              <router-link to="/change-password" class="nav-link" active-class="active">修改密码</router-link>
+              <router-link v-if="isAdmin" to="/admin/users" class="nav-link" active-class="active">用户管理</router-link>
+            </nav>
+            <div class="user-box">
+              <span class="user-name">{{ authState.user?.username }}</span>
+              <el-button type="primary" plain size="small" class="logout-btn" @click="handleLogout">退出</el-button>
+            </div>
+          </div>
+          <div v-else class="nav-area">
+            <el-button type="primary" size="small" @click="goLogin">登录</el-button>
+          </div>
+        </el-header>
+        <el-main class="app-main">
+          <router-view v-slot="{ Component }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </el-main>
+      </el-container>
+    </div>
+  </template>
 
 <script setup>
 import { computed } from 'vue'
@@ -74,7 +74,7 @@ const handleLogout = () => {
   width: 100vw;
   height: 100vh;
   background: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.15), transparent 50%),
-              radial-gradient(circle at 0% 100%, rgba(139, 92, 246, 0.1), transparent 50%);
+    radial-gradient(circle at 0% 100%, rgba(139, 92, 246, 0.1), transparent 50%);
   z-index: 0;
   pointer-events: none;
 }
