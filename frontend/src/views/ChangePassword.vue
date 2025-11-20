@@ -111,7 +111,7 @@ const checkPasswordStrength = (value) => {
   if (value.length >= 10) score += 1
   if (/[A-Z]/.test(value)) score += 1
   if (/[0-9]/.test(value)) score += 1
-  if /[^A-Za-z0-9]/.test(value)) score += 1
+  if (/[^A-Za-z0-9]/.test(value)) score += 1
   strengthScore.value = score
 }
 
