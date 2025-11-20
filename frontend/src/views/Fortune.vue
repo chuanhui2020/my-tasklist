@@ -77,7 +77,7 @@
                             <text :x="fallingStickX + 5" :y="fallingStickY + 75" text-anchor="middle" fill="#8B0000"
                                 font-size="12" font-family="KaiTi, serif" font-weight="bold"
                                 :transform="`rotate(${fallingStickRotation} ${fallingStickX + 5} ${fallingStickY + 70})`">{{
-                                fortuneNumber }}</text>
+                                    fortuneNumber }}</text>
                         </g>
                     </svg>
                 </div>
@@ -138,6 +138,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import api from '@/api'
 
 const isShaking = ref(false)
 const isFalling = ref(false)
@@ -162,74 +163,36 @@ const formatPoem = (poem) => {
     return poem.replace(/，/g, '，<br>').replace(/。/g, '。<br>')
 }
 
-// 生成签文
-const generateFortune = async () => {
+// 生成签文 - 调用后端 AI API
+const generateFortune = async (number) => {
     isGenerating.value = true
 
     try {
-        // 这里调用 AI 生成签文
-        // 模拟 API 调用
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        const response = await api.generateFortune(number)
 
-        // 模拟生成的签文数据
-        const types = [
-            { type: 'great', text: '上上籤' },
-            { type: 'good', text: '上籤' },
-            { type: 'medium', text: '中籤' },
-            { type: 'fair', text: '中下籤' },
-            { type: 'poor', text: '下籤' }
-        ]
-
-        const selectedType = types[Math.floor(Math.random() * types.length)]
-
-        const poems = [
-            '春來花自開，福至心自寬，誠心祈善願，吉慶自然來。',
-            '雲開見月明，守得花開時，耐心待時機，好運必相隨。',
-            '登高望遠處，前程似錦繡，勤勉不懈怠，功名可期待。',
-            '水到渠成時，莫急莫躁進，靜待良機至，萬事皆順遂。',
-            '柳暗花明處，轉機在眼前，堅持初心志，終見彩虹現。'
-        ]
-
-        const interpretations = [
-            '此籤示意運勢漸佳，諸事順遂。當下雖有小阻，但只要保持誠心與耐心，終能撥雲見日，迎來轉機。',
-            '籤示前路光明，貴人相助。凡事宜積極進取，但需謹慎行事，切勿操之過急，方能水到渠成。',
-            '此籤暗示需要等待時機，不宜急進。當前雖有困頓，但守得雲開見月明，耐心等待必有收穫。',
-            '籤文提醒需要堅持與努力，機會就在不遠處。只要不放棄，持之以恆，定能達成所願。',
-            '此籤預示轉機將至，困境即將過去。保持樂觀心態，積極面對，好運即將降臨。'
-        ]
-
-        const adviceOptions = [
-            [
-                { label: '事業', value: '貴人相助，宜把握機會' },
-                { label: '財運', value: '正財穩定，偏財需謹慎' },
-                { label: '感情', value: '真誠相待，情緣可期' },
-                { label: '健康', value: '注意休息，保持平和' }
-            ],
-            [
-                { label: '事業', value: '穩中求進，切勿冒進' },
-                { label: '財運', value: '量入為出，理財有道' },
-                { label: '感情', value: '耐心等待，緣分自來' },
-                { label: '健康', value: '規律作息，身心安康' }
-            ],
-            [
-                { label: '事業', value: '積極進取，勇於創新' },
-                { label: '財運', value: '投資有道，財源廣進' },
-                { label: '感情', value: '主動出擊，把握良機' },
-                { label: '健康', value: '適度運動，精神飽滿' }
-            ]
-        ]
-
-        fortuneData.value = {
-            type: selectedType.type,
-            typeText: selectedType.text,
-            poem: poems[Math.floor(Math.random() * poems.length)],
-            interpretation: interpretations[Math.floor(Math.random() * interpretations.length)],
-            advice: adviceOptions[Math.floor(Math.random() * adviceOptions.length)]
+        if (response.data.success) {
+            fortuneData.value = response.data.data
+        } else {
+            throw new Error(response.data.error || '生成签文失败')
         }
 
     } catch (error) {
         ElMessage.error('求籤失敗，請重試')
-        console.error(error)
+        console.error('Fortune generation error:', error)
+
+        // 如果 API 失败，使用备用数据
+        fortuneData.value = {
+            type: 'medium',
+            typeText: '中籤',
+            poem: '雲開見月明，守得花開時，耐心待時機，好運必相隨。',
+            interpretation: '此籤暗示需要等待時機，不宜急進。當前雖有困頓，但守得雲開見月明，耐心等待必有收穫。',
+            advice: [
+                { label: '事業', value: '穩中求進，切勿冒進' },
+                { label: '財運', value: '量入為出，理財有道' },
+                { label: '感情', value: '耐心等待，緣分自來' },
+                { label: '健康', value: '規律作息，身心安康' }
+            ]
+        }
     } finally {
         isGenerating.value = false
     }
@@ -252,7 +215,7 @@ const startFortune = async () => {
     }, 2000)
 
     // 同时生成签文
-    await generateFortune()
+    await generateFortune(fortuneNumber.value)
 }
 
 // 签子掉落动画

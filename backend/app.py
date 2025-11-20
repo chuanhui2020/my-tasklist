@@ -5,6 +5,7 @@ from config import Config
 from models import db, User
 from routes.task_routes import task_bp
 from routes.auth_routes import auth_bp
+from routes.fortune_routes import fortune_bp
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -14,6 +15,7 @@ db.init_app(app)
 
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(task_bp, url_prefix='/api')
+app.register_blueprint(fortune_bp, url_prefix='/api/fortune')
 
 with app.app_context():
     db.create_all()

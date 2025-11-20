@@ -110,5 +110,9 @@ export default {
 
   removeManualHoliday(date) {
     return api.delete(`/holidays/manual/${date}`)
+  },
+
+  generateFortune(fortuneNumber) {
+    return api.post('/fortune/generate', { fortuneNumber })
   }
 }
