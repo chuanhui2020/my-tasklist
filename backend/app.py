@@ -1,4 +1,11 @@
-﻿from flask import Flask
+﻿import sys
+import os
+
+# 禁用 Python 输出缓冲，确保 print 立即显示
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+os.environ['PYTHONUNBUFFERED'] = '1'
+
+from flask import Flask
 from flask_cors import CORS
 from sqlalchemy import inspect, text
 from config import Config

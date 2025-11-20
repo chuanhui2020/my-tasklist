@@ -296,24 +296,29 @@ def generate_fallback_fortune(fortune_number):
 @fortune_bp.route('/generate', methods=['POST'])
 def generate_fortune():
     """生成签文 API"""
+    import sys
     from datetime import datetime
     import time
+    
+    # 强制立即输出
+    sys.stdout.flush()
+    sys.stderr.flush()
     
     start_time = time.time()
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    print("\n" + "="*80)
-    print(f"🎯 [API 请求] 收到签文生成请求 - {timestamp}")
-    print("="*80)
+    print("\n" + "="*80, flush=True)
+    print(f"🎯 [API 请求] 收到签文生成请求 - {timestamp}", flush=True)
+    print("="*80, flush=True)
     
     # 打印请求信息
-    print(f"📍 请求路径: {request.path}")
-    print(f"🌐 请求方法: {request.method}")
-    print(f"🔗 客户端 IP: {request.remote_addr}")
-    print(f"📋 Content-Type: {request.content_type}")
+    print(f"📍 请求路径: {request.path}", flush=True)
+    print(f"🌐 请求方法: {request.method}", flush=True)
+    print(f"🔗 客户端 IP: {request.remote_addr}", flush=True)
+    print(f"📋 Content-Type: {request.content_type}", flush=True)
     
     # 打印请求头（部分）
-    print(f"\n📨 请求头:")
+    print(f"\n📨 请求头:", flush=True)
     for key in ['User-Agent', 'Authorization', 'Origin', 'Referer']:
         if key in request.headers:
             value = request.headers[key]
