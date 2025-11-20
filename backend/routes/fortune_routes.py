@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from functools import wraps
 import os
 import json
+from logger_config import fortune_logger as logger
 
 fortune_bp = Blueprint('fortune', __name__)
 
@@ -12,6 +13,12 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
 def generate_fortune_with_ai(fortune_number):
     """使用 AI 生成签文"""
+    
+    print(f"\n🎋 开始生成第 {fortune_number} 签")
+    print(f"📋 当前配置:")
+    print(f"   AI_SERVICE = {AI_SERVICE}")
+    print(f"   OPENAI_API_KEY = {'已配置' if OPENAI_API_KEY else '未配置'}")
+    print(f"   GEMINI_API_KEY = {'已配置 (' + GEMINI_API_KEY[-8:] + ')' if GEMINI_API_KEY else '未配置'}")
     
     prompt = f"""你是一位精通中国传统文化的占卜大师。请为第 {fortune_number} 签生成一支完整的灵签。
 
@@ -38,14 +45,17 @@ def generate_fortune_with_ai(fortune_number):
 
     try:
         if AI_SERVICE == 'openai' and OPENAI_API_KEY:
+            print(f"🎯 决策：使用 OpenAI API")
             return generate_with_openai(prompt)
         elif AI_SERVICE == 'gemini' and GEMINI_API_KEY:
+            print(f"🎯 决策：使用 Gemini API")
             return generate_with_gemini(prompt)
         else:
-            # 如果没有配置 API，返回预设的签文
+            print(f"🎯 决策：使用备用签文（未配置 AI 或配置不完整）")
             return generate_fallback_fortune(fortune_number)
     except Exception as e:
-        print(f"AI generation error: {e}")
+        print(f"❌ AI 生成异常: {e}")
+        print(f"🔄 自动降级到备用签文")
         return generate_fallback_fortune(fortune_number)
 
 def generate_with_openai(prompt):
@@ -96,6 +106,11 @@ def generate_with_openai(prompt):
 def generate_with_gemini(prompt):
     """使用 Google Gemini API 生成"""
     import requests
+    from datetime import datetime
+    
+    print(f"\n{'='*60}")
+    print(f"🤖 [Gemini AI] 开始调用 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{'='*60}")
     
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}'
     
@@ -109,24 +124,88 @@ def generate_with_gemini(prompt):
         }
     }
     
-    response = requests.post(url, json=data, timeout=30)
+    print(f"📤 请求 URL: {url[:80]}...{GEMINI_API_KEY[-8:]}")
+    print(f"📝 提示词长度: {len(prompt)} 字符")
+    print(f"⚙️  配置: temperature=0.8, maxTokens=800")
+    print(f"\n发送请求中...")
     
-    if response.status_code == 200:
-        result = response.json()
-        content = result['candidates'][0]['content']['parts'][0]['text']
+    try:
+        response = requests.post(url, json=data, timeout=30)
         
-        # 尝试解析 JSON
-        try:
-            if '```json' in content:
-                content = content.split('```json')[1].split('```')[0].strip()
-            elif '```' in content:
-                content = content.split('```')[1].split('```')[0].strip()
+        print(f"📥 响应状态码: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
             
-            return json.loads(content)
-        except:
-            return generate_fallback_fortune(1)
-    else:
-        raise Exception(f"Gemini API error: {response.status_code}")
+            # 记录完整响应（用于调试）
+            print(f"✅ 调用成功！")
+            print(f"\n原始响应结构:")
+            print(f"  - candidates 数量: {len(result.get('candidates', []))}")
+            
+            if 'candidates' in result and len(result['candidates']) > 0:
+                candidate = result['candidates'][0]
+                print(f"  - finishReason: {candidate.get('finishReason', 'N/A')}")
+                
+                content = candidate['content']['parts'][0]['text']
+                print(f"  - 生成内容长度: {len(content)} 字符")
+                print(f"\n📜 AI 生成的原始内容:")
+                print(f"{'-'*60}")
+                print(content[:500] + ('...' if len(content) > 500 else ''))
+                print(f"{'-'*60}")
+                
+                # 尝试解析 JSON
+                try:
+                    if '```json' in content:
+                        print(f"\n🔧 检测到 JSON 代码块，正在提取...")
+                        content = content.split('```json')[1].split('```')[0].strip()
+                    elif '```' in content:
+                        print(f"\n🔧 检测到代码块，正在提取...")
+                        content = content.split('```')[1].split('```')[0].strip()
+                    
+                    fortune_data = json.loads(content)
+                    
+                    print(f"\n✨ 签文解析成功！")
+                    print(f"  - 签型: {fortune_data.get('typeText', 'N/A')}")
+                    print(f"  - 签诗: {fortune_data.get('poem', 'N/A')[:50]}...")
+                    print(f"  - 解签长度: {len(fortune_data.get('interpretation', ''))} 字")
+                    print(f"  - 指引数量: {len(fortune_data.get('advice', []))} 条")
+                    print(f"{'='*60}\n")
+                    
+                    return fortune_data
+                    
+                except json.JSONDecodeError as e:
+                    print(f"\n❌ JSON 解析失败: {str(e)}")
+                    print(f"尝试解析的内容: {content[:200]}...")
+                    print(f"⚠️  降级到备用签文")
+                    print(f"{'='*60}\n")
+                    return generate_fallback_fortune(1)
+            else:
+                print(f"\n❌ 响应中没有 candidates")
+                print(f"完整响应: {result}")
+                print(f"⚠️  降级到备用签文")
+                print(f"{'='*60}\n")
+                return generate_fallback_fortune(1)
+                
+        else:
+            error_body = response.text[:500]
+            print(f"\n❌ API 调用失败")
+            print(f"状态码: {response.status_code}")
+            print(f"错误信息: {error_body}")
+            print(f"⚠️  降级到备用签文")
+            print(f"{'='*60}\n")
+            raise Exception(f"Gemini API error: {response.status_code}")
+            
+    except requests.exceptions.Timeout:
+        print(f"\n⏱️  请求超时（30秒）")
+        print(f"⚠️  降级到备用签文")
+        print(f"{'='*60}\n")
+        raise Exception("Gemini API timeout")
+        
+    except requests.exceptions.RequestException as e:
+        print(f"\n❌ 网络请求异常: {str(e)}")
+        print(f"⚠️  降级到备用签文")
+        print(f"{'='*60}\n")
+        raise Exception(f"Gemini API request error: {str(e)}")
 
 def generate_fallback_fortune(fortune_number):
     """备用签文生成（当 AI 不可用时）"""
