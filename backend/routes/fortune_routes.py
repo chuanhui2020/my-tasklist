@@ -6,64 +6,79 @@ import json
 
 fortune_bp = Blueprint('fortune', __name__)
 
-# 这里可以配置多种 AI 服务
-AI_SERVICE = os.environ.get('AI_SERVICE', 'openai')  # 可选: openai, gemini, local
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-
 def generate_fortune_with_ai(fortune_number):
-    """使用 AI 生成签文"""
+    """
+    主生成函数：选择 AI 服务或回退到本地
+    """
+    import os
+    
+    # 获取配置的服务类型
+    ai_service = os.environ.get('AI_SERVICE', 'openai').lower()
     
     print(f"\n🎋 开始生成第 {fortune_number} 签")
     print(f"📋 当前配置:")
-    print(f"   AI_SERVICE = {AI_SERVICE}")
-    print(f"   OPENAI_API_KEY = {'已配置' if OPENAI_API_KEY else '未配置'}")
-    print(f"   GEMINI_API_KEY = {'已配置 (' + GEMINI_API_KEY[-8:] + ')' if GEMINI_API_KEY else '未配置'}")
+    print(f"   AI_SERVICE = {ai_service}")
     
-    prompt = f"""你是一位精通中国传统文化的占卜大师。请为第 {fortune_number} 签生成一支完整的灵签。
-
-要求：
-1. 使用繁体中文
-2. 签诗：四句七言诗，押韵，意境优美
-3. 签型：从"上上籤"、"上籤"、"中籤"、"中下籤"、"下籤"中选择一个
-4. 解签：100-150字，解释签诗含义和运势
-5. 指引：分别给出事业、财运、感情、健康四个方面的建议，每条10-15字
-
-请以JSON格式返回，格式如下：
-{{
-  "type": "great/good/medium/fair/poor",
-  "typeText": "上上籤/上籤/中籤/中下籤/下籤",
-  "poem": "签诗四句，用，和。分隔",
-  "interpretation": "解签内容",
-  "advice": [
-    {{"label": "事業", "value": "建议内容"}},
-    {{"label": "財運", "value": "建议内容"}},
-    {{"label": "感情", "value": "建议内容"}},
-    {{"label": "健康", "value": "建议内容"}}
-  ]
-}}"""
-
-    try:
-        if AI_SERVICE == 'openai' and OPENAI_API_KEY:
-            print(f"🎯 决策：使用 OpenAI API")
-            return generate_with_openai(prompt)
-        elif AI_SERVICE == 'gemini' and GEMINI_API_KEY:
-            print(f"🎯 决策：使用 Gemini API")
-            return generate_with_gemini(prompt)
+    # 检查 API Key 状态
+    openai_key = os.environ.get('OPENAI_API_KEY')
+    gemini_key = os.environ.get('GEMINI_API_KEY')
+    compatible_key = os.environ.get('AI_API_KEY')
+    
+    print(f"   OPENAI_API_KEY = {'已配置' if openai_key else '未配置'}")
+    print(f"   GEMINI_API_KEY = {'已配置 (' + gemini_key[:8] + '...)' if gemini_key else '未配置'}")
+    print(f"   AI_API_KEY     = {'已配置 (' + compatible_key[:8] + '...)' if compatible_key else '未配置'}")
+    
+    fortune_data = None
+    
+    # 根据配置选择服务
+    if ai_service in ['compatible', 'deepseek', 'siliconflow']:
+        print(f"🎯 决策：使用兼容模式 (DeepSeek/SiliconFlow/Zhipu)")
+        fortune_data = generate_with_compatible_api(fortune_number)
+        
+    elif ai_service == 'gemini' and gemini_key:
+        print(f"🎯 决策：使用 Gemini API")
+        # 构造 prompt
+        prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
+        fortune_data = generate_with_gemini(prompt)
+        
+    elif ai_service == 'openai' and openai_key:
+        print(f"🎯 决策：使用 OpenAI API")
+        prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
+        fortune_data = generate_with_openai(prompt)
+        
+    elif ai_service == 'local':
+        print(f"🎯 决策：强制使用本地模式")
+    else:
+        # 默认逻辑
+        if compatible_key:
+             print(f"🎯 决策：默认使用兼容模式")
+             fortune_data = generate_with_compatible_api(fortune_number)
+        elif openai_key:
+            print(f"🎯 决策：默认使用 OpenAI API")
+            prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
+            fortune_data = generate_with_openai(prompt)
+        elif gemini_key:
+            print(f"🎯 决策：默认使用 Gemini API")
+            prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
+            fortune_data = generate_with_gemini(prompt)
         else:
-            print(f"🎯 决策：使用备用签文（未配置 AI 或配置不完整）")
-            return generate_fallback_fortune(fortune_number)
-    except Exception as e:
-        print(f"❌ AI 生成异常: {e}")
-        print(f"🔄 自动降级到备用签文")
-        return generate_fallback_fortune(fortune_number)
+            print(f"⚠️  未配置任何 API Key")
+    
+    # 如果 AI 生成失败或未配置，使用回退方案
+    if not fortune_data:
+        print(f"\n🔄 自动降级到备用签文")
+        fortune_data = generate_fallback_fortune(fortune_number)
+        
+    return fortune_data
 
 def generate_with_openai(prompt):
     """使用 OpenAI API 生成"""
     import requests
+    import os
     
+    api_key = os.environ.get('OPENAI_API_KEY')
     headers = {
-        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Authorization': f'Bearer {api_key}',
         'Content-Type': 'application/json'
     }
     
@@ -206,6 +221,116 @@ def generate_with_gemini(prompt):
         print(f"⚠️  降级到备用签文")
         print(f"{'='*60}\n")
         raise Exception(f"Gemini API request error: {str(e)}")
+
+def generate_with_compatible_api(fortune_number):
+    """
+    使用兼容 OpenAI 格式的 API (DeepSeek, SiliconFlow, Zhipu, Moonshot 等)
+    """
+    import requests
+    import json
+    import os
+    import time
+    
+    api_key = os.environ.get('AI_API_KEY')
+    base_url = os.environ.get('AI_BASE_URL', 'https://api.deepseek.com')
+    model = os.environ.get('AI_MODEL', 'deepseek-chat')
+    
+    if not api_key:
+        print("❌ 未配置 AI_API_KEY")
+        return None
+
+    print(f"\n============================================================")
+    print(f"🤖 [Compatible AI] 开始调用 - {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"============================================================")
+    print(f"🔗 Base URL: {base_url}")
+    print(f"🧠 Model: {model}")
+    
+    prompt = f"""
+    你是一位精通周易、通过灵签指点迷津的老法师。
+    现在求签者抽到了第 {fortune_number} 签。
+    
+    请根据这个签号，生成一支灵签。
+    
+    必须严格按照以下 JSON 格式返回，不要包含任何 markdown 格式标记（如 ```json ... ```）：
+    {{
+        "type": "签的吉凶类型 (如: 上上籤, 中平籤, 下下籤)",
+        "typeText": "签的吉凶类型中文 (如: 上上籤)",
+        "poem": "四句七言签诗",
+        "interpretation": "对签诗的详细白话解说，包含运势分析",
+        "advice": [
+            {{ "label": "事业", "value": "简短建议" }},
+            {{ "label": "财运", "value": "简短建议" }},
+            {{ "label": "感情", "value": "简短建议" }},
+            {{ "label": "健康", "value": "简短建议" }}
+        ]
+    }}
+    """
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "你是一位智慧的解签大师，输出必须是纯 JSON 格式。"},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 800,
+        "stream": False
+    }
+
+    try:
+        print("\n发送请求中...")
+        # 修正 URL 拼接逻辑
+        url = base_url.rstrip('/')
+        if not url.endswith('/v1/chat/completions') and '/v1' not in url:
+             url += '/v1/chat/completions'
+        elif not url.endswith('/chat/completions'):
+             url += '/chat/completions'
+             
+        print(f"📤 请求 URL: {url}")
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        
+        print(f"📥 响应状态码: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"\n❌ API 调用失败")
+            print(f"状态码: {response.status_code}")
+            print(f"错误信息: {response.text}")
+            return None
+            
+        result = response.json()
+        content = result['choices'][0]['message']['content']
+        
+        print(f"\n📜 AI 生成的原始内容:")
+        print("-" * 60)
+        print(content)
+        print("-" * 60)
+        
+        # 清理 markdown 标记
+        if '```json' in content:
+            content = content.split('```json')[1].split('```')[0]
+        elif '```' in content:
+            content = content.split('```')[1].split('```')[0]
+            
+        fortune_data = json.loads(content.strip())
+        
+        # 确保数据结构完整
+        if 'fortuneNumber' not in fortune_data:
+            fortune_data['fortuneNumber'] = fortune_number
+            
+        print("\n✨ 签文解析成功！")
+        return fortune_data
+
+    except Exception as e:
+        print(f"\n❌ AI 生成异常: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def generate_fallback_fortune(fortune_number):
     """备用签文生成（当 AI 不可用时）"""
