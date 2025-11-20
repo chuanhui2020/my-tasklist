@@ -167,18 +167,35 @@ const formatPoem = (poem) => {
 const generateFortune = async (number) => {
     isGenerating.value = true
 
+    console.log('🎋 开始请求签文，签号:', number)
+
     try {
+        console.log('📤 发送请求到后端...')
         const response = await api.generateFortune(number)
 
+        console.log('📥 收到响应:', response)
+        console.log('📦 响应数据:', response.data)
+
         if (response.data.success) {
+            console.log('✅ 签文生成成功')
             fortuneData.value = response.data.data
         } else {
+            console.error('❌ 后端返回失败:', response.data.error)
             throw new Error(response.data.error || '生成签文失败')
         }
 
     } catch (error) {
+        console.error('❌ 请求异常:')
+        console.error('  - 错误类型:', error.constructor.name)
+        console.error('  - 错误信息:', error.message)
+        console.error('  - 完整错误:', error)
+
+        if (error.response) {
+            console.error('  - HTTP 状态码:', error.response.status)
+            console.error('  - 响应数据:', error.response.data)
+        }
+
         ElMessage.error('求籤失敗，請重試')
-        console.error('Fortune generation error:', error)
 
         // 如果 API 失败，使用备用数据
         fortuneData.value = {
