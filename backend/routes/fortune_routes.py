@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from functools import wraps
 import os
 import json
-from logger_config import fortune_logger as logger
+# from logger_config import fortune_logger as logger  # 临时注释，使用 print 代替
 
 fortune_bp = Blueprint('fortune', __name__)
 
@@ -296,16 +296,30 @@ def generate_fallback_fortune(fortune_number):
 @fortune_bp.route('/generate', methods=['POST'])
 def generate_fortune():
     """生成签文 API"""
+    print("\n" + "="*60)
+    print("🎯 [API] 收到签文生成请求")
+    print("="*60)
+    
     try:
         data = request.get_json()
+        print(f"📦 请求数据: {data}")
+        
         fortune_number = data.get('fortuneNumber', 1)
+        print(f"🎲 签号: {fortune_number}")
         
         # 验证签号范围
         if not isinstance(fortune_number, int) or fortune_number < 1 or fortune_number > 100:
-            return jsonify({'error': '签号必须在 1-100 之间'}), 400
+            error_msg = '签号必须在 1-100 之间'
+            print(f"❌ 验证失败: {error_msg}")
+            return jsonify({'error': error_msg}), 400
+        
+        print(f"✅ 验证通过，开始生成签文...")
         
         # 生成签文
         fortune_data = generate_fortune_with_ai(fortune_number)
+        
+        print(f"✅ 签文生成成功")
+        print("="*60 + "\n")
         
         return jsonify({
             'success': True,
@@ -313,7 +327,11 @@ def generate_fortune():
         })
         
     except Exception as e:
-        print(f"Error generating fortune: {e}")
+        print(f"\n❌ [API] 发生异常: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("="*60 + "\n")
+        
         return jsonify({
             'success': False,
             'error': str(e)
