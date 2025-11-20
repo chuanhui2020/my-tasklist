@@ -12,6 +12,7 @@
               <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
               <router-link to="/change-password" class="nav-link" active-class="active">修改密码</router-link>
               <router-link v-if="isAdmin" to="/admin/users" class="nav-link" active-class="active">用户管理</router-link>
+              <router-link to="/fortune" class="nav-link" active-class="active">靈籤占卜</router-link>
             </nav>
             <div class="user-box">
               <span class="user-name">{{ authState.user?.username }}</span>

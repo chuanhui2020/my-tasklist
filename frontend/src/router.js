@@ -4,6 +4,7 @@ import TaskList from './views/TaskList.vue'
 import Login from './views/Login.vue'
 import AdminUsers from './views/AdminUsers.vue'
 import ChangePassword from './views/ChangePassword.vue'
+import Fortune from './views/Fortune.vue'
 
 const routes = [
   {
@@ -26,6 +27,12 @@ const routes = [
     name: 'AdminUsers',
     component: AdminUsers,
     meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/fortune',
+    name: 'Fortune',
+    component: Fortune,
+    meta: { requiresAuth: true }
   },
   {
     path: '/change-password',
