@@ -7,7 +7,9 @@
           <div class="card-header">
             <div class="header-left">
               <div class="card-title">
-                <el-icon class="icon-pulse"><MagicStick /></el-icon>
+                <el-icon class="icon-pulse">
+                  <MagicStick />
+                </el-icon>
                 <span>体素花园</span>
               </div>
               <div class="card-subtitle">放松一下，看看奶龙</div>
@@ -38,7 +40,9 @@
             </div>
 
             <el-button type="primary" @click="showCreateForm">
-              <el-icon><Plus /></el-icon>
+              <el-icon>
+                <Plus />
+              </el-icon>
               新建任务
             </el-button>
           </div>
@@ -49,7 +53,9 @@
             <div class="task-header">
               <div>
                 <div class="task-title">
-                  <el-icon class="icon-spin"><Odometer /></el-icon>
+                  <el-icon class="icon-spin">
+                    <Odometer />
+                  </el-icon>
                   任务列表
                 </div>
                 <div class="task-subtitle">当前筛选：{{ statusFilterLabel }} · 排序依据：{{ sortByLabel }}</div>
@@ -67,25 +73,14 @@
           </div>
 
           <div v-else class="task-grid">
-            <TaskCard
-              v-for="task in tasks"
-              :key="task.id"
-              :task="task"
-              @toggle-status="handleToggleStatus"
-              @edit="handleEdit"
-              @delete="handleDelete"
-            />
+            <TaskCard v-for="task in tasks" :key="task.id" :task="task" @toggle-status="handleToggleStatus"
+              @edit="handleEdit" @delete="handleDelete" />
           </div>
         </el-card>
       </main>
     </div>
 
-    <TaskForm
-      :visible="showTaskForm"
-      :task="editingTask"
-      @close="showTaskForm = false"
-      @submit="handleTaskSubmit"
-    />
+    <TaskForm :visible="showTaskForm" :task="editingTask" @close="showTaskForm = false" @submit="handleTaskSubmit" />
   </div>
 </template>
 
@@ -111,7 +106,7 @@ export default {
   setup() {
     const tasks = ref([])
     const loading = ref(false)
-    const statusFilter = ref('')
+    const statusFilter = ref('pending')
     const sortBy = ref('due_date')
     const showTaskForm = ref(false)
     const editingTask = ref(null)
@@ -252,14 +247,16 @@ export default {
   background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
 }
 
-.card-header, .task-header {
+.card-header,
+.task-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
 }
 
-.card-title, .task-title {
+.card-title,
+.task-title {
   font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
@@ -268,7 +265,8 @@ export default {
   gap: 10px;
 }
 
-.card-subtitle, .task-subtitle {
+.card-subtitle,
+.task-subtitle {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 4px;
@@ -344,20 +342,33 @@ export default {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(0.95); }
-  100% { opacity: 1; transform: scale(1); }
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.7;
+    transform: scale(0.95);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (max-width: 1200px) {
   .layout {
     grid-template-columns: 1fr;
   }
-  
+
   .layout-sidebar {
     order: 2;
   }
