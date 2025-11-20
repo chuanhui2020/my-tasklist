@@ -6,7 +6,7 @@ const USER_KEY = 'tasklist_user'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 60000  // 增加到 60 秒，因为 AI 生成需要时间
 })
 
 api.interceptors.request.use((config) => {

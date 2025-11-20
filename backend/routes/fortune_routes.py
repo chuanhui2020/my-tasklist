@@ -296,43 +296,107 @@ def generate_fallback_fortune(fortune_number):
 @fortune_bp.route('/generate', methods=['POST'])
 def generate_fortune():
     """生成签文 API"""
-    print("\n" + "="*60)
-    print("🎯 [API] 收到签文生成请求")
-    print("="*60)
+    from datetime import datetime
+    import time
+    
+    start_time = time.time()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    print("\n" + "="*80)
+    print(f"🎯 [API 请求] 收到签文生成请求 - {timestamp}")
+    print("="*80)
+    
+    # 打印请求信息
+    print(f"📍 请求路径: {request.path}")
+    print(f"🌐 请求方法: {request.method}")
+    print(f"🔗 客户端 IP: {request.remote_addr}")
+    print(f"📋 Content-Type: {request.content_type}")
+    
+    # 打印请求头（部分）
+    print(f"\n📨 请求头:")
+    for key in ['User-Agent', 'Authorization', 'Origin', 'Referer']:
+        if key in request.headers:
+            value = request.headers[key]
+            # 隐藏 token 的部分内容
+            if key == 'Authorization' and len(value) > 20:
+                value = value[:20] + '...' + value[-8:]
+            print(f"   {key}: {value}")
     
     try:
+        # 获取请求数据
         data = request.get_json()
-        print(f"📦 请求数据: {data}")
+        print(f"\n📦 请求体数据:")
+        print(f"   {data}")
         
         fortune_number = data.get('fortuneNumber', 1)
-        print(f"🎲 签号: {fortune_number}")
+        print(f"\n🎲 解析签号: {fortune_number}")
         
         # 验证签号范围
         if not isinstance(fortune_number, int) or fortune_number < 1 or fortune_number > 100:
             error_msg = '签号必须在 1-100 之间'
-            print(f"❌ 验证失败: {error_msg}")
-            return jsonify({'error': error_msg}), 400
+            print(f"\n❌ 验证失败: {error_msg}")
+            print("="*80 + "\n")
+            
+            response_data = {'error': error_msg}
+            print(f"📤 [API 响应] 返回错误 400")
+            print(f"   响应数据: {response_data}")
+            print("="*80 + "\n")
+            
+            return jsonify(response_data), 400
         
-        print(f"✅ 验证通过，开始生成签文...")
+        print(f"✅ 验证通过")
+        print(f"\n⏳ 开始生成签文...")
+        print("-"*80)
         
         # 生成签文
+        gen_start = time.time()
         fortune_data = generate_fortune_with_ai(fortune_number)
+        gen_time = time.time() - gen_start
         
-        print(f"✅ 签文生成成功")
-        print("="*60 + "\n")
+        print("-"*80)
+        print(f"✅ 签文生成完成，耗时: {gen_time:.2f} 秒")
         
-        return jsonify({
+        # 打印签文摘要
+        print(f"\n📜 签文摘要:")
+        print(f"   签型: {fortune_data.get('typeText', 'N/A')}")
+        print(f"   签诗: {fortune_data.get('poem', 'N/A')[:30]}...")
+        print(f"   解签长度: {len(fortune_data.get('interpretation', ''))} 字")
+        print(f"   指引数量: {len(fortune_data.get('advice', []))} 条")
+        
+        # 准备响应
+        response_data = {
             'success': True,
             'data': fortune_data
-        })
+        }
+        
+        total_time = time.time() - start_time
+        
+        print(f"\n📤 [API 响应] 返回成功 200")
+        print(f"   总耗时: {total_time:.2f} 秒")
+        print(f"   响应数据大小: ~{len(str(response_data))} 字符")
+        print("="*80 + "\n")
+        
+        return jsonify(response_data)
         
     except Exception as e:
-        print(f"\n❌ [API] 发生异常: {type(e).__name__}: {str(e)}")
+        error_time = time.time() - start_time
+        
+        print(f"\n❌ [API 异常] 发生错误")
+        print(f"   异常类型: {type(e).__name__}")
+        print(f"   异常信息: {str(e)}")
+        print(f"   发生时间: {error_time:.2f} 秒后")
+        
+        print(f"\n📚 完整堆栈跟踪:")
         import traceback
         traceback.print_exc()
-        print("="*60 + "\n")
         
-        return jsonify({
+        response_data = {
             'success': False,
             'error': str(e)
-        }), 500
+        }
+        
+        print(f"\n📤 [API 响应] 返回错误 500")
+        print(f"   响应数据: {response_data}")
+        print("="*80 + "\n")
+        
+        return jsonify(response_data), 500
