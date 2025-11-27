@@ -36,13 +36,26 @@ echo "✅ 环境检查通过"
 # 启动后端
 echo "📡 启动后端服务..."
 cd backend
-if [ ! -d "venv" ]; then
-    echo "创建Python虚拟环境..."
-    python3 -m venv venv
+VENV_DIR=".venv"
+if [ -d "venv" ] && [ ! -d "$VENV_DIR" ]; then
+    VENV_DIR="venv"
 fi
 
-source venv/bin/activate
-pip install -r requirements.txt
+if command -v uv >/dev/null 2>&1; then
+    echo "🛠 使用 uv 管理后端依赖..."
+    if [ ! -d "$VENV_DIR" ]; then
+        uv venv "$VENV_DIR"
+    fi
+    source "$VENV_DIR/bin/activate"
+    uv sync --frozen --no-dev
+else
+    echo "⚠️ 未检测到 uv，回退 pip 安装（建议先安装 uv）"
+    if [ ! -d "$VENV_DIR" ]; then
+        python3 -m venv "$VENV_DIR"
+    fi
+    source "$VENV_DIR/bin/activate"
+    pip install -r requirements.txt
+fi
 
 # 后台启动Flask应用
 nohup python app.py > ../backend.log 2>&1 &

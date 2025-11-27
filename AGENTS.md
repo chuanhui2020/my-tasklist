@@ -7,7 +7,7 @@
 - Root helpers (`start.sh`, `stop.sh`) orchestrate both services; adjust them whenever entrypoint commands or ports shift.
 
 ## Build, Test, and Development Commands
-- Backend environment: `cd backend && python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt` to sync dependencies.
+- Backend environment: `cd backend && uv venv .venv && .venv\Scripts\activate && uv sync --frozen` to sync dependencies (install `uv` first; fallback to pip + `requirements.txt` only if `uv` is unavailable).
 - Run API locally with `python app.py`; use `gunicorn -c gunicorn.conf.py app:app` for production parity.
 - Frontend setup: `cd frontend && npm install` once, then `npm run dev` for hot reload, `npm run build` for optimized assets, and `npm run preview` to validate the bundle.
 
@@ -24,5 +24,5 @@
 - PRs should summarize scope, list manual test commands, link tracking issues, and include screenshots or curl traces for user-visible changes. Confirm deployment scripts remain accurate before requesting review.
 
 ## Deployment & Configuration Notes
-- Mirror production locally with `gunicorn` and Vite¡¯s preview before releasing. Keep systemd and nginx templates in `deploy/` aligned with any port or path adjustments.
+- Mirror production locally with `gunicorn` and Vite's preview before releasing. Keep systemd and nginx templates in `deploy/` aligned with any port or path adjustments.
 - Regenerate `.env` files per environment; configure secrets through environment variables and never commit credentials.

@@ -1,0 +1,14 @@
+[project]
+name = "my-tasklist-backend"
+version = "0.1.0"
+description = "Flask API for the tasklist app"
+requires-python = ">=3.8"
+dependencies = [
+    "Flask==2.3.3",
+    "Flask-SQLAlchemy==3.0.5",
+    "Flask-CORS==4.0.0",
+    "PyMySQL==1.1.0",
+    "python-dotenv==1.0.0",
+    "cryptography",
+    "requests==2.31.0",
+]

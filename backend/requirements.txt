@@ -1,3 +1,4 @@
+## Managed by uv via pyproject.toml / uv.lock. Keep for pip fallback only.
 Flask==2.3.3
 Flask-SQLAlchemy==3.0.5
 Flask-CORS==4.0.0
