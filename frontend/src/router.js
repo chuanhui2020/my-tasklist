@@ -5,6 +5,7 @@ import Login from './views/Login.vue'
 import AdminUsers from './views/AdminUsers.vue'
 import ChangePassword from './views/ChangePassword.vue'
 import Fortune from './views/Fortune.vue'
+import BmiManager from './views/BmiManager.vue'
 
 const routes = [
   {
@@ -32,6 +33,12 @@ const routes = [
     path: '/fortune',
     name: 'Fortune',
     component: Fortune,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/bmi',
+    name: 'BmiManager',
+    component: BmiManager,
     meta: { requiresAuth: true }
   },
   {
