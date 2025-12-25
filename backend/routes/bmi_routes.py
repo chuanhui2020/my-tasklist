@@ -41,14 +41,15 @@ def normalize_advice(advice, fallback):
         parts = re.split(r'[\r\n]+', advice)
         if len(parts) == 1:
             parts = re.split(r'[。；;]+', advice)
-        items = [part.strip(' -•0123456789.、)') for part in parts if part.strip()]
+        items = [part.strip(' -•0123456789.、)[]{}"\'`') for part in parts if part.strip()]
 
     if not items:
         items = list(fallback)
 
     cleaned = []
     for item in items:
-        trimmed = item.strip()
+        trimmed = re.sub(r'^\s*advice\s*[:=]\s*', '', item, flags=re.I).strip()
+        trimmed = trimmed.strip('[]{}"\'`')
         if not trimmed:
             continue
         cleaned.append(trimmed[:MAX_ITEM_CHARS])
@@ -63,6 +64,24 @@ def normalize_advice(advice, fallback):
                 cleaned.append(item[:MAX_ITEM_CHARS])
 
     return cleaned[:3]
+
+
+def extract_items_from_text(text):
+    if not text:
+        return []
+    candidate = text.strip()
+    match = re.search(r'"?advice"?\s*[:=]\s*\[(.*)', candidate, re.S)
+    if match:
+        candidate = match.group(1)
+
+    parts = re.split(r'[\r\n,，。；;]+', candidate)
+    items = []
+    for part in parts:
+        cleaned = part.strip().strip('[]{}"\'`')
+        cleaned = re.sub(r'^\s*advice\s*[:=]\s*', '', cleaned, flags=re.I).strip()
+        if cleaned:
+            items.append(cleaned)
+    return items
 
 
 def extract_advice(content, fallback):
@@ -82,6 +101,9 @@ def extract_advice(content, fallback):
             advice = payload
         return normalize_advice(advice, fallback)
     except json.JSONDecodeError:
+        extracted = extract_items_from_text(cleaned)
+        if extracted:
+            return normalize_advice(extracted, fallback)
         return normalize_advice(cleaned, fallback)
 
 
