@@ -754,6 +754,10 @@ const resetForm = () => {
   color: var(--text-primary);
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--glass-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .guide-card {
