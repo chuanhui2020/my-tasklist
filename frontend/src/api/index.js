@@ -114,5 +114,9 @@ export default {
 
   generateFortune(fortuneNumber) {
     return api.post('/fortune/generate', { fortuneNumber })
+  },
+
+  generateBmiAdvice(payload) {
+    return api.post('/bmi/advice', payload)
   }
 }

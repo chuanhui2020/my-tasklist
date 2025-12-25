@@ -12,6 +12,7 @@ from models import db, User
 from routes.task_routes import task_bp
 from routes.auth_routes import auth_bp
 from routes.fortune_routes import fortune_bp
+from routes.bmi_routes import bmi_bp
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -22,6 +23,7 @@ db.init_app(app)
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(task_bp, url_prefix='/api')
 app.register_blueprint(fortune_bp, url_prefix='/api/fortune')
+app.register_blueprint(bmi_bp, url_prefix='/api/bmi')
 
 with app.app_context():
     db.create_all()

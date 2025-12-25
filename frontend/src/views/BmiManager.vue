@@ -121,7 +121,11 @@
           </div>
 
           <div class="advice-section">
-            <div class="advice-title">健康建议</div>
+            <div class="advice-title">
+              <span>健康建议</span>
+              <span v-if="isGeneratingAdvice" class="advice-loading">AI 生成中...</span>
+              <span v-else-if="adviceError" class="advice-error">生成失败，已使用本地建议</span>
+            </div>
             <div class="advice-tags">
               <span v-for="(item, index) in adviceList" :key="index" class="advice-chip">{{ item }}</span>
             </div>
@@ -157,7 +161,8 @@
 </template>
 
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import api from '@/api'
 
 const FORM_DEFAULTS = {
   gender: 'male',
@@ -207,6 +212,13 @@ const adviceMap = {
   over: ['减少高糖高油食物', '增加日常步行', '每周 2-3 次有氧'],
   obese: ['控制总热量摄入', '循序渐进提高活动量', '必要时咨询专业意见']
 }
+
+const adviceList = ref([])
+const isGeneratingAdvice = ref(false)
+const adviceError = ref(false)
+let adviceTimer = null
+let lastPayloadKey = ''
+let activeRequestId = 0
 
 const isReady = computed(() => form.height > 0 && form.weight > 0)
 
@@ -284,7 +296,62 @@ const scaleMarks = computed(() => {
   })
 })
 
-const adviceList = computed(() => adviceMap[bmiLevel.value.key] || [])
+const fallbackAdviceList = computed(() => adviceMap[bmiLevel.value.key] || [])
+
+const bmiPayload = computed(() => ({
+  age: form.age,
+  height: form.height,
+  weight: form.weight,
+  bmi: bmiValue.value
+}))
+
+const scheduleAdviceRequest = () => {
+  if (!isReady.value) {
+    adviceList.value = []
+    return
+  }
+
+  const payloadKey = `${bmiPayload.value.age}-${bmiPayload.value.height}-${bmiPayload.value.weight}-${bmiPayload.value.bmi}`
+  if (payloadKey === lastPayloadKey) return
+
+  lastPayloadKey = payloadKey
+  adviceList.value = fallbackAdviceList.value
+  adviceError.value = false
+
+  if (adviceTimer) {
+    clearTimeout(adviceTimer)
+  }
+
+  adviceTimer = setTimeout(() => {
+    requestAdvice()
+  }, 600)
+}
+
+const requestAdvice = async () => {
+  const requestId = ++activeRequestId
+  isGeneratingAdvice.value = true
+  adviceError.value = false
+
+  try {
+    const response = await api.generateBmiAdvice(bmiPayload.value)
+    if (requestId !== activeRequestId) return
+
+    const advice = response?.data?.data?.advice
+    if (Array.isArray(advice) && advice.length) {
+      adviceList.value = advice.slice(0, 3)
+    }
+  } catch (error) {
+    if (requestId !== activeRequestId) return
+    adviceError.value = true
+    console.error('获取 BMI 建议失败:', error)
+  } finally {
+    if (requestId === activeRequestId) {
+      isGeneratingAdvice.value = false
+    }
+  }
+}
+
+watch(bmiPayload, scheduleAdviceRequest, { immediate: true, deep: true })
 
 const resetForm = () => {
   Object.assign(form, FORM_DEFAULTS)
@@ -656,9 +723,22 @@ const resetForm = () => {
 }
 
 .advice-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 10px;
+}
+
+.advice-loading {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.advice-error {
+  font-size: 12px;
+  color: var(--accent-warning);
 }
 
 .advice-tags {
