@@ -50,16 +50,3 @@ class Task(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'user_id': self.user_id
         }
-
-class Holiday(db.Model):
-    __tablename__ = 'holidays'
-
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    date = db.Column(db.Date, unique=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'date': self.date.strftime('%Y-%m-%d')
-        }

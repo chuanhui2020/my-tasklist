@@ -31,7 +31,6 @@
 - ✅ **附加功能**
   - AI 算命功能
   - BMI 健康管理
-  - 假日管理
   - 响应式设计，支持移动端
 
 ### 技术亮点
@@ -261,7 +260,6 @@ docker stats
 ### 其他功能
 - `POST /api/fortune/generate` - AI 算命
 - `POST /api/bmi/advice` - BMI 健康建议
-- `GET /api/holidays/manual` - 获取假日列表
 
 ---
 
@@ -284,13 +282,6 @@ description TEXT
 status      ENUM('pending', 'done') DEFAULT 'pending'
 due_date    DATE
 user_id     INT NOT NULL (外键关联 users)
-created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-```
-
-### holidays 表
-```sql
-id          INT PRIMARY KEY AUTO_INCREMENT
-date        DATE UNIQUE NOT NULL
 created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 ```
 

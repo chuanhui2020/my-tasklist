@@ -168,7 +168,7 @@ Override via environment variable: `DATABASE_URL`
 backend/
 ├── app.py              # Flask app entry point, blueprint registration
 ├── config.py           # Database and secret key configuration
-├── models.py           # SQLAlchemy models: User, Task, Holiday
+├── models.py           # SQLAlchemy models: User, Task
 ├── auth_utils.py       # Token generation/verification, @require_auth decorator
 └── routes/
     ├── auth_routes.py      # /api/auth/* - login, profile, user management
@@ -196,7 +196,6 @@ backend/
 3. **Models (`models.py`):**
    - `User`: username, password_hash, role (admin/user), has many tasks
    - `Task`: title, description, status (pending/done), due_date, user_id (FK)
-   - `Holiday`: date, created_at (for manual holiday management)
    - All models have `to_dict()` methods for JSON serialization
 
 4. **API Response Pattern:**
@@ -255,11 +254,6 @@ frontend/src/
 - BMI calculation with AI-generated health advice
 - Stores BMI records per user
 - Extended timeout for AI advice generation
-
-### Holiday Management (`fortune_routes.py`)
-- Manual holiday configuration
-- API endpoints: `/api/holidays/manual` (GET, POST, DELETE)
-- Stored in `holidays` table
 
 ## Database Migrations
 

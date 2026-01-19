@@ -100,18 +100,6 @@ export default {
     return api.delete(`/tasks/${id}`)
   },
 
-  getManualHolidays(params = {}) {
-    return api.get('/holidays/manual', { params })
-  },
-
-  addManualHoliday(date) {
-    return api.post('/holidays/manual', { date })
-  },
-
-  removeManualHoliday(date) {
-    return api.delete(`/holidays/manual/${date}`)
-  },
-
   generateFortune(fortuneNumber) {
     return api.post('/fortune/generate', { fortuneNumber })
   },

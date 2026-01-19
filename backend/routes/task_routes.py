@@ -1,7 +1,7 @@
 ﻿from flask import Blueprint, request, jsonify, g
-from models import db, Task, Holiday
+from models import db, Task
 from datetime import datetime
-from sqlalchemy import extract, case
+from sqlalchemy import case
 from auth_utils import require_auth
 
 
@@ -118,46 +118,3 @@ def delete_task(task_id):
     db.session.commit()
 
     return jsonify({'message': '任务已删除'})
-
-@task_bp.route('/holidays/manual', methods=['GET'])
-@require_auth()
-def get_manual_holidays():
-    year = request.args.get('year', type=int)
-    query = Holiday.query
-    if year:
-        query = query.filter(extract('year', Holiday.date) == year)
-    holidays = query.order_by(Holiday.date.asc()).all()
-    return jsonify([holiday.to_dict() for holiday in holidays])
-
-@task_bp.route('/holidays/manual', methods=['POST'])
-@require_auth()
-def add_manual_holiday():
-    data = request.json or {}
-    date_str = data.get('date')
-    if not date_str:
-        return jsonify({'error': '日期不能为空'}), 400
-    try:
-        holiday_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': '日期格式错误，请使用 YYYY-MM-DD'}), 400
-    existing = Holiday.query.filter_by(date=holiday_date).first()
-    if existing:
-        return jsonify(existing.to_dict()), 200
-    holiday = Holiday(date=holiday_date)
-    db.session.add(holiday)
-    db.session.commit()
-    return jsonify(holiday.to_dict()), 201
-
-@task_bp.route('/holidays/manual/<date_str>', methods=['DELETE'])
-@require_auth()
-def remove_manual_holiday(date_str):
-    try:
-        holiday_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': '日期格式错误，请使用 YYYY-MM-DD'}), 400
-    holiday = Holiday.query.filter_by(date=holiday_date).first()
-    if not holiday:
-        return jsonify({'message': '节假日已为非标记状态'}), 200
-    db.session.delete(holiday)
-    db.session.commit()
-    return jsonify({'message': '节假日已取消'})
