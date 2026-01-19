@@ -24,6 +24,15 @@ services:
       timeout: 5s
       retries: 5
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    # 资源限制（1C2G 服务器优化）
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'      # 最多使用 50% CPU
+          memory: 512M     # 最多使用 512MB 内存
+        reservations:
+          cpus: '0.25'     # 保留 25% CPU
+          memory: 256M     # 保留 256MB 内存
 
   # Flask 后端服务
   backend:
@@ -51,6 +60,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    # 资源限制（1C2G 服务器优化）
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'      # 最多使用 30% CPU
+          memory: 384M     # 最多使用 384MB 内存
+        reservations:
+          cpus: '0.15'     # 保留 15% CPU
+          memory: 192M     # 保留 192MB 内存
 
   # Nginx + Vue 前端服务
   frontend:
@@ -70,6 +88,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    # 资源限制（1C2G 服务器优化）
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'      # 最多使用 20% CPU
+          memory: 128M     # 最多使用 128MB 内存
+        reservations:
+          cpus: '0.1'      # 保留 10% CPU
+          memory: 64M      # 保留 64MB 内存
 
 volumes:
   mysql_data:
