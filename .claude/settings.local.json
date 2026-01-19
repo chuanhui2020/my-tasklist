@@ -4,7 +4,9 @@
       "Bash(source:*)",
       "Bash(pip install:*)",
       "Read(/D:\\root\\home\\my-tasklist/**)",
-      "Bash(python3 -c:*)"
+      "Bash(python3 -c:*)",
+      "Bash(chmod:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

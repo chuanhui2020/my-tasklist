@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# 文档
+*.md
+AGENTS.md
+AI_CONFIG.md
+BACKEND_LOGS.md
+CHINESE_AI_GUIDE.md
+DEBUG_FORTUNE.md
+FORTUNE_GUIDE.md
+GEMINI_LOGS.md
+LOG_LOCATION.md
+LOG_OUTPUT_FIXED.md
+NO_LOGS_FIX.md
+QUICK_FIX.md
+TIMEOUT_FIXED.md
+CLAUDE.md
+
+# 日志
+*.log
+backend.log
+frontend.log
+
+# Python
+backend/__pycache__
+backend/**/__pycache__
+backend/.venv
+backend/venv
+backend/*.pyc
+backend/**/*.pyc
+backend/.pytest_cache
+backend/uv.lock
+
+# Node
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# IDE
+.vscode
+.idea
+.cursor
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 部署相关
+deploy/
+.pids
+*.service
+
+# 脚本（在容器中不需要）
+start.sh
+stop.sh
+diagnose.sh
