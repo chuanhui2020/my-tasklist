@@ -6,7 +6,22 @@
       "Read(/D:\\root\\home\\my-tasklist/**)",
       "Bash(python3 -c:*)",
       "Bash(chmod:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebSearch",
+      "WebFetch(domain:registry.npmjs.org)",
+      "WebFetch(domain:vite.dev)",
+      "WebFetch(domain:router.vuejs.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:v6.vite.dev)",
+      "WebFetch(domain:v5.vite.dev)",
+      "WebFetch(domain:v7.vite.dev)",
+      "WebFetch(domain:element-plus.org)",
+      "WebFetch(domain:blog.vuejs.org)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(cd:*)",
+      "Bash(rm -f start.sh stop.sh diagnose.sh)",
+      "Bash(rm -rf deploy/)"
     ],
     "deny": [],
     "ask": []

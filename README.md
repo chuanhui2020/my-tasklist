@@ -2,7 +2,7 @@
 
 <div align="center">
 
-一个基于 **Flask + Vue 3 + MySQL** 的现代化任务管理 Web 应用
+一个基于 **FastAPI + Vue 3 + MySQL** 的现代化任务管理 Web 应用
 
 支持任务增删改查、用户管理、AI 功能等
 
@@ -106,7 +106,7 @@ docker compose down
 MYSQL_ROOT_PASSWORD=your_secure_root_password_here
 MYSQL_PASSWORD=your_secure_user_password_here
 
-# Flask 密钥（至少 32 位）
+# 应用密钥（至少 32 位）
 SECRET_KEY=your-random-secret-key-here
 
 # 前端端口（可选，默认 3000）
@@ -129,21 +129,20 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 ### 后端
 - **Python 3.10** - 编程语言
-- **Flask 2.3** - Web 框架
-- **Flask-SQLAlchemy** - ORM
-- **Flask-CORS** - 跨域支持
+- **FastAPI** - Web 框架
+- **SQLAlchemy 2.0** - ORM
 - **PyMySQL** - MySQL 驱动
-- **Gunicorn** - WSGI 服务器
+- **Uvicorn** - ASGI 服务器
 
 ### 前端
-- **Vue 3** - 前端框架
-- **Vue Router 4** - 路由管理
+- **Vue 3.5** - 前端框架
+- **Vue Router 4.5** - 路由管理
 - **Axios** - HTTP 客户端
 - **Element Plus** - UI 组件库
-- **Vite** - 构建工具
+- **Vite 6** - 构建工具
 
 ### 数据库
-- **MySQL 8.0** - 关系型数据库
+- **MySQL 8.4** - 关系型数据库
 
 ### 部署
 - **Docker** - 容器化
@@ -156,11 +155,13 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 ```
 my-tasklist/
-├── backend/                    # 后端 Flask 应用
+├── backend/                    # 后端 FastAPI 应用
 │   ├── app.py                  # 应用入口
 │   ├── config.py               # 配置文件（环境变量）
 │   ├── models.py               # 数据库模型
 │   ├── auth_utils.py           # 认证工具
+│   ├── database.py             # 数据库连接
+│   ├── schemas.py              # Pydantic 请求模型
 │   ├── requirements.txt        # Python 依赖
 │   └── routes/                 # API 路由
 │       ├── auth_routes.py      # 认证接口
@@ -184,7 +185,6 @@ my-tasklist/
 ├── nginx.conf                  # Nginx 配置
 ├── .env.example                # 环境变量模板
 ├── docker-start.sh             # 启动脚本
-├── database.sql                # 数据库初始化
 └── README.md                   # 项目文档
 ```
 
@@ -303,61 +303,11 @@ docker compose logs -f frontend
 docker compose restart backend
 ```
 
-### 传统开发环境
-
-<details>
-<summary>点击展开查看传统部署方式</summary>
-
-#### 后端开发
-
-```bash
-cd backend
-
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 设置环境变量
-export DATABASE_URL="mysql+pymysql://root:password@localhost/tasklist_db"
-export SECRET_KEY="your-secret-key"
-
-# 运行开发服务器
-python app.py
-```
-
-#### 前端开发
-
-```bash
-cd frontend
-
-# 安装依赖
-npm install
-
-# 设置后端地址并启动
-VITE_BACKEND_URL=http://localhost:5000 npm run dev
-```
-
-#### 数据库准备
-
-```bash
-mysql -u root -p
-CREATE DATABASE tasklist_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE tasklist_db;
-SOURCE database.sql;
-```
-
-</details>
-
 ---
 
 ## 📖 文档
 
-- **[DOCKER_README.md](./DOCKER_README.md)** - Docker 快速参考
 - **[DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)** - 详细部署文档
-- **[DOCKER_MIGRATION.md](./DOCKER_MIGRATION.md)** - Docker 迁移说明
 - **[CLAUDE.md](./CLAUDE.md)** - 开发者指南
 
 ---
@@ -511,6 +461,6 @@ echo "Backup completed: $BACKUP_DIR/backup_$DATE.sql"
 
 **⭐ 如果这个项目对你有帮助，请给个 Star！⭐**
 
-Made with ❤️ using Flask + Vue 3 + Docker
+Made with ❤️ using FastAPI + Vue 3 + Docker
 
 </div>

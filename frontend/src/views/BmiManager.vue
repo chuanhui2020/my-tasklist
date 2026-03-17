@@ -35,8 +35,8 @@
         <el-form label-position="top" class="bmi-form">
           <el-form-item label="性别" class="form-item-full">
             <el-radio-group v-model="form.gender" size="small">
-              <el-radio-button label="male">男</el-radio-button>
-              <el-radio-button label="female">女</el-radio-button>
+              <el-radio-button value="male">男</el-radio-button>
+              <el-radio-button value="female">女</el-radio-button>
             </el-radio-group>
           </el-form-item>
 

@@ -1,12 +1,13 @@
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 import json
 import os
 import re
 import time
 
-import requests
+import requests as http_requests
 
-bmi_bp = Blueprint('bmi', __name__)
+bmi_router = APIRouter(prefix='/api/bmi')
 
 MAX_ITEM_CHARS = 20
 MAX_TOKENS = 120
@@ -126,7 +127,7 @@ def generate_with_openai(prompt):
         'max_tokens': MAX_TOKENS
     }
 
-    response = requests.post(
+    response = http_requests.post(
         'https://api.openai.com/v1/chat/completions',
         headers=headers,
         json=data,
@@ -157,7 +158,7 @@ def generate_with_gemini(prompt):
         }
     }
 
-    response = requests.post(url, json=data, timeout=30)
+    response = http_requests.post(url, json=data, timeout=30)
     if response.status_code != 200:
         return None
 
@@ -199,7 +200,7 @@ def generate_with_compatible_api(prompt):
         'Authorization': f'Bearer {api_key}'
     }
 
-    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    response = http_requests.post(url, headers=headers, json=payload, timeout=60)
     if response.status_code != 200:
         return None
 
@@ -233,21 +234,20 @@ def generate_bmi_advice_with_ai(prompt):
     return content
 
 
-@bmi_bp.route('/advice', methods=['POST'])
-def generate_bmi_advice():
+@bmi_router.post('/advice')
+def generate_bmi_advice(body: dict):
     start_time = time.time()
-    data = request.get_json() or {}
 
     try:
-        age = int(data.get('age', 0))
-        height = float(data.get('height', 0))
-        weight = float(data.get('weight', 0))
-        bmi = float(data.get('bmi', 0))
+        age = int(body.get('age', 0))
+        height = float(body.get('height', 0))
+        weight = float(body.get('weight', 0))
+        bmi = float(body.get('bmi', 0))
     except (TypeError, ValueError):
-        return jsonify({'success': False, 'error': '参数格式错误'}), 400
+        return JSONResponse({'success': False, 'error': '参数格式错误'}, status_code=400)
 
     if age <= 0 or height <= 0 or weight <= 0:
-        return jsonify({'success': False, 'error': '参数缺失'}), 400
+        return JSONResponse({'success': False, 'error': '参数缺失'}, status_code=400)
 
     height_m = height / 100
     calculated_bmi = round(weight / (height_m * height_m), 1) if height_m else 0
@@ -264,9 +264,9 @@ def generate_bmi_advice():
     duration = time.time() - start_time
     print(f"📌 BMI 建议生成完成，耗时 {duration:.2f}s")
 
-    return jsonify({
+    return {
         'success': True,
         'data': {
             'advice': advice
         }
-    })
+    }

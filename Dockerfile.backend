@@ -14,8 +14,7 @@ RUN apt-get update && apt-get install -y \
 COPY backend/requirements.txt .
 
 # 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir gunicorn
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制应用代码
 COPY backend/ .
@@ -27,7 +26,7 @@ RUN useradd -m -u 1000 appuser && \
 USER appuser
 
 # 暴露端口
-EXPOSE 5000
+EXPOSE 8000
 
 # 启动命令
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-keep-alive", "120", "--access-log"]

@@ -4,17 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Personal Task Management System - A full-stack web application built with Flask (backend) + Vue 3 (frontend) + MySQL.
+Personal Task Management System - A full-stack web application built with FastAPI (backend) + Vue 3 (frontend) + MySQL.
 
 **Tech Stack:**
-- Backend: Flask 2.3, Flask-SQLAlchemy, PyMySQL
+- Backend: FastAPI, SQLAlchemy 2.0, PyMySQL
 - Frontend: Vue 3, Vue Router 4, Element Plus, Vite
-- Database: MySQL 8.0+
+- Database: MySQL 8.4
 - Auth: JWT-like tokens using itsdangerous
 
-## Deployment Options
+## Deployment
 
-### Option 1: Docker Compose (Recommended for Production)
+### Docker Compose
 
 **Quick Start:**
 
@@ -56,14 +56,14 @@ docker compose exec db mysqldump -u root -p tasklist_db > backup.sql
 **See [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md) for detailed documentation.**
 
 **Docker Architecture:**
-- `db` service: MySQL 8.0 database
-- `backend` service: Flask + Gunicorn (Python 3.10)
+- `db` service: MySQL 8.4 database
+- `backend` service: FastAPI + Uvicorn (Python 3.10)
 - `frontend` service: Nginx + Vue 3 static files
 
 **Environment Variables (.env):**
 - `MYSQL_ROOT_PASSWORD`: Database root password
 - `MYSQL_PASSWORD`: Application database password
-- `SECRET_KEY`: Flask secret key (must be random in production!)
+- `SECRET_KEY`: Application secret key (must be random in production!)
 - `FRONTEND_PORT`: Frontend access port (default: 3000)
 
 **Data Persistence:**
@@ -71,105 +71,18 @@ docker compose exec db mysqldump -u root -p tasklist_db > backup.sql
 - Survives container restarts and rebuilds
 - Backup regularly for production use
 
-### Option 2: Traditional Deployment (Development)
-
-#### Backend (Python)
-
-The project supports both `uv` (preferred) and `pip` for dependency management.
-
-```bash
-cd backend
-
-# With uv (recommended):
-uv venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-uv sync --frozen --no-dev
-
-# With pip (fallback):
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Run development server:
-python app.py  # Runs on http://localhost:5000
-```
-
-**Dependencies are managed in:**
-- `pyproject.toml` (primary, used by uv)
-- `requirements.txt` (fallback for pip, also used by Docker)
-- `uv.lock` (lockfile)
-
-#### Frontend (Vue 3)
-
-```bash
-cd frontend
-
-# Install dependencies:
-npm install
-
-# Development server with environment variable:
-VITE_BACKEND_URL=http://localhost:5000 npm run dev    # Runs on http://localhost:3000
-
-# Production build:
-npm run build
-
-# Preview production build:
-npm run preview
-```
-
-**Frontend Configuration:**
-- `vite.config.js` reads `VITE_BACKEND_URL` from environment
-- Default: `http://localhost:5000`
-- Set different URL for remote backend
-
-#### Full Stack Startup (Legacy)
-
-Use the provided shell scripts:
-
-```bash
-# Development mode (hot reload):
-./start.sh dev
-
-# Production mode (builds frontend):
-./start.sh prod
-
-# Stop all services:
-./stop.sh
-```
-
-The `start.sh` script:
-- Checks for Python3, Node.js, and MySQL
-- Starts backend on port 5000
-- Starts frontend on port 3000
-- Logs to `backend.log` and `frontend.log`
-- Saves PIDs to `.pids` file
-
-#### Database Setup (Manual)
-
-```bash
-mysql -u root -p
-CREATE DATABASE tasklist_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE tasklist_db;
-SOURCE database.sql;
-```
-
-**Default database config** (in `backend/config.py`):
-```
-mysql+pymysql://root:123456@localhost/tasklist_db?charset=utf8mb4
-```
-
-Override via environment variable: `DATABASE_URL`
-
 ## Architecture
 
 ### Backend Structure
 
 ```
 backend/
-├── app.py              # Flask app entry point, blueprint registration
-├── config.py           # Database and secret key configuration
+├── app.py              # FastAPI app entry point, lifespan, router registration
+├── config.py           # Settings class (env-based configuration)
+├── database.py         # SQLAlchemy engine, SessionLocal, Base, get_db dependency
 ├── models.py           # SQLAlchemy models: User, Task
-├── auth_utils.py       # Token generation/verification, @require_auth decorator
+├── schemas.py          # Pydantic request models
+├── auth_utils.py       # Token generation/verification, get_current_user / require_admin dependencies
 └── routes/
     ├── auth_routes.py      # /api/auth/* - login, profile, user management
     ├── task_routes.py      # /api/tasks/* - CRUD for tasks
@@ -183,24 +96,30 @@ backend/
    - Uses `itsdangerous.URLSafeTimedSerializer` for stateless tokens
    - Token payload: `{user_id: int, role: str}`
    - Tokens expire after 24 hours (configurable via `AUTH_TOKEN_MAX_AGE`)
-   - Protected routes use `@require_auth()` or `@require_auth(role='admin')` decorator
-   - Current user stored in Flask's `g.current_user`
+   - Protected routes use `Depends(get_current_user)` or `Depends(require_admin)`
+   - Current user injected via FastAPI dependency injection
 
-2. **Database Initialization (`app.py`):**
+2. **Database Initialization (`app.py` lifespan):**
    - On startup, the app:
-     - Creates all tables via `db.create_all()`
+     - Creates all tables via `Base.metadata.create_all()`
      - Checks and migrates schema (e.g., password_hash length, user_id column)
      - Creates default admin user (username: `admin`, password: `123456`)
      - Updates existing tasks to belong to admin if user_id is NULL
 
-3. **Models (`models.py`):**
+3. **Database Session (`database.py`):**
+   - `get_db()` generator provides a SQLAlchemy session per request via `Depends(get_db)`
+   - Session is automatically closed after each request
+
+4. **Models (`models.py`):**
    - `User`: username, password_hash, role (admin/user), has many tasks
    - `Task`: title, description, status (pending/done), due_date, user_id (FK)
    - All models have `to_dict()` methods for JSON serialization
 
-4. **API Response Pattern:**
-   - Success: `return jsonify({...}), 200` (or 201 for creation)
-   - Error: `return jsonify({'error': 'message'}), 4xx`
+5. **API Response Pattern:**
+   - Success: `return {...}` (or `JSONResponse({...}, status_code=201)` for creation)
+   - Error: `JSONResponse({'error': 'message'}, status_code=4xx)`
+   - Custom exception handlers ensure `HTTPException` returns `{"error": "..."}` format
+   - `RequestValidationError` returns 400 + `{"error": "参数格式错误"}`
    - Auth errors return 401, permission errors return 403
 
 ### Frontend Structure
@@ -257,14 +176,14 @@ frontend/src/
 
 ## Database Migrations
 
-The app performs **inline schema migrations** in `app.py` on startup:
+The app performs **inline schema migrations** in `app.py` lifespan on startup:
 - Checks column existence/type via SQLAlchemy `inspect()`
 - Executes raw SQL `ALTER TABLE` statements when needed
 - Example: ensures `users.password_hash` is VARCHAR(512), adds `tasks.user_id` if missing
 
 **When adding new columns:**
 1. Update the model in `models.py`
-2. Add migration logic in `app.py` startup section (inside `with app.app_context()`)
+2. Add migration logic in `app.py` lifespan startup section
 3. Use `inspector.get_columns()` to check if column exists before altering
 
 ## Configuration
@@ -275,13 +194,13 @@ The app performs **inline schema migrations** in `app.py` on startup:
 - Never commit `.env` file to Git (already in `.gitignore`)
 
 **Backend (`backend/config.py`):**
-- `SECRET_KEY`: Flask secret key (from `SECRET_KEY` env var)
+- `SECRET_KEY`: Application secret key (from `SECRET_KEY` env var)
 - `DATABASE_URL`: Full database connection string (from `DATABASE_URL` env var)
 - Falls back to localhost defaults for development
 
 **Frontend (`frontend/vite.config.js`):**
 - Backend API URL read from `VITE_BACKEND_URL` environment variable
-- Default: `http://localhost:5000`
+- Default: `http://localhost:8000`
 - In Docker: Nginx handles API proxy, so this is only for development
 
 **Docker Environment:**
@@ -294,24 +213,28 @@ The app performs **inline schema migrations** in `app.py` on startup:
 ### Adding a New Protected API Endpoint
 
 ```python
-from flask import Blueprint, request, jsonify, g
-from auth_utils import require_auth
-from models import db
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from database import get_db
+from auth_utils import get_current_user, require_admin
+from models import User
 
-your_bp = Blueprint('your_feature', __name__)
+your_router = APIRouter(prefix='/api/your-feature')
 
-@your_bp.route('/your-route', methods=['GET'])
-@require_auth()  # or @require_auth(role='admin')
-def your_handler():
-    current_user = g.current_user
+@your_router.get('/your-route')
+def your_handler(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),  # or Depends(require_admin)
+):
     # ... your logic
-    return jsonify({'result': '...'}), 200
+    return {'result': '...'}
 ```
 
 Then register in `app.py`:
 ```python
-from routes.your_routes import your_bp
-app.register_blueprint(your_bp, url_prefix='/api/your-feature')
+from routes.your_routes import your_router
+app.include_router(your_router)
 ```
 
 ### Adding a New Frontend Route
@@ -331,10 +254,10 @@ app.register_blueprint(your_bp, url_prefix='/api/your-feature')
 
 ### Adding a New Database Model
 
-1. Define model in `models.py` with `to_dict()` method
-2. Add migration logic in `app.py` startup (check if table/columns exist)
+1. Define model in `models.py` with `to_dict()` method (inherit from `Base`)
+2. Add migration logic in `app.py` lifespan (check if table/columns exist)
 3. Import and use in route handlers
-4. Remember to commit with `db.session.commit()`
+4. Remember to commit with `db.commit()`
 
 ## Default Credentials
 

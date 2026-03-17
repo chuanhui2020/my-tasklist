@@ -1,120 +1,144 @@
-﻿from flask import Blueprint, request, jsonify, g
-from models import db, Task
-from datetime import datetime
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from sqlalchemy import case
-from auth_utils import require_auth
+from datetime import datetime
+from models import Task, User
+from schemas import TaskCreate, TaskUpdate, TaskStatusUpdate
+from database import get_db
+from auth_utils import get_current_user
+
+task_router = APIRouter(prefix='/api')
 
 
-task_bp = Blueprint('tasks', __name__)
+@task_router.get('/tasks')
+def get_tasks(
+    status: str = Query(default=None),
+    sort: str = Query(default='due_date'),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = db.query(Task).filter(Task.user_id == user.id)
 
-@task_bp.route('/tasks', methods=['GET'])
-@require_auth()
-def get_tasks():
-    status_filter = request.args.get('status')
-    sort_by = request.args.get('sort', 'due_date')
+    if status:
+        query = query.filter(Task.status == status)
 
-    query = Task.query.filter(Task.user_id == g.current_user.id)
-
-    if status_filter:
-        query = query.filter(Task.status == status_filter)
-
-    if sort_by == 'created_at':
+    if sort == 'created_at':
         tasks = query.order_by(Task.created_at.desc()).all()
     else:
         tasks = query.order_by(
             case((Task.due_date.is_(None), 1), else_=0),
             Task.due_date.asc(),
-            Task.created_at.desc()
+            Task.created_at.desc(),
         ).all()
 
-    return jsonify([task.to_dict() for task in tasks])
+    return [task.to_dict() for task in tasks]
 
-@task_bp.route('/tasks/<int:task_id>', methods=['GET'])
-@require_auth()
-def get_task(task_id):
-    task = Task.query.filter_by(id=task_id, user_id=g.current_user.id).first()
+
+@task_router.get('/tasks/{task_id}')
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    task = db.query(Task).filter_by(id=task_id, user_id=user.id).first()
     if not task:
-        return jsonify({'error': '任务不存在'}), 404
-    return jsonify(task.to_dict())
+        return JSONResponse({'error': '任务不存在'}, status_code=404)
+    return task.to_dict()
 
-@task_bp.route('/tasks', methods=['POST'])
-@require_auth()
-def create_task():
-    data = request.json or {}
 
-    if not data.get('title'):
-        return jsonify({'error': '任务标题不能为空'}), 400
+@task_router.post('/tasks', status_code=201)
+def create_task(
+    body: TaskCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not body.title:
+        return JSONResponse({'error': '任务标题不能为空'}, status_code=400)
 
     due_date = None
-    if data.get('due_date'):
+    if body.due_date:
         try:
-            due_date = datetime.strptime(data['due_date'], '%Y-%m-%d').date()
+            due_date = datetime.strptime(body.due_date, '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({'error': '日期格式错误，请使用 YYYY-MM-DD 格式'}), 400
+            return JSONResponse({'error': '日期格式错误，请使用 YYYY-MM-DD 格式'}, status_code=400)
 
     task = Task(
-        title=data['title'],
-        description=data.get('description', ''),
+        title=body.title,
+        description=body.description or '',
         due_date=due_date,
-        user_id=g.current_user.id
+        user_id=user.id,
     )
 
-    db.session.add(task)
-    db.session.commit()
+    db.add(task)
+    db.commit()
+    db.refresh(task)
 
-    return jsonify(task.to_dict()), 201
+    return JSONResponse(task.to_dict(), status_code=201)
 
-@task_bp.route('/tasks/<int:task_id>', methods=['PUT'])
-@require_auth()
-def update_task(task_id):
-    task = Task.query.filter_by(id=task_id, user_id=g.current_user.id).first()
+
+@task_router.put('/tasks/{task_id}')
+def update_task(
+    task_id: int,
+    body: TaskUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    task = db.query(Task).filter_by(id=task_id, user_id=user.id).first()
     if not task:
-        return jsonify({'error': '任务不存在'}), 404
+        return JSONResponse({'error': '任务不存在'}, status_code=404)
 
-    data = request.json or {}
+    if not body.title:
+        return JSONResponse({'error': '任务标题不能为空'}, status_code=400)
 
-    if not data.get('title'):
-        return jsonify({'error': '任务标题不能为空'}), 400
+    task.title = body.title
+    task.description = body.description or ''
 
-    task.title = data['title']
-    task.description = data.get('description', '')
-
-    if data.get('due_date'):
+    if body.due_date:
         try:
-            task.due_date = datetime.strptime(data['due_date'], '%Y-%m-%d').date()
+            task.due_date = datetime.strptime(body.due_date, '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({'error': '日期格式错误，请使用 YYYY-MM-DD 格式'}), 400
+            return JSONResponse({'error': '日期格式错误，请使用 YYYY-MM-DD 格式'}, status_code=400)
     else:
         task.due_date = None
 
-    db.session.commit()
-    return jsonify(task.to_dict())
+    db.commit()
+    db.refresh(task)
+    return task.to_dict()
 
-@task_bp.route('/tasks/<int:task_id>/status', methods=['PATCH'])
-@require_auth()
-def update_task_status(task_id):
-    task = Task.query.filter_by(id=task_id, user_id=g.current_user.id).first()
+
+@task_router.patch('/tasks/{task_id}/status')
+def update_task_status(
+    task_id: int,
+    body: TaskStatusUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    task = db.query(Task).filter_by(id=task_id, user_id=user.id).first()
     if not task:
-        return jsonify({'error': '任务不存在'}), 404
+        return JSONResponse({'error': '任务不存在'}, status_code=404)
 
-    data = request.json or {}
+    if body.status not in ['pending', 'done']:
+        return JSONResponse({'error': '无效的状态值'}, status_code=400)
 
-    if 'status' not in data or data['status'] not in ['pending', 'done']:
-        return jsonify({'error': '无效的状态值'}), 400
+    task.status = body.status
+    db.commit()
+    db.refresh(task)
 
-    task.status = data['status']
-    db.session.commit()
+    return task.to_dict()
 
-    return jsonify(task.to_dict())
 
-@task_bp.route('/tasks/<int:task_id>', methods=['DELETE'])
-@require_auth()
-def delete_task(task_id):
-    task = Task.query.filter_by(id=task_id, user_id=g.current_user.id).first()
+@task_router.delete('/tasks/{task_id}')
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    task = db.query(Task).filter_by(id=task_id, user_id=user.id).first()
     if not task:
-        return jsonify({'error': '任务不存在'}), 404
+        return JSONResponse({'error': '任务不存在'}, status_code=404)
 
-    db.session.delete(task)
-    db.session.commit()
+    db.delete(task)
+    db.commit()
 
-    return jsonify({'message': '任务已删除'})
+    return {'message': '任务已删除'}

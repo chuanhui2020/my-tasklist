@@ -1,15 +1,15 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { resolve } from 'path'
+import { fileURLToPath, URL } from 'node:url'
 
 // 从环境变量读取后端地址，默认为 localhost
-const BACKEND_URL = process.env.VITE_BACKEND_URL || 'http://localhost:5000'
+const BACKEND_URL = process.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
   server: {

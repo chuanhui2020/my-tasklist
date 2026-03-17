@@ -1,20 +1,24 @@
-﻿from functools import wraps
-from flask import request, jsonify, g, current_app
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy.orm import Session
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from config import settings
+from database import get_db
 from models import User
 
+
 def _get_serializer():
-    secret = current_app.config['SECRET_KEY']
-    return URLSafeTimedSerializer(secret_key=secret, salt='tasklist-auth')
+    return URLSafeTimedSerializer(secret_key=settings.SECRET_KEY, salt='tasklist-auth')
+
 
 def generate_token(user):
     serializer = _get_serializer()
     payload = {'user_id': user.id, 'role': user.role}
     return serializer.dumps(payload)
 
-def verify_token(token):
+
+def verify_token(token, db: Session):
     serializer = _get_serializer()
-    max_age = current_app.config.get('AUTH_TOKEN_MAX_AGE', 60 * 60 * 24)
+    max_age = settings.AUTH_TOKEN_MAX_AGE
     try:
         data = serializer.loads(token, max_age=max_age)
     except SignatureExpired:
@@ -22,31 +26,30 @@ def verify_token(token):
     except BadSignature:
         raise ValueError('token_invalid')
 
-    user = User.query.get(data.get('user_id'))
+    user = db.get(User, data.get('user_id'))
     if not user:
         raise ValueError('user_missing')
     return user
 
-def require_auth(role=None):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            auth_header = request.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
-                return jsonify({'error': '未登录或凭证无效'}), 401
-            token = auth_header.split(' ', 1)[1].strip()
-            if not token:
-                return jsonify({'error': '未登录或凭证无效'}), 401
-            try:
-                user = verify_token(token)
-            except ValueError as exc:
-                message = '登录已过期，请重新登录' if str(exc) == 'token_expired' else '登录状态无效，请重新登录'
-                return jsonify({'error': message}), 401
 
-            if role and user.role != role:
-                return jsonify({'error': '权限不足'}), 403
+def get_current_user(
+    db: Session = Depends(get_db),
+    authorization: str = Header(default=''),
+) -> User:
+    if not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail='未登录或凭证无效')
+    token = authorization.split(' ', 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail='未登录或凭证无效')
+    try:
+        user = verify_token(token, db)
+    except ValueError as exc:
+        message = '登录已过期，请重新登录' if str(exc) == 'token_expired' else '登录状态无效，请重新登录'
+        raise HTTPException(status_code=401, detail=message)
+    return user
 
-            g.current_user = user
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != 'admin':
+        raise HTTPException(status_code=403, detail='权限不足')
+    return user

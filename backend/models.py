@@ -1,19 +1,20 @@
-﻿from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, ForeignKey
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from database import Base
 
-db = SQLAlchemy()
 
-class User(db.Model):
+class User(Base):
     __tablename__ = 'users'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    username = db.Column(db.String(64), unique=True, nullable=False)
-    password_hash = db.Column(db.String(512), nullable=False)
-    role = db.Column(db.Enum('admin', 'user'), default='user', nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    role: Mapped[str] = mapped_column(Enum('admin', 'user'), default='user', nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    tasks = db.relationship('Task', backref='owner', lazy=True)
+    tasks = relationship('Task', backref='owner', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -29,16 +30,17 @@ class User(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
         }
 
-class Task(db.Model):
+
+class Task(Base):
     __tablename__ = 'tasks'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    title = db.Column(db.String(255), nullable=False)
-    description = db.Column(db.Text)
-    status = db.Column(db.Enum('pending', 'done'), default='pending')
-    due_date = db.Column(db.Date)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Enum('pending', 'done'), default='pending')
+    due_date = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
 
     def to_dict(self):
         return {

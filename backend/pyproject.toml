@@ -1,14 +1,17 @@
 [project]
 name = "my-tasklist-backend"
-version = "0.1.0"
-description = "Flask API for the tasklist app"
-requires-python = ">=3.8"
+version = "0.2.0"
+description = "FastAPI backend for the tasklist app"
+requires-python = ">=3.10"
 dependencies = [
-    "Flask==2.3.3",
-    "Flask-SQLAlchemy==3.0.5",
-    "Flask-CORS==4.0.0",
+    "fastapi==0.115.0",
+    "uvicorn[standard]==0.30.6",
+    "pydantic-settings==2.5.2",
+    "SQLAlchemy==2.0.35",
     "PyMySQL==1.1.0",
     "python-dotenv==1.0.0",
     "cryptography",
     "requests==2.31.0",
+    "werkzeug==3.0.4",
+    "itsdangerous==2.2.0",
 ]

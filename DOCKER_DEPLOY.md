@@ -47,7 +47,7 @@ nano .env
 MYSQL_ROOT_PASSWORD=your_secure_root_password_here
 MYSQL_PASSWORD=your_secure_user_password_here
 
-# Flask 密钥（生产环境必须修改！）
+# 应用密钥（生产环境必须修改！）
 SECRET_KEY=your-random-secret-key-at-least-32-characters-long
 
 # 前端访问端口（可选，默认 3000）
@@ -82,7 +82,7 @@ docker compose ps
 
 # 应该看到 3 个容器都在运行：
 # - tasklist-db (MySQL)
-# - tasklist-backend (Flask)
+# - tasklist-backend (FastAPI)
 # - tasklist-frontend (Nginx)
 
 # 检查健康状态
@@ -260,7 +260,7 @@ curl http://localhost:3000/api/tasks
 # 2. 进入前端容器测试
 docker compose exec frontend sh
 # 在容器内执行：
-wget -O- http://backend:5000/api/tasks
+wget -O- http://backend:8000/api/tasks
 
 # 3. 检查 nginx 配置
 docker compose exec frontend cat /etc/nginx/conf.d/default.conf
@@ -275,9 +275,6 @@ docker compose exec frontend tail -f /var/log/nginx/error.log
 # 1. 删除现有数据并重新初始化
 docker compose down -v  # 警告：会删除所有数据！
 docker compose up -d
-
-# 2. 手动初始化
-docker compose exec db mysql -u root -p$MYSQL_ROOT_PASSWORD tasklist_db < database.sql
 ```
 
 ---

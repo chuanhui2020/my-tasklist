@@ -1,7 +1,7 @@
 services:
   # MySQL 数据库服务
   db:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: tasklist-db
     restart: always
     environment:
@@ -32,7 +32,7 @@ services:
           cpus: '0.25'     # 保留 25% CPU
           memory: 256M     # 保留 256MB 内存
 
-  # Flask 后端服务
+  # FastAPI 后端服务
   backend:
     build:
       context: .
@@ -42,9 +42,8 @@ services:
     environment:
       # 数据库配置
       DATABASE_URL: mysql+pymysql://${MYSQL_USER:-taskuser}:${MYSQL_PASSWORD:-taskpassword}@db:3306/${MYSQL_DATABASE:-tasklist_db}?charset=utf8mb4
-      # Flask 配置
+      # 应用配置
       SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
-      FLASK_ENV: ${FLASK_ENV:-production}
       # Python 配置
       PYTHONUNBUFFERED: 1
     depends_on:
@@ -53,7 +52,7 @@ services:
     networks:
       - tasklist_network
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/api/tasks', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
