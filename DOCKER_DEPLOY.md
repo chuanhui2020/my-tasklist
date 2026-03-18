@@ -201,13 +201,16 @@ docker compose exec -T db mysql \
 ### 进入数据库
 
 ```bash
-# 进入 MySQL 命令行
-docker compose exec db mysql -u root -p
+# 进入 MySQL 命令行（指定 utf8mb4 避免中文乱码）
+docker compose exec db mysql -u taskuser -p --default-character-set=utf8mb4 tasklist_db
 
-# 输入 MYSQL_ROOT_PASSWORD 后即可执行 SQL
-# mysql> USE tasklist_db;
+# 使用 root 用户
+docker compose exec db mysql -u root -p --default-character-set=utf8mb4 tasklist_db
+
+# 常用 SQL
 # mysql> SHOW TABLES;
 # mysql> SELECT * FROM users;
+# mysql> SELECT * FROM tasks;
 ```
 
 ### 数据持久化
