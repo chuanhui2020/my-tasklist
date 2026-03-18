@@ -1,5 +1,30 @@
 # Docker Compose 部署指南
 
+## 部署架构
+
+```
+用户浏览器 --HTTPS(443)--> Cloudflare CDN/WAF --HTTPS(443)--> Nginx(前端容器:443)
+                                                                  ├── 静态文件(Vue 3)
+                                                                  └── /api/ --HTTP--> Uvicorn(后端容器:8000) --MySQL--> MySQL 8.4(数据库容器:3306)
+```
+
+**容器组成（Docker Compose）：**
+
+| 容器 | 服务 | 端口 | 说明 |
+|------|------|------|------|
+| `tasklist-frontend` | Nginx | 80, 443 | 托管 Vue 静态文件，反代 API 到后端 |
+| `tasklist-backend` | Uvicorn (单 worker) | 8000 | 运行 FastAPI 应用 |
+| `tasklist-db` | MySQL 8.4 | 3306 | 数据持久化到 `mysql_data` volume |
+
+三个容器通过内部网络 `tasklist_network` 通信。
+
+**HTTPS 全链路加密：**
+
+- 域名 `tasklist.ch-tools.org` 通过 Cloudflare 代理（Proxied），附带 CDN 和 DDoS 防护
+- SSL 模式：Full (Strict)，Cloudflare 到源站之间使用 Cloudflare Origin Certificate 加密
+- Nginx 监听 443 端口，证书文件挂载自 `./certs/` 目录
+- HTTP(80) 自动 301 重定向到 HTTPS
+
 ## 快速开始
 
 ### 前置要求
@@ -323,32 +348,33 @@ services:
 
 ## 生产环境部署建议
 
-### 1. 使用 HTTPS
+### 1. HTTPS 配置（Cloudflare Origin Certificate）
 
-使用 Nginx 反向代理 + Let's Encrypt：
+项目已通过 Cloudflare Origin Certificate 实现全链路 HTTPS：
 
 ```bash
-# 安装 certbot
-sudo apt install certbot python3-certbot-nginx
+# 1. 在 Cloudflare 控制台生成 Origin Certificate
+#    SSL/TLS → Origin Server → Create Certificate
 
-# 申请证书
-sudo certbot --nginx -d your-domain.com
+# 2. 保存证书到项目 certs 目录
+mkdir -p certs
+# 将 Certificate 保存为 certs/origin.pem
+# 将 Private Key 保存为 certs/origin-key.pem
+chmod 600 certs/origin-key.pem
 
-# 配置自动续期
-sudo certbot renew --dry-run
+# 3. 重建前端容器
+docker compose up -d --build frontend
+
+# 4. Cloudflare SSL/TLS 模式设为 Full (Strict)
 ```
 
-### 2. 配置域名
+### 2. 域名配置
 
-修改 `nginx.conf` 中的 `server_name`：
+域名 `tasklist.ch-tools.org` 通过 Cloudflare 管理：
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;  # 修改为你的域名
-    # ...
-}
-```
+- DNS 记录指向服务器 IP，代理状态为橙色云朵（Proxied）
+- Cloudflare 提供 CDN 加速和 DDoS 防护
+- SSL/TLS 模式：Full (Strict)
 
 ### 3. 环境变量安全
 
