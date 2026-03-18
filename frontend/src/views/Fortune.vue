@@ -19,7 +19,7 @@
 
             <div class="fortune-content">
                 <!-- 签筒和签子 SVG -->
-                <div class="fortune-scene" :class="{ shaking: isShaking }">
+                <div v-if="!alreadyDrawn" class="fortune-scene" :class="{ shaking: isShaking }">
                     <svg viewBox="0 0 400 500" class="fortune-svg">
                         <!-- 签筒 -->
                         <defs>
@@ -225,21 +225,22 @@ const toggleExpand = (id) => {
 // 加载今日签文和历史
 const loadData = async () => {
     try {
-        const [todayRes, historyRes] = await Promise.all([
-            api.getTodayFortune(),
-            api.getFortuneHistory()
-        ])
-
+        const todayRes = await api.getTodayFortune()
         if (todayRes.data.drawn) {
             alreadyDrawn.value = true
             fortuneData.value = todayRes.data.data
             fortuneNumber.value = todayRes.data.data.fortuneNumber
             showResult.value = true
         }
+    } catch (e) {
+        console.error('加载今日签文失败:', e)
+    }
 
+    try {
+        const historyRes = await api.getFortuneHistory()
         historyRecords.value = historyRes.data.records || []
     } catch (e) {
-        // silent — page still usable
+        console.error('加载历史记录失败:', e)
     }
 }
 
