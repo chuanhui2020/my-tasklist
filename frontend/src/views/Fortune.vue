@@ -89,9 +89,19 @@
                         <span v-if="alreadyDrawn">🚫 今日已求籤</span>
                         <span v-else-if="!isShaking && !isGenerating">🙏 誠心求籤</span>
                         <span v-else-if="isShaking">🎋 搖籤中...</span>
-                        <span v-else>📜 解籤中...</span>
+                        <span v-else>{{ currentHint }}</span>
                     </el-button>
                 </div>
+
+                <!-- 等待提示 -->
+                <transition name="fortune-reveal">
+                    <div v-if="isGenerating && !isShaking && !showResult" class="waiting-hints">
+                        <div class="waiting-text">{{ currentHint }}</div>
+                        <div class="waiting-dots">
+                            <span class="dot" v-for="i in 3" :key="i" :style="{ animationDelay: (i - 1) * 0.3 + 's' }"></span>
+                        </div>
+                    </div>
+                </transition>
 
                 <!-- 签文展示 -->
                 <transition name="fortune-reveal">
@@ -184,7 +194,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 
@@ -201,6 +211,36 @@ const fallingStickRotation = ref(0)
 const expandedId = ref(null)
 const historyRecords = ref([])
 
+const waitingHints = [
+    '📿 靈籤感應中...',
+    '🔮 正在解讀天機...',
+    '✨ 法師正在解籤...',
+    '🌙 卜算星象運勢...',
+    '🏮 焚香禱告中...',
+    '📜 翻閱古籍對照...',
+    '🎴 推演卦象吉凶...',
+]
+const currentHint = ref(waitingHints[0])
+let hintTimer = null
+let hintIndex = 0
+
+const startHintRotation = () => {
+    hintIndex = 0
+    currentHint.value = waitingHints[0]
+    hintTimer = setInterval(() => {
+        hintIndex = (hintIndex + 1) % waitingHints.length
+        currentHint.value = waitingHints[hintIndex]
+    }, 3000)
+}
+
+const stopHintRotation = () => {
+    if (hintTimer) {
+        clearInterval(hintTimer)
+        hintTimer = null
+    }
+}
+
+onUnmounted(stopHintRotation)
 const fortuneData = ref({
     type: 'great',
     typeText: '上上籤',
@@ -251,6 +291,7 @@ onMounted(loadData)
 // 生成签文 - 调用后端 AI API
 const generateFortune = async (number) => {
     isGenerating.value = true
+    startHintRotation()
 
     try {
         const response = await api.generateFortune(number)
@@ -295,6 +336,7 @@ const generateFortune = async (number) => {
             ]
         }
     } finally {
+        stopHintRotation()
         isGenerating.value = false
     }
 }
@@ -690,6 +732,45 @@ const reset = () => {
     background: rgba(255, 215, 0, 0.1) !important;
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(255, 215, 0, 0.3);
+}
+
+/* 等待提示 */
+.waiting-hints {
+    text-align: center;
+    margin: 30px 0;
+    padding: 24px;
+}
+
+.waiting-text {
+    font-size: 20px;
+    font-family: 'KaiTi', serif;
+    color: #FFD700;
+    animation: hintFade 0.6s ease-in-out;
+}
+
+@keyframes hintFade {
+    0% { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.waiting-dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #FFD700;
+    animation: dotBounce 1.2s ease-in-out infinite;
+}
+
+@keyframes dotBounce {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1.2); }
 }
 
 @media (max-width: 768px) {
