@@ -67,6 +67,7 @@ class FortuneRecord(Base):
     poem = mapped_column(Text, nullable=False)
     interpretation = mapped_column(Text, nullable=False)
     advice = mapped_column(Text, nullable=False)
+    work_fortune = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -82,5 +83,6 @@ class FortuneRecord(Base):
             'poem': self.poem,
             'interpretation': self.interpretation,
             'advice': advice_list,
+            'work_fortune': self.work_fortune or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
         }

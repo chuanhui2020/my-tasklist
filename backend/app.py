@@ -63,6 +63,16 @@ async def lifespan(app: FastAPI):
                     db.commit()
                 except Exception:
                     db.rollback()
+
+        # Migrate fortune_records: add work_fortune column
+        if 'fortune_records' in inspector.get_table_names():
+            fr_columns = {col['name'] for col in inspector.get_columns('fortune_records')}
+            if 'work_fortune' not in fr_columns:
+                try:
+                    db.execute(text('ALTER TABLE fortune_records ADD COLUMN work_fortune TEXT NULL'))
+                    db.commit()
+                except Exception:
+                    db.rollback()
     finally:
         db.close()
 

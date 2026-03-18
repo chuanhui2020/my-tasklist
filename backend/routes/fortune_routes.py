@@ -51,7 +51,8 @@ def build_fortune_prompt(fortune_number):
         {{ "label": "財運", "value": "簡短建議" }},
         {{ "label": "感情", "value": "簡短建議" }},
         {{ "label": "健康", "value": "簡短建議" }}
-    ]
+    ],
+    "work_fortune": "今日工作運勢，用搞笑幽默的語氣寫，像朋友吐槽一樣，例如：宜摸魚、宜假裝很忙、宜帶薪拉屎、宜瘋狂加班衝KPI、宜跟老闆畫大餅等，30字以內"
 }}"""
 
 
@@ -441,12 +442,27 @@ def generate_fallback_fortune(fortune_number):
     interp_index = fortune_number % len(interpretations)
     advice_index = fortune_number % len(advice_options)
 
+    work_fortunes = [
+        '宜摸魚，老闆不在工位的時候就是你的黃金時間',
+        '宜帶薪拉屎，每次多蹲五分鐘，一年多賺一個月',
+        '宜假裝很忙，打字聲音要大，表情要嚴肅',
+        '宜瘋狂加班衝KPI，今天不卷明天被卷',
+        '宜跟老闆畫大餅，反正畫餅不用交稅',
+        '宜躺平，今日諸事不宜，唯有躺平保平安',
+        '宜提前下班，反正也沒人發現你幾點走的',
+        '宜開會摸魚，打開筆記本假裝記錄，實則刷手機',
+        '宜寫週報吹牛，把喝咖啡寫成調研市場行情',
+        '宜找同事聊八卦，美其名曰跨部門溝通協作',
+    ]
+    work_index = fortune_number % len(work_fortunes)
+
     return {
         'type': selected_type['type'],
         'typeText': selected_type['text'],
         'poem': poems[poem_index],
         'interpretation': interpretations[interp_index],
-        'advice': advice_options[advice_index]
+        'advice': advice_options[advice_index],
+        'work_fortune': work_fortunes[work_index]
     }
 
 
@@ -511,7 +527,8 @@ def generate_fortune(body: dict, db: Session = Depends(get_db), user: User = Dep
             type_text=fortune_data.get('typeText', '中籤'),
             poem=fortune_data.get('poem', ''),
             interpretation=fortune_data.get('interpretation', ''),
-            advice=json.dumps(fortune_data.get('advice', []), ensure_ascii=False)
+            advice=json.dumps(fortune_data.get('advice', []), ensure_ascii=False),
+            work_fortune=fortune_data.get('work_fortune', '')
         )
         db.add(record)
         db.commit()

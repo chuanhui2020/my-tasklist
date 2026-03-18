@@ -133,6 +133,11 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <div v-if="fortuneData.work_fortune" class="result-work-fortune">
+                                    <div class="work-fortune-title">【今日打工人運勢】</div>
+                                    <div class="work-fortune-text">{{ fortuneData.work_fortune }}</div>
+                                </div>
                             </div>
 
                             <el-button v-if="!alreadyDrawn" type="primary" plain @click="reset" class="reset-button">
@@ -184,6 +189,10 @@
                                         <span class="advice-value">{{ item.value }}</span>
                                     </div>
                                 </div>
+                            </div>
+                            <div v-if="record.work_fortune" class="result-work-fortune">
+                                <div class="work-fortune-title">【今日打工人運勢】</div>
+                                <div class="work-fortune-text">{{ record.work_fortune }}</div>
                             </div>
                         </div>
                     </transition>
@@ -714,6 +723,30 @@ const reset = () => {
 .advice-value {
     color: var(--text-secondary);
     font-family: 'KaiTi', serif;
+}
+
+.result-work-fortune {
+    background: rgba(255, 165, 0, 0.08);
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 165, 0, 0.2);
+    text-align: center;
+}
+
+.work-fortune-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #FFA500;
+    margin-bottom: 12px;
+    font-family: 'KaiTi', serif;
+}
+
+.work-fortune-text {
+    font-size: 18px;
+    line-height: 1.8;
+    color: #FFD700;
+    font-family: 'KaiTi', serif;
+    font-weight: 700;
 }
 
 .reset-button {
