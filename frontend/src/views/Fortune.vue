@@ -212,6 +212,8 @@ const isFalling = ref(false)
 const isGenerating = ref(false)
 const showResult = ref(false)
 const alreadyDrawn = ref(false)
+const animationDone = ref(false)
+const apiDone = ref(false)
 const fortuneNumber = ref(1)
 const fallingStickIndex = ref(3)
 const fallingStickX = ref(195)
@@ -297,6 +299,14 @@ const loadData = async () => {
 
 onMounted(loadData)
 
+// 两者都完成才显示结果
+const tryShowResult = () => {
+    if (animationDone.value && apiDone.value) {
+        showResult.value = true
+        isFalling.value = false
+    }
+}
+
 // 生成签文 - 调用后端 AI API
 const generateFortune = async (number) => {
     isGenerating.value = true
@@ -317,42 +327,43 @@ const generateFortune = async (number) => {
 
     } catch (error) {
         if (error.response?.status === 429) {
-            // Already drawn today
             alreadyDrawn.value = true
             const data = error.response.data?.data
             if (data) {
                 fortuneData.value = data
                 fortuneNumber.value = data.fortuneNumber
-                showResult.value = true
             }
             ElMessage.warning('今日已求過籤，每日僅可求籤一次')
-            return
-        }
-
-        ElMessage.error('求籤失敗，請重試')
-
-        // 如果 API 失败，使用备用数据
-        fortuneData.value = {
-            type: 'medium',
-            typeText: '中籤',
-            poem: '雲開見月明，守得花開時，耐心待時機，好運必相隨。',
-            interpretation: '此籤暗示需要等待時機，不宜急進。當前雖有困頓，但守得雲開見月明，耐心等待必有收穫。',
-            advice: [
-                { label: '事業', value: '穩中求進，切勿冒進' },
-                { label: '財運', value: '量入為出，理財有道' },
-                { label: '感情', value: '耐心等待，緣分自來' },
-                { label: '健康', value: '規律作息，身心安康' }
-            ]
+        } else {
+            ElMessage.error('求籤失敗，請重試')
+            fortuneData.value = {
+                type: 'medium',
+                typeText: '中籤',
+                poem: '雲開見月明，守得花開時，耐心待時機，好運必相隨。',
+                interpretation: '此籤暗示需要等待時機，不宜急進。當前雖有困頓，但守得雲開見月明，耐心等待必有收穫。',
+                advice: [
+                    { label: '事業', value: '穩中求進，切勿冒進' },
+                    { label: '財運', value: '量入為出，理財有道' },
+                    { label: '感情', value: '耐心等待，緣分自來' },
+                    { label: '健康', value: '規律作息，身心安康' }
+                ]
+            }
         }
     } finally {
         stopHintRotation()
         isGenerating.value = false
+        apiDone.value = true
+        tryShowResult()
     }
 }
 
 // 开始抽签
 const startFortune = async () => {
     if (alreadyDrawn.value) return
+
+    // 重置标志
+    animationDone.value = false
+    apiDone.value = false
 
     // 生成随机签号
     fortuneNumber.value = Math.floor(Math.random() * 100) + 1
@@ -390,10 +401,10 @@ const animateFalling = () => {
         if (progress < 1) {
             requestAnimationFrame(animate)
         } else {
-            // 掉落完成，显示结果
+            // 掉落完成
             setTimeout(() => {
-                showResult.value = true
-                isFalling.value = false
+                animationDone.value = true
+                tryShowResult()
             }, 500)
         }
     }
