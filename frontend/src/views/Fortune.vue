@@ -211,7 +211,9 @@ const fortuneData = ref({
 
 // 格式化诗文（添加换行）
 const formatPoem = (poem) => {
-    return poem.replace(/，/g, '，<br>').replace(/。/g, '。<br>')
+    let text = poem.trimEnd()
+    if (!text.endsWith('。')) text += '。'
+    return text.replace(/，/g, '，<br>').replace(/。/g, '。<br>')
 }
 
 const formatDate = (dateStr) => {

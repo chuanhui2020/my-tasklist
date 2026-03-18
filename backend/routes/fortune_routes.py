@@ -44,7 +44,7 @@ def build_fortune_prompt(fortune_number):
 {{
     "type": "great/good/medium/fair/poor 五選一",
     "typeText": "上上籤/上籤/中籤/中下籤/下籤 對應type",
-    "poem": "四句七言籤詩",
+    "poem": "四句七言籤詩，每句以逗號或句號結尾，最後一句必須以句號（。）結尾",
     "interpretation": "對籤詩的詳細白話解說，包含運勢分析",
     "advice": [
         {{ "label": "事業", "value": "簡短建議" }},
