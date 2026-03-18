@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, ForeignKey
@@ -15,6 +16,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     tasks = relationship('Task', backref='owner', lazy=True)
+    fortune_records = relationship('FortuneRecord', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -51,4 +53,34 @@ class Task(Base):
             'due_date': self.due_date.strftime('%Y-%m-%d') if self.due_date else None,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'user_id': self.user_id
+        }
+
+
+class FortuneRecord(Base):
+    __tablename__ = 'fortune_records'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    fortune_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    fortune_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    type_text: Mapped[str] = mapped_column(String(20), nullable=False)
+    poem = mapped_column(Text, nullable=False)
+    interpretation = mapped_column(Text, nullable=False)
+    advice = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        try:
+            advice_list = json.loads(self.advice)
+        except (json.JSONDecodeError, TypeError):
+            advice_list = []
+        return {
+            'id': self.id,
+            'fortuneNumber': self.fortune_number,
+            'type': self.fortune_type,
+            'typeText': self.type_text,
+            'poem': self.poem,
+            'interpretation': self.interpretation,
+            'advice': advice_list,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
         }

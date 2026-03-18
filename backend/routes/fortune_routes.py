@@ -1,16 +1,58 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 import os
 import json
 import re
 import sys
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, date
+
+import random
 
 import requests as http_requests
 
+from database import get_db
+from auth_utils import get_current_user
+from models import User, FortuneRecord
+
 fortune_router = APIRouter(prefix='/api/fortune')
+
+SYSTEM_PROMPT = '你是一位精通周易與傳統占卜的老法師，輸出必須是純 JSON 格式，所有內容使用繁體中文。'
+
+
+def build_fortune_prompt(fortune_number):
+    themes = ['事業前程', '姻緣桃花', '財運亨通', '學業進步', '健康平安', '家庭和睦', '旅行出行', '貴人相助']
+    seasons = ['春', '夏', '秋', '冬']
+    elements = ['金', '木', '水', '火', '土']
+
+    theme = random.choice(themes)
+    season = random.choice(seasons)
+    element = random.choice(elements)
+    today = date.today().strftime('%Y年%m月%d日')
+
+    return f"""現在是{today}，{season}季，五行屬{element}。
+求籤者抽到了第 {fortune_number} 籤，心中所念偏向「{theme}」。
+
+請根據籤號、時節與五行，生成一支獨特的靈籤。每次生成的籤詩和解讀都應不同，體現當下時運。
+
+**所有文字必須使用繁體中文。**
+
+嚴格按照以下 JSON 格式返回，不要包含任何 markdown 格式標記：
+{{
+    "type": "great/good/medium/fair/poor 五選一",
+    "typeText": "上上籤/上籤/中籤/中下籤/下籤 對應type",
+    "poem": "四句七言籤詩",
+    "interpretation": "對籤詩的詳細白話解說，包含運勢分析",
+    "advice": [
+        {{ "label": "事業", "value": "簡短建議" }},
+        {{ "label": "財運", "value": "簡短建議" }},
+        {{ "label": "感情", "value": "簡短建議" }},
+        {{ "label": "健康", "value": "簡短建議" }}
+    ]
+}}"""
 
 
 def generate_fortune_with_ai(fortune_number):
@@ -28,32 +70,29 @@ def generate_fortune_with_ai(fortune_number):
     print(f"   GEMINI_API_KEY = {'已配置 (' + gemini_key[:8] + '...)' if gemini_key else '未配置'}")
     print(f"   AI_API_KEY     = {'已配置 (' + compatible_key[:8] + '...)' if compatible_key else '未配置'}")
 
+    prompt = build_fortune_prompt(fortune_number)
     fortune_data = None
 
     if ai_service in ['compatible', 'deepseek', 'siliconflow']:
         print(f"🎯 决策：使用兼容模式 (DeepSeek/SiliconFlow/Zhipu)")
-        fortune_data = generate_with_compatible_api(fortune_number)
+        fortune_data = generate_with_compatible_api(prompt)
     elif ai_service == 'gemini' and gemini_key:
         print(f"🎯 决策：使用 Gemini API")
-        prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
         fortune_data = generate_with_gemini(prompt)
     elif ai_service == 'openai' and openai_key:
         print(f"🎯 决策：使用 OpenAI API")
-        prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
         fortune_data = generate_with_openai(prompt)
     elif ai_service == 'local':
         print(f"🎯 决策：强制使用本地模式")
     else:
         if compatible_key:
             print(f"🎯 决策：默认使用兼容模式")
-            fortune_data = generate_with_compatible_api(fortune_number)
+            fortune_data = generate_with_compatible_api(prompt)
         elif openai_key:
             print(f"🎯 决策：默认使用 OpenAI API")
-            prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
             fortune_data = generate_with_openai(prompt)
         elif gemini_key:
             print(f"🎯 决策：默认使用 Gemini API")
-            prompt = f"你是一位精通中国传统占卜文化的大师。请为第 {fortune_number} 签生成一支完整的灵签，包含签诗、签型、解签和指引。请以 JSON 格式返回。"
             fortune_data = generate_with_gemini(prompt)
         else:
             print(f"⚠️  未配置任何 API Key")
@@ -75,10 +114,10 @@ def generate_with_openai(prompt):
     data = {
         'model': 'gpt-3.5-turbo',
         'messages': [
-            {'role': 'system', 'content': '你是一位精通中国传统占卜文化的大师，擅长解读灵签。'},
+            {'role': 'system', 'content': SYSTEM_PROMPT},
             {'role': 'user', 'content': prompt}
         ],
-        'temperature': 0.8,
+        'temperature': 0.95,
         'max_tokens': 800
     }
 
@@ -236,7 +275,7 @@ def log_ai_transaction(service, model, request_data, response_data, status_code,
         print(f"❌ 写入日志文件失败: {e}")
 
 
-def generate_with_compatible_api(fortune_number):
+def generate_with_compatible_api(prompt):
     start_time = time.time()
 
     api_key = os.environ.get('AI_API_KEY')
@@ -253,29 +292,6 @@ def generate_with_compatible_api(fortune_number):
     print(f"🔗 Base URL: {base_url}")
     print(f"🧠 Model: {model}")
 
-    prompt = f"""
-    你是一位精通周易、通過靈籤指點迷津的老法師。
-    現在求籤者抽到了第 {fortune_number} 籤。
-
-    請根據這個籤號，生成一支靈籤。
-
-    **重要：所有返回的文字必須使用繁體中文（Traditional Chinese）。**
-
-    必須嚴格按照以下 JSON 格式返回，不要包含任何 markdown 格式標記（如 ```json ... ```）：
-    {{
-        "type": "籤的吉凶類型 (如: 上上籤, 中平籤, 下下籤)",
-        "typeText": "籤的吉凶類型中文 (如: 上上籤)",
-        "poem": "四句七言籤詩 (繁體)",
-        "interpretation": "對籤詩的詳細白話解說，包含運勢分析 (繁體)",
-        "advice": [
-            {{ "label": "事業", "value": "簡短建議 (繁體)" }},
-            {{ "label": "財運", "value": "簡短建議 (繁體)" }},
-            {{ "label": "感情", "value": "簡短建議 (繁體)" }},
-            {{ "label": "健康", "value": "簡短建議 (繁體)" }}
-        ]
-    }}
-    """
-
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
@@ -284,10 +300,10 @@ def generate_with_compatible_api(fortune_number):
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "你是一位智慧的解籤大師，輸出必須是純 JSON 格式，且所有內容必須使用繁體中文。"},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.7,
+        "temperature": 0.95,
         "max_tokens": 800,
         "stream": False
     }
@@ -338,9 +354,6 @@ def generate_with_compatible_api(fortune_number):
 
         fortune_data = json.loads(content.strip())
 
-        if 'fortuneNumber' not in fortune_data:
-            fortune_data['fortuneNumber'] = fortune_number
-
         print("\n✨ 签文解析成功！")
         return fortune_data
 
@@ -355,8 +368,6 @@ def generate_with_compatible_api(fortune_number):
 
 
 def generate_fallback_fortune(fortune_number):
-    import random
-
     types = [
         {'type': 'great', 'text': '上上籤'},
         {'type': 'good', 'text': '上籤'},
@@ -440,7 +451,7 @@ def generate_fallback_fortune(fortune_number):
 
 
 @fortune_router.post('/generate')
-def generate_fortune(body: dict):
+def generate_fortune(body: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     sys.stdout.flush()
     sys.stderr.flush()
 
@@ -452,6 +463,22 @@ def generate_fortune(body: dict):
     print("="*80, flush=True)
 
     try:
+        # Check daily limit
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        today_end = datetime.combine(date.today(), datetime.max.time())
+        existing = db.query(FortuneRecord).filter(
+            FortuneRecord.user_id == user.id,
+            FortuneRecord.created_at >= today_start,
+            FortuneRecord.created_at <= today_end
+        ).first()
+
+        if existing:
+            return JSONResponse({
+                'success': False,
+                'error': '今日已求過籤，每日僅可求籤一次',
+                'data': existing.to_dict()
+            }, status_code=429)
+
         fortune_number = body.get('fortuneNumber', 1)
         print(f"\n🎲 解析签号: {fortune_number}")
 
@@ -475,9 +502,23 @@ def generate_fortune(body: dict):
         print(f"   解签长度: {len(fortune_data.get('interpretation', ''))} 字")
         print(f"   指引数量: {len(fortune_data.get('advice', []))} 条")
 
+        # Persist to database
+        record = FortuneRecord(
+            user_id=user.id,
+            fortune_number=fortune_number,
+            fortune_type=fortune_data.get('type', 'medium'),
+            type_text=fortune_data.get('typeText', '中籤'),
+            poem=fortune_data.get('poem', ''),
+            interpretation=fortune_data.get('interpretation', ''),
+            advice=json.dumps(fortune_data.get('advice', []), ensure_ascii=False)
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+
         response_data = {
             'success': True,
-            'data': fortune_data
+            'data': record.to_dict()
         }
 
         total_time = time.time() - start_time
@@ -501,3 +542,27 @@ def generate_fortune(body: dict):
             {'success': False, 'error': str(e)},
             status_code=500,
         )
+
+
+@fortune_router.get('/today')
+def get_today_fortune(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = datetime.combine(date.today(), datetime.max.time())
+    record = db.query(FortuneRecord).filter(
+        FortuneRecord.user_id == user.id,
+        FortuneRecord.created_at >= today_start,
+        FortuneRecord.created_at <= today_end
+    ).first()
+
+    if record:
+        return {'drawn': True, 'data': record.to_dict()}
+    return {'drawn': False, 'data': None}
+
+
+@fortune_router.get('/history')
+def get_fortune_history(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    records = db.query(FortuneRecord).filter(
+        FortuneRecord.user_id == user.id
+    ).order_by(FortuneRecord.created_at.desc()).limit(10).all()
+
+    return {'records': [r.to_dict() for r in records]}

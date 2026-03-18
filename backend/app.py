@@ -12,7 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import inspect, text
 from config import settings
 from database import engine, SessionLocal, Base
-from models import User, Task
+from models import User, Task, FortuneRecord
 
 
 @asynccontextmanager

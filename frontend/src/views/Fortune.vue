@@ -84,9 +84,10 @@
 
                 <!-- 控制按钮 -->
                 <div class="fortune-actions" v-if="!showResult">
-                    <el-button type="primary" size="large" :loading="isShaking || isGenerating" @click="startFortune"
-                        class="draw-button">
-                        <span v-if="!isShaking && !isGenerating">🙏 誠心求籤</span>
+                    <el-button type="primary" size="large" :loading="isShaking || isGenerating"
+                        :disabled="alreadyDrawn" @click="startFortune" class="draw-button">
+                        <span v-if="alreadyDrawn">🚫 今日已求籤</span>
+                        <span v-else-if="!isShaking && !isGenerating">🙏 誠心求籤</span>
                         <span v-else-if="isShaking">🎋 搖籤中...</span>
                         <span v-else>📜 解籤中...</span>
                     </el-button>
@@ -124,7 +125,7 @@
                                 </div>
                             </div>
 
-                            <el-button type="primary" plain @click="reset" class="reset-button">
+                            <el-button v-if="!alreadyDrawn" type="primary" plain @click="reset" class="reset-button">
                                 🔄 重新求籤
                             </el-button>
                         </div>
@@ -132,11 +133,58 @@
                 </transition>
             </div>
         </el-card>
+
+        <!-- 历史记录 -->
+        <el-card v-if="historyRecords.length > 0" class="fortune-card history-card">
+            <template #header>
+                <div class="fortune-header">
+                    <div class="header-icon">📜</div>
+                    <div>
+                        <h2 class="fortune-title">求籤記錄</h2>
+                        <p class="fortune-subtitle">最近十次靈籤記錄</p>
+                    </div>
+                </div>
+            </template>
+
+            <div class="history-list">
+                <div v-for="record in historyRecords" :key="record.id" class="history-item"
+                    :class="{ expanded: expandedId === record.id }" @click="toggleExpand(record.id)">
+                    <div class="history-summary">
+                        <span class="history-date">{{ formatDate(record.created_at) }}</span>
+                        <span class="history-number">第 {{ record.fortuneNumber }} 籤</span>
+                        <span class="result-type history-badge" :class="record.type">{{ record.typeText }}</span>
+                        <span class="history-poem-preview">{{ record.poem.slice(0, 20) }}…</span>
+                        <span class="history-arrow">{{ expandedId === record.id ? '▲' : '▼' }}</span>
+                    </div>
+                    <transition name="expand">
+                        <div v-if="expandedId === record.id" class="history-detail">
+                            <div class="result-poem">
+                                <div class="poem-title">【籤詩】</div>
+                                <div class="poem-text" v-html="formatPoem(record.poem)"></div>
+                            </div>
+                            <div class="result-interpretation">
+                                <div class="interpretation-title">【解籤】</div>
+                                <div class="interpretation-text">{{ record.interpretation }}</div>
+                            </div>
+                            <div class="result-advice">
+                                <div class="advice-title">【指引】</div>
+                                <div class="advice-items">
+                                    <div v-for="(item, idx) in record.advice" :key="idx" class="advice-item">
+                                        <span class="advice-label">{{ item.label }}：</span>
+                                        <span class="advice-value">{{ item.value }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </transition>
+                </div>
+            </div>
+        </el-card>
     </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 
@@ -144,11 +192,14 @@ const isShaking = ref(false)
 const isFalling = ref(false)
 const isGenerating = ref(false)
 const showResult = ref(false)
+const alreadyDrawn = ref(false)
 const fortuneNumber = ref(1)
 const fallingStickIndex = ref(3)
 const fallingStickX = ref(195)
 const fallingStickY = ref(220)
 const fallingStickRotation = ref(0)
+const expandedId = ref(null)
+const historyRecords = ref([])
 
 const fortuneData = ref({
     type: 'great',
@@ -163,36 +214,66 @@ const formatPoem = (poem) => {
     return poem.replace(/，/g, '，<br>').replace(/。/g, '。<br>')
 }
 
+const formatDate = (dateStr) => {
+    return dateStr.slice(0, 10)
+}
+
+const toggleExpand = (id) => {
+    expandedId.value = expandedId.value === id ? null : id
+}
+
+// 加载今日签文和历史
+const loadData = async () => {
+    try {
+        const [todayRes, historyRes] = await Promise.all([
+            api.getTodayFortune(),
+            api.getFortuneHistory()
+        ])
+
+        if (todayRes.data.drawn) {
+            alreadyDrawn.value = true
+            fortuneData.value = todayRes.data.data
+            fortuneNumber.value = todayRes.data.data.fortuneNumber
+            showResult.value = true
+        }
+
+        historyRecords.value = historyRes.data.records || []
+    } catch (e) {
+        // silent — page still usable
+    }
+}
+
+onMounted(loadData)
+
 // 生成签文 - 调用后端 AI API
 const generateFortune = async (number) => {
     isGenerating.value = true
 
-    console.log('🎋 开始请求签文，签号:', number)
-
     try {
-        console.log('📤 发送请求到后端...')
         const response = await api.generateFortune(number)
 
-        console.log('📥 收到响应:', response)
-        console.log('📦 响应数据:', response.data)
-
         if (response.data.success) {
-            console.log('✅ 签文生成成功')
             fortuneData.value = response.data.data
+            alreadyDrawn.value = true
+            // Refresh history
+            const historyRes = await api.getFortuneHistory()
+            historyRecords.value = historyRes.data.records || []
         } else {
-            console.error('❌ 后端返回失败:', response.data.error)
             throw new Error(response.data.error || '生成签文失败')
         }
 
     } catch (error) {
-        console.error('❌ 请求异常:')
-        console.error('  - 错误类型:', error.constructor.name)
-        console.error('  - 错误信息:', error.message)
-        console.error('  - 完整错误:', error)
-
-        if (error.response) {
-            console.error('  - HTTP 状态码:', error.response.status)
-            console.error('  - 响应数据:', error.response.data)
+        if (error.response?.status === 429) {
+            // Already drawn today
+            alreadyDrawn.value = true
+            const data = error.response.data?.data
+            if (data) {
+                fortuneData.value = data
+                fortuneNumber.value = data.fortuneNumber
+                showResult.value = true
+            }
+            ElMessage.warning('今日已求過籤，每日僅可求籤一次')
+            return
         }
 
         ElMessage.error('求籤失敗，請重試')
@@ -217,6 +298,8 @@ const generateFortune = async (number) => {
 
 // 开始抽签
 const startFortune = async () => {
+    if (alreadyDrawn.value) return
+
     // 生成随机签号
     fortuneNumber.value = Math.floor(Math.random() * 100) + 1
     fallingStickIndex.value = Math.floor(Math.random() * 8)
@@ -622,5 +705,106 @@ const reset = () => {
     .advice-items {
         grid-template-columns: 1fr;
     }
+
+    .history-summary {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+}
+
+/* History card */
+.history-card {
+    margin-top: 24px;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.history-item {
+    background: linear-gradient(135deg, rgba(139, 69, 19, 0.08), rgba(210, 105, 30, 0.04));
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.history-item:hover {
+    border-color: rgba(255, 215, 0, 0.4);
+    box-shadow: 0 4px 16px rgba(255, 215, 0, 0.15);
+}
+
+.history-item.expanded {
+    border-color: rgba(255, 215, 0, 0.5);
+}
+
+.history-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: 'KaiTi', serif;
+}
+
+.history-date {
+    color: var(--text-secondary);
+    font-size: 14px;
+    min-width: 90px;
+}
+
+.history-number {
+    color: #FFD700;
+    font-weight: 700;
+    font-size: 15px;
+    min-width: 70px;
+}
+
+.history-badge {
+    font-size: 12px;
+    padding: 4px 12px;
+}
+
+.history-poem-preview {
+    color: var(--text-secondary);
+    font-size: 14px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-arrow {
+    color: rgba(255, 215, 0, 0.6);
+    font-size: 12px;
+    margin-left: auto;
+}
+
+.history-detail {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 215, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.expand-enter-active,
+.expand-leave-active {
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+    opacity: 0;
+    max-height: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+    opacity: 1;
+    max-height: 800px;
 }
 </style>

@@ -34,6 +34,8 @@ api.interceptors.response.use(
         }
         ElMessage.error('登录状态已失效，请重新登录')
       }
+    } else if (status === 429) {
+      // Let the caller handle rate limiting (e.g. fortune daily limit)
     } else {
       ElMessage.error(message || '请求失败')
     }
@@ -102,6 +104,14 @@ export default {
 
   generateFortune(fortuneNumber) {
     return api.post('/fortune/generate', { fortuneNumber })
+  },
+
+  getTodayFortune() {
+    return api.get('/fortune/today')
+  },
+
+  getFortuneHistory() {
+    return api.get('/fortune/history')
   },
 
   generateBmiAdvice(payload) {
