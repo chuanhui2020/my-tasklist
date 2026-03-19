@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, ForeignKey
+from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, Float, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from database import Base
 
@@ -53,6 +53,26 @@ class Task(Base):
             'due_date': self.due_date.strftime('%Y-%m-%d') if self.due_date else None,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'user_id': self.user_id
+        }
+
+
+class BmiProfile(Base):
+    __tablename__ = 'bmi_profiles'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), unique=True, nullable=False)
+    gender: Mapped[str] = mapped_column(String(10), default='male', nullable=False)
+    age: Mapped[int] = mapped_column(Integer, default=28, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, default=170, nullable=False)
+    weight: Mapped[float] = mapped_column(Float, default=65.0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'gender': self.gender,
+            'age': self.age,
+            'height': self.height,
+            'weight': float(self.weight),
         }
 
 

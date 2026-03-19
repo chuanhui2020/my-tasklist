@@ -1,11 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 import json
 import os
 import re
 import time
 
 import requests as http_requests
+
+from database import get_db
+from auth_utils import get_current_user
+from models import User, BmiProfile
 
 bmi_router = APIRouter(prefix='/api/bmi')
 
@@ -270,3 +275,31 @@ def generate_bmi_advice(body: dict):
             'advice': advice
         }
     }
+
+
+@bmi_router.get('/profile')
+def get_bmi_profile(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    profile = db.query(BmiProfile).filter_by(user_id=user.id).first()
+    if not profile:
+        return {'success': True, 'data': None}
+    return {'success': True, 'data': profile.to_dict()}
+
+
+@bmi_router.put('/profile')
+def save_bmi_profile(body: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    gender = body.get('gender', 'male')
+    age = int(body.get('age', 28))
+    height = int(body.get('height', 170))
+    weight = float(body.get('weight', 65))
+
+    profile = db.query(BmiProfile).filter_by(user_id=user.id).first()
+    if profile:
+        profile.gender = gender
+        profile.age = age
+        profile.height = height
+        profile.weight = weight
+    else:
+        profile = BmiProfile(user_id=user.id, gender=gender, age=age, height=height, weight=weight)
+        db.add(profile)
+    db.commit()
+    return {'success': True, 'data': profile.to_dict()}

@@ -116,5 +116,13 @@ export default {
 
   generateBmiAdvice(payload) {
     return api.post('/bmi/advice', payload)
+  },
+
+  getBmiProfile() {
+    return api.get('/bmi/profile')
+  },
+
+  saveBmiProfile(data) {
+    return api.put('/bmi/profile', data)
   }
 }

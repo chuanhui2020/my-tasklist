@@ -161,7 +161,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 import api from '@/api'
 
 const FORM_DEFAULTS = {
@@ -172,6 +172,46 @@ const FORM_DEFAULTS = {
 }
 
 const form = reactive({ ...FORM_DEFAULTS })
+let profileLoaded = false
+let saveTimer = null
+
+const loadProfile = async () => {
+  try {
+    const res = await api.getBmiProfile()
+    const data = res?.data?.data
+    if (data) {
+      Object.assign(form, {
+        gender: data.gender || FORM_DEFAULTS.gender,
+        age: data.age || FORM_DEFAULTS.age,
+        height: data.height || FORM_DEFAULTS.height,
+        weight: data.weight || FORM_DEFAULTS.weight
+      })
+    }
+  } catch (e) {
+    console.error('加载 BMI 档案失败:', e)
+  } finally {
+    profileLoaded = true
+  }
+}
+
+const saveProfile = () => {
+  if (!profileLoaded) return
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(async () => {
+    try {
+      await api.saveBmiProfile({
+        gender: form.gender,
+        age: form.age,
+        height: form.height,
+        weight: form.weight
+      })
+    } catch (e) {
+      console.error('保存 BMI 档案失败:', e)
+    }
+  }, 400)
+}
+
+onMounted(loadProfile)
 
 const normalMin = 18.5
 const normalMax = 23.9
@@ -352,6 +392,8 @@ const requestAdvice = async () => {
 }
 
 watch(bmiPayload, scheduleAdviceRequest, { immediate: true, deep: true })
+
+watch(() => ({ gender: form.gender, age: form.age, height: form.height, weight: form.weight }), saveProfile, { deep: true })
 
 const resetForm = () => {
   Object.assign(form, FORM_DEFAULTS)
@@ -823,8 +865,9 @@ const resetForm = () => {
 .level-desc {
   font-size: 12px;
   color: var(--text-secondary);
-  max-width: 220px;
+  max-width: 300px;
   text-align: right;
+  white-space: nowrap;
 }
 
 @media (max-width: 1024px) {
