@@ -18,8 +18,16 @@
             </template>
 
             <div class="fortune-content">
+                <!-- 加载中 -->
+                <div v-if="pageLoading" class="page-loading">
+                    <div class="waiting-text">🏮 正在請示神明...</div>
+                    <div class="waiting-dots">
+                        <span class="dot" v-for="i in 3" :key="i" :style="{ animationDelay: (i - 1) * 0.3 + 's' }"></span>
+                    </div>
+                </div>
+
                 <!-- 签筒和签子 SVG -->
-                <div v-if="!alreadyDrawn" class="fortune-scene" :class="{ shaking: isShaking }">
+                <div v-if="!pageLoading && !alreadyDrawn" class="fortune-scene" :class="{ shaking: isShaking }">
                     <svg viewBox="0 0 400 500" class="fortune-svg">
                         <!-- 签筒 -->
                         <defs>
@@ -83,7 +91,7 @@
                 </div>
 
                 <!-- 控制按钮 -->
-                <div class="fortune-actions" v-if="!showResult">
+                <div class="fortune-actions" v-if="!pageLoading && !showResult">
                     <el-button type="primary" size="large" :loading="isShaking || isGenerating"
                         :disabled="alreadyDrawn" @click="startFortune" class="draw-button">
                         <span v-if="alreadyDrawn">🚫 今日已求籤</span>
@@ -207,6 +215,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 
+const pageLoading = ref(true)
 const isShaking = ref(false)
 const isFalling = ref(false)
 const isGenerating = ref(false)
@@ -294,6 +303,8 @@ const loadData = async () => {
         historyRecords.value = historyRes.data.records || []
     } catch (e) {
         console.error('加载历史记录失败:', e)
+    } finally {
+        pageLoading.value = false
     }
 }
 
@@ -514,6 +525,11 @@ const reset = () => {
     color: var(--text-secondary);
     margin: 4px 0 0 0;
     font-family: 'KaiTi', serif;
+}
+
+.page-loading {
+    text-align: center;
+    padding: 60px 20px;
 }
 
 .fortune-content {
