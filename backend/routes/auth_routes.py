@@ -30,6 +30,15 @@ def current_user_profile(user: User = Depends(get_current_user)):
     return {'user': user.to_dict()}
 
 
+@auth_router.get('/auth/users')
+def list_users(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    users = db.query(User).order_by(User.id).all()
+    return {'users': [u.to_dict() for u in users]}
+
+
 @auth_router.post('/auth/users', status_code=201)
 def create_user(
     body: UserCreate,

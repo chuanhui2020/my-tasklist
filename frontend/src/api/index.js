@@ -70,6 +70,10 @@ export default {
     return api.get('/auth/me')
   },
 
+  getUsers() {
+    return api.get('/auth/users')
+  },
+
   createUser(data) {
     return api.post('/auth/users', data)
   },

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="admin-wrapper">
     <div class="background-shapes">
       <div class="shape shape-1"></div>
@@ -14,11 +14,41 @@
             </el-icon>
           </div>
           <div>
-            <div class="admin-title">创建新用户</div>
-            <div class="admin-subtitle">管理员可在此添加普通或管理员账号</div>
+            <div class="admin-title">用户管理</div>
+            <div class="admin-subtitle">管理员可在此添加和管理账号</div>
           </div>
         </div>
       </template>
+
+      <!-- 用户列表 -->
+      <div class="user-list-section">
+        <div class="section-title">
+          <span class="section-icon">👥</span>
+          <span>现有用户</span>
+          <span class="user-count">{{ users.length }} 人</span>
+        </div>
+        <div v-if="listLoading" class="list-loading">加载中...</div>
+        <div v-else class="user-list">
+          <div v-for="u in users" :key="u.id" class="user-item">
+            <div class="user-avatar" :class="u.role">
+              {{ u.username.charAt(0).toUpperCase() }}
+            </div>
+            <div class="user-info">
+              <span class="user-name">{{ u.username }}</span>
+              <span class="user-role-tag" :class="u.role">{{ u.role === 'admin' ? '管理员' : '普通用户' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分割线 -->
+      <div class="section-divider"></div>
+
+      <!-- 创建用户表单 -->
+      <div class="section-title">
+        <span class="section-icon">➕</span>
+        <span>创建新用户</span>
+      </div>
 
       <el-form
         :model="form"
@@ -27,15 +57,16 @@
         label-position="top"
         size="large"
         class="admin-form"
+        autocomplete="off"
       >
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" prefix-icon="User" />
+          <el-input v-model="form.username" placeholder="请输入用户名" prefix-icon="User" autocomplete="new-username" />
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input v-model="form.password" placeholder="请输入密码" show-password prefix-icon="Lock" />
+          <el-input v-model="form.password" placeholder="请输入密码" show-password prefix-icon="Lock" autocomplete="new-password" />
         </el-form-item>
         <el-form-item label="角色" prop="role">
-          <el-select v-model="form.role" style="width: 100%;">
+          <el-select v-model="form.role" style="width: 100%;" popper-class="dark-select-dropdown">
             <el-option label="普通用户" value="user" />
             <el-option label="管理员" value="admin" />
           </el-select>
@@ -50,13 +81,15 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UserFilled } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const formRef = ref(null)
 const loading = ref(false)
+const users = ref([])
+const listLoading = ref(false)
 
 const form = reactive({
   username: '',
@@ -69,6 +102,20 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
+const loadUsers = async () => {
+  listLoading.value = true
+  try {
+    const res = await api.getUsers()
+    users.value = res.data.users || []
+  } catch (e) {
+    console.error('加载用户列表失败:', e)
+  } finally {
+    listLoading.value = false
+  }
+}
+
+onMounted(loadUsers)
+
 const handleSubmit = () => {
   formRef.value?.validate(async (valid) => {
     if (!valid) return
@@ -77,6 +124,7 @@ const handleSubmit = () => {
       await api.createUser(form)
       ElMessage.success('用户创建成功')
       handleReset()
+      loadUsers()
     } catch (error) {
       // 错误提示由拦截器处理
     } finally {
@@ -199,6 +247,116 @@ const handleReset = () => {
   margin-top: 4px;
 }
 
+/* 用户列表 */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.section-icon {
+  font-size: 18px;
+}
+
+.user-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 10px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.list-loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 20px;
+}
+
+.user-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  min-width: 180px;
+}
+
+.user-item:hover {
+  border-color: var(--primary-color);
+  background: rgba(6, 182, 212, 0.05);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.user-avatar.admin {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+}
+
+.user-avatar.user {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.user-role-tag {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.user-role-tag.admin {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.user-role-tag.user {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--primary-color);
+}
+
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-border), transparent);
+  margin: 24px 0;
+}
+
+/* 表单 */
 .admin-form {
   margin-top: 16px;
 }
@@ -225,6 +383,29 @@ const handleReset = () => {
 
 :deep(.el-input__inner) {
   color: var(--text-primary);
+}
+
+:deep(.el-select__wrapper) {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: none !important;
+  border-radius: 12px !important;
+  padding: 4px 12px;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-select__wrapper.is-focused) {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 1px var(--primary-color) !important;
+  background-color: rgba(15, 23, 42, 0.8) !important;
+}
+
+:deep(.el-select__selected-item) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-select__placeholder) {
+  color: var(--text-secondary) !important;
 }
 
 .form-actions {
@@ -262,5 +443,37 @@ const handleReset = () => {
   .form-actions {
     flex-direction: column;
   }
+
+  .user-list {
+    flex-direction: column;
+  }
+
+  .user-item {
+    min-width: unset;
+  }
+}
+</style>
+
+<style>
+/* 全局样式：下拉菜单暗色主题 */
+.dark-select-dropdown {
+  background: rgba(30, 41, 59, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 12px !important;
+}
+
+.dark-select-dropdown .el-select-dropdown__item {
+  color: var(--text-secondary) !important;
+}
+
+.dark-select-dropdown .el-select-dropdown__item.is-hovering {
+  background: rgba(6, 182, 212, 0.1) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-select-dropdown .el-select-dropdown__item.is-selected {
+  color: var(--primary-color) !important;
+  font-weight: 600;
 }
 </style>
