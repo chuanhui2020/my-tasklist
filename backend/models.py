@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, Float, ForeignKey
+from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, Float, ForeignKey, func
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from database import Base
 
@@ -17,6 +17,7 @@ class User(Base):
 
     tasks = relationship('Task', backref='owner', lazy=True)
     fortune_records = relationship('FortuneRecord', backref='user', lazy=True)
+    secure_notes = relationship('SecureNote', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -105,4 +106,25 @@ class FortuneRecord(Base):
             'advice': advice_list,
             'work_fortune': self.work_fortune or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+
+class SecureNote(Base):
+    __tablename__ = 'secure_notes'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    encrypted_content = mapped_column(Text, nullable=False)
+    salt: Mapped[str] = mapped_column(String(64), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None,
         }

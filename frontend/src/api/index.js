@@ -128,5 +128,25 @@ export default {
 
   saveBmiProfile(data) {
     return api.put('/bmi/profile', data)
+  },
+
+  getSecureNotes() {
+    return api.get('/secure-notes')
+  },
+
+  createSecureNote(data) {
+    return api.post('/secure-notes', data)
+  },
+
+  unlockSecureNote(id, password) {
+    return api.post(`/secure-notes/${id}/unlock`, { password })
+  },
+
+  updateSecureNote(id, data) {
+    return api.put(`/secure-notes/${id}`, data)
+  },
+
+  deleteSecureNote(id) {
+    return api.delete(`/secure-notes/${id}`)
   }
 }

@@ -6,6 +6,7 @@ import AdminUsers from './views/AdminUsers.vue'
 import ChangePassword from './views/ChangePassword.vue'
 import Fortune from './views/Fortune.vue'
 import BmiManager from './views/BmiManager.vue'
+import SecureNotes from './views/SecureNotes.vue'
 
 const routes = [
   {
@@ -39,6 +40,12 @@ const routes = [
     path: '/bmi',
     name: 'BmiManager',
     component: BmiManager,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/secure-notes',
+    name: 'SecureNotes',
+    component: SecureNotes,
     meta: { requiresAuth: true }
   },
   {

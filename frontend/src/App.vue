@@ -14,6 +14,7 @@
               <router-link v-if="isAdmin" to="/admin/users" class="nav-link" active-class="active">用户管理</router-link>
               <router-link to="/fortune" class="nav-link" active-class="active">靈籤占卜</router-link>
               <router-link to="/bmi" class="nav-link" active-class="active">BMI管理</router-link>
+              <router-link to="/secure-notes" class="nav-link" active-class="active">信息收纳</router-link>
             </nav>
             <div class="user-box">
               <span class="user-name">{{ authState.user?.username }}</span>

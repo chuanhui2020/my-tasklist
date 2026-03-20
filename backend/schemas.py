@@ -43,3 +43,20 @@ class BmiRequest(BaseModel):
 
 class FortuneRequest(BaseModel):
     fortuneNumber: int = 1
+
+
+class SecureNoteCreate(BaseModel):
+    title: str = ''
+    content: str = ''
+    password: str = ''
+
+
+class SecureNoteUnlock(BaseModel):
+    password: str = ''
+
+
+class SecureNoteUpdate(BaseModel):
+    title: str = ''
+    content: str = ''
+    password: str = ''
+    new_password: Optional[str] = None
