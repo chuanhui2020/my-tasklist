@@ -480,9 +480,9 @@ def generate_fortune(body: dict, db: Session = Depends(get_db), user: User = Dep
 
     try:
         # Check daily limit
-        now_utc = datetime.utcnow()
-        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = now_utc.replace(hour=23, minute=59, second=59, microsecond=999999)
+        now = datetime.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
         existing = db.query(FortuneRecord).filter(
             FortuneRecord.user_id == user.id,
             FortuneRecord.created_at >= today_start,
@@ -564,9 +564,9 @@ def generate_fortune(body: dict, db: Session = Depends(get_db), user: User = Dep
 
 @fortune_router.get('/today')
 def get_today_fortune(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    now_utc = datetime.utcnow()
-    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = now_utc.replace(hour=23, minute=59, second=59, microsecond=999999)
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
     record = db.query(FortuneRecord).filter(
         FortuneRecord.user_id == user.id,
         FortuneRecord.created_at >= today_start,

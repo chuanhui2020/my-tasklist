@@ -1,8 +1,8 @@
 <template>
   <div class="secure-notes-page">
     <div class="page-header">
-      <h2 class="page-title">信息收纳</h2>
-      <el-button type="primary" @click="openCreateDialog">新建笔记</el-button>
+      <h2 class="page-title">密钥盒子</h2>
+      <el-button type="primary" @click="openCreateDialog">新建密钥</el-button>
     </div>
 
     <div v-if="notes.length" class="notes-grid">
@@ -15,7 +15,7 @@
           <span class="note-time">{{ note.created_at }}</span>
           <div class="note-actions" @click.stop>
             <el-button size="small" text @click="openEditUnlock(note)">编辑</el-button>
-            <el-popconfirm title="确定删除这条笔记？" @confirm="handleDelete(note.id)">
+            <el-popconfirm title="确定删除这条密钥？" @confirm="handleDelete(note.id)">
               <template #reference>
                 <el-button size="small" text type="danger">删除</el-button>
               </template>
@@ -24,13 +24,13 @@
         </div>
       </div>
     </div>
-    <el-empty v-else description="还没有收纳任何信息" />
+    <el-empty v-else description="还没有存储任何密钥" />
 
     <!-- Unlock Dialog -->
     <el-dialog v-model="unlockVisible" title="输入密码查看" width="400px" :close-on-click-modal="false" @closed="resetUnlock">
       <el-form @submit.prevent="handleUnlock">
         <el-form-item label="密码">
-          <el-input v-model="unlockPassword" type="password" show-password placeholder="请输入笔记密码" />
+          <el-input v-model="unlockPassword" type="password" show-password placeholder="请输入密钥密码" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -48,10 +48,10 @@
     </el-dialog>
 
     <!-- Create / Edit Dialog -->
-    <el-dialog v-model="formVisible" :title="isEditing ? '编辑笔记' : '新建笔记'" width="560px" :close-on-click-modal="false" @closed="resetForm">
+    <el-dialog v-model="formVisible" :title="isEditing ? '编辑密钥' : '新建密钥'" width="560px" :close-on-click-modal="false" @closed="resetForm">
       <el-form :model="form" label-position="top">
         <el-form-item label="标题">
-          <el-input v-model="form.title" placeholder="笔记标题" maxlength="100" />
+          <el-input v-model="form.title" placeholder="密钥标题" maxlength="100" />
         </el-form-item>
         <el-form-item label="内容">
           <el-input v-model="form.content" type="textarea" :rows="6" placeholder="输入要加密保存的内容" />

@@ -9,6 +9,7 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-tasklist_db}
       MYSQL_USER: ${MYSQL_USER:-taskuser}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-taskpassword}
+      TZ: Asia/Shanghai
     volumes:
       - mysql_data:/var/lib/mysql
     ports:
@@ -20,7 +21,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone='+08:00'
     # 资源限制（1C2G 服务器优化）
     deploy:
       resources:
@@ -52,6 +53,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Python 配置
       PYTHONUNBUFFERED: 1
+      TZ: Asia/Shanghai
     depends_on:
       db:
         condition: service_healthy

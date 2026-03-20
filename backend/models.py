@@ -13,7 +13,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     role: Mapped[str] = mapped_column(Enum('admin', 'user'), default='user', nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     tasks = relationship('Task', backref='owner', lazy=True)
     fortune_records = relationship('FortuneRecord', backref='user', lazy=True)
@@ -42,7 +42,7 @@ class Task(Base):
     description = mapped_column(Text)
     status: Mapped[str] = mapped_column(Enum('pending', 'done'), default='pending')
     due_date = mapped_column(Date)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
 
     def to_dict(self):
@@ -66,7 +66,7 @@ class BmiProfile(Base):
     age: Mapped[int] = mapped_column(Integer, default=28, nullable=False)
     height: Mapped[int] = mapped_column(Integer, default=170, nullable=False)
     weight: Mapped[float] = mapped_column(Float, default=65.0, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     def to_dict(self):
         return {
@@ -89,7 +89,7 @@ class FortuneRecord(Base):
     interpretation = mapped_column(Text, nullable=False)
     advice = mapped_column(Text, nullable=False)
     work_fortune = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self):
         try:
