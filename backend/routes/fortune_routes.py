@@ -23,7 +23,29 @@ fortune_router = APIRouter(prefix='/api/fortune')
 SYSTEM_PROMPT = '你是一位精通周易與傳統占卜的老法師，輸出必須是純 JSON 格式，所有內容使用繁體中文。'
 
 
-def build_fortune_prompt(fortune_number):
+FORTUNE_TYPES = [
+    {'type': 'great', 'text': '上上籤', 'weight': 5},
+    {'type': 'good', 'text': '上籤', 'weight': 20},
+    {'type': 'medium', 'text': '中籤', 'weight': 45},
+    {'type': 'fair', 'text': '中下籤', 'weight': 20},
+    {'type': 'poor', 'text': '下籤', 'weight': 10},
+]
+
+
+def pick_fortune_type():
+    types = [t['type'] for t in FORTUNE_TYPES]
+    weights = [t['weight'] for t in FORTUNE_TYPES]
+    return random.choices(types, weights=weights, k=1)[0]
+
+
+def get_fortune_type_text(fortune_type):
+    for t in FORTUNE_TYPES:
+        if t['type'] == fortune_type:
+            return t['text']
+    return '中籤'
+
+
+def build_fortune_prompt(fortune_number, fortune_type):
     themes = ['事業前程', '姻緣桃花', '財運亨通', '學業進步', '健康平安', '家庭和睦', '旅行出行', '貴人相助']
     seasons = ['春', '夏', '秋', '冬']
     elements = ['金', '木', '水', '火', '土']
@@ -32,18 +54,21 @@ def build_fortune_prompt(fortune_number):
     season = random.choice(seasons)
     element = random.choice(elements)
     today = date.today().strftime('%Y年%m月%d日')
+    type_text = get_fortune_type_text(fortune_type)
 
     return f"""現在是{today}，{season}季，五行屬{element}。
 求籤者抽到了第 {fortune_number} 籤，心中所念偏向「{theme}」。
+此籤已定為「{type_text}」（{fortune_type}），請嚴格按照此籤型生成對應的籤詩與解讀。
 
-請根據籤號、時節與五行，生成一支獨特的靈籤。每次生成的籤詩和解讀都應不同，體現當下時運。
+請根據籤號、籤型、時節與五行，生成一支獨特的靈籤。每次生成的籤詩和解讀都應不同，體現當下時運。
+籤詩的意境和解讀的語氣必須與「{type_text}」的吉凶程度相符。
 
 **所有文字必須使用繁體中文。**
 
 嚴格按照以下 JSON 格式返回，不要包含任何 markdown 格式標記：
 {{
-    "type": "great/good/medium/fair/poor 五選一",
-    "typeText": "上上籤/上籤/中籤/中下籤/下籤 對應type",
+    "type": "{fortune_type}",
+    "typeText": "{type_text}",
     "poem": "四句七言籤詩，每句以逗號或句號結尾，最後一句必須以句號（。）結尾",
     "interpretation": "對籤詩的詳細白話解說，包含運勢分析",
     "advice": [
@@ -56,10 +81,10 @@ def build_fortune_prompt(fortune_number):
 }}"""
 
 
-def generate_fortune_with_ai(fortune_number):
+def generate_fortune_with_ai(fortune_number, fortune_type):
     ai_service = os.environ.get('AI_SERVICE', 'openai').lower()
 
-    print(f"\n🎋 开始生成第 {fortune_number} 签")
+    print(f"\n🎋 开始生成第 {fortune_number} 签 (预定签型: {fortune_type})")
     print(f"📋 当前配置:")
     print(f"   AI_SERVICE = {ai_service}")
 
@@ -71,7 +96,7 @@ def generate_fortune_with_ai(fortune_number):
     print(f"   GEMINI_API_KEY = {'已配置 (' + gemini_key[:8] + '...)' if gemini_key else '未配置'}")
     print(f"   AI_API_KEY     = {'已配置 (' + compatible_key[:8] + '...)' if compatible_key else '未配置'}")
 
-    prompt = build_fortune_prompt(fortune_number)
+    prompt = build_fortune_prompt(fortune_number, fortune_type)
     fortune_data = None
 
     if ai_service in ['compatible', 'deepseek', 'siliconflow']:
@@ -100,7 +125,11 @@ def generate_fortune_with_ai(fortune_number):
 
     if not fortune_data:
         print(f"\n🔄 自动降级到备用签文")
-        fortune_data = generate_fallback_fortune(fortune_number)
+        fortune_data = generate_fallback_fortune(fortune_number, fortune_type)
+
+    # Enforce the pre-determined type regardless of AI output
+    fortune_data['type'] = fortune_type
+    fortune_data['typeText'] = get_fortune_type_text(fortune_type)
 
     return fortune_data
 
@@ -368,15 +397,7 @@ def generate_with_compatible_api(prompt):
         return None
 
 
-def generate_fallback_fortune(fortune_number):
-    types = [
-        {'type': 'great', 'text': '上上籤'},
-        {'type': 'good', 'text': '上籤'},
-        {'type': 'medium', 'text': '中籤'},
-        {'type': 'fair', 'text': '中下籤'},
-        {'type': 'poor', 'text': '下籤'}
-    ]
-
+def generate_fallback_fortune(fortune_number, fortune_type=None):
     poems = [
         '春來花自開，福至心自寬，誠心祈善願，吉慶自然來。',
         '雲開見月明，守得花開時，耐心待時機，好運必相隨。',
@@ -437,7 +458,6 @@ def generate_fallback_fortune(fortune_number):
     ]
 
     random.seed(fortune_number)
-    selected_type = types[fortune_number % len(types)]
     poem_index = fortune_number % len(poems)
     interp_index = fortune_number % len(interpretations)
     advice_index = fortune_number % len(advice_options)
@@ -456,9 +476,12 @@ def generate_fallback_fortune(fortune_number):
     ]
     work_index = fortune_number % len(work_fortunes)
 
+    if not fortune_type:
+        fortune_type = 'medium'
+
     return {
-        'type': selected_type['type'],
-        'typeText': selected_type['text'],
+        'type': fortune_type,
+        'typeText': get_fortune_type_text(fortune_type),
         'poem': poems[poem_index],
         'interpretation': interpretations[interp_index],
         'advice': advice_options[advice_index],
@@ -503,11 +526,14 @@ def generate_fortune(body: dict, db: Session = Depends(get_db), user: User = Dep
             return JSONResponse({'error': '签号必须在 1-100 之间'}, status_code=400)
 
         print(f"✅ 验证通过")
+
+        fortune_type = pick_fortune_type()
+        print(f"🎲 随机签型: {fortune_type} ({get_fortune_type_text(fortune_type)})")
         print(f"\n⏳ 开始生成签文...")
         print("-"*80)
 
         gen_start = time.time()
-        fortune_data = generate_fortune_with_ai(fortune_number)
+        fortune_data = generate_fortune_with_ai(fortune_number, fortune_type)
         gen_time = time.time() - gen_start
 
         print("-"*80)
