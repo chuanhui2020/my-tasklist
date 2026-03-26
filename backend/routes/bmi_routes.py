@@ -350,17 +350,34 @@ def record_weight(body: dict, db: Session = Depends(get_db), user: User = Depend
     if weight < 30 or weight > 300:
         return JSONResponse({'error': '体重数据无效，请输入30-300kg之间的值'}, status_code=400)
 
-    today = date.today()
-    existing = db.query(WeightRecord).filter_by(user_id=user.id, date=today).first()
-    if existing:
-        return JSONResponse({'error': '今日体重已记录，无法修改'}, status_code=409)
+    # 支持补录：可选 date 参数，默认今天
+    record_date = date.today()
+    date_str = body.get('date')
+    if date_str:
+        try:
+            from datetime import datetime as dt
+            record_date = dt.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return JSONResponse({'error': '日期格式无效'}, status_code=400)
+        # 补录限制：最近90天内，不能超过今天
+        earliest = date.today() - timedelta(days=90)
+        if record_date > date.today():
+            return JSONResponse({'error': '不能记录未来日期的体重'}, status_code=400)
+        if record_date < earliest:
+            return JSONResponse({'error': '只能补录最近三个月的体重数据'}, status_code=400)
 
-    record = WeightRecord(user_id=user.id, weight=weight, date=today)
+    existing = db.query(WeightRecord).filter_by(user_id=user.id, date=record_date).first()
+    if existing:
+        return JSONResponse({'error': f'{record_date.strftime("%Y-%m-%d")} 的体重已记录，无法修改'}, status_code=409)
+
+    record = WeightRecord(user_id=user.id, weight=weight, date=record_date)
     db.add(record)
 
-    profile = db.query(BmiProfile).filter_by(user_id=user.id).first()
-    if profile:
-        profile.weight = weight
+    # 只有记录今天的体重时才同步更新 profile
+    if record_date == date.today():
+        profile = db.query(BmiProfile).filter_by(user_id=user.id).first()
+        if profile:
+            profile.weight = weight
 
     db.commit()
     return {'success': True, 'data': record.to_dict()}

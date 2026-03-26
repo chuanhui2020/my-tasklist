@@ -64,9 +64,12 @@
         </el-form>
 
         <div class="form-actions">
-          <el-button type="primary" :disabled="todayWeightRecorded" @click="showWeightDialog">
-            {{ todayWeightRecorded ? '今日已记录' : '📝 今日体重' }}
-          </el-button>
+          <div class="form-actions-left">
+            <el-button type="primary" :disabled="todayWeightRecorded" @click="showWeightDialog">
+              {{ todayWeightRecorded ? '今日已记录' : '📝 今日体重' }}
+            </el-button>
+            <el-button @click="showBackfillDialog">📅 补录体重</el-button>
+          </div>
           <span class="form-note">BMI = 体重(kg) ÷ 身高(m)²</span>
         </div>
       </el-card>
@@ -211,6 +214,34 @@
         <el-button @click="weightDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="recordingWeight" @click="confirmRecordWeight">
           确认记录
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="backfillDialogVisible" title="补录体重" width="420px" :close-on-click-modal="false">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px">
+        每日体重仅可记录一次，记录后无法修改，请确认数据准确。
+      </el-alert>
+      <el-form label-position="top">
+        <el-form-item label="日期">
+          <el-date-picker
+            v-model="backfillDate"
+            type="date"
+            placeholder="选择日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            :disabled-date="disableBackfillDate"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="体重 (kg)">
+          <el-input-number v-model="backfillWeight" :min="30" :max="200" :precision="1" :step="0.5" controls-position="right" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="backfillDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="recordingBackfill" @click="confirmBackfillWeight">
+          确认补录
         </el-button>
       </template>
     </el-dialog>
@@ -462,6 +493,10 @@ watch(() => ({ gender: form.gender, age: form.age, height: form.height, weight: 
 const todayWeightRecorded = ref(false)
 const weightDialogVisible = ref(false)
 const recordingWeight = ref(false)
+const backfillDialogVisible = ref(false)
+const backfillDate = ref('')
+const backfillWeight = ref(65)
+const recordingBackfill = ref(false)
 const chartRef = ref(null)
 const chartRange = ref(90)
 const weightHistory = ref([])
@@ -498,6 +533,38 @@ const confirmRecordWeight = async () => {
     }
   } finally {
     recordingWeight.value = false
+  }
+}
+
+const showBackfillDialog = () => {
+  backfillDate.value = ''
+  backfillWeight.value = form.weight
+  backfillDialogVisible.value = true
+}
+
+const disableBackfillDate = (d) => {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const earliest = new Date(today)
+  earliest.setDate(earliest.getDate() - 90)
+  return d > today || d < earliest
+}
+
+const confirmBackfillWeight = async () => {
+  if (!backfillDate.value) {
+    ElMessage.warning('请选择日期')
+    return
+  }
+  recordingBackfill.value = true
+  try {
+    await api.recordWeight({ weight: backfillWeight.value, date: backfillDate.value })
+    backfillDialogVisible.value = false
+    ElMessage.success(`${backfillDate.value} 体重已补录`)
+    loadWeightHistory()
+  } catch (e) {
+    // 409 already handled by global interceptor
+  } finally {
+    recordingBackfill.value = false
   }
 }
 
@@ -857,6 +924,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   margin-top: 12px;
+}
+
+.form-actions-left {
+  display: flex;
+  gap: 8px;
 }
 
 .form-note {
