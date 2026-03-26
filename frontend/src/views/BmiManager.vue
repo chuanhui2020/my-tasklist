@@ -64,7 +64,9 @@
         </el-form>
 
         <div class="form-actions">
-          <el-button type="primary" @click="resetForm">重置数据</el-button>
+          <el-button type="primary" :disabled="todayWeightRecorded" @click="showWeightDialog">
+            {{ todayWeightRecorded ? '今日已记录' : '📝 今日体重' }}
+          </el-button>
           <span class="form-note">BMI = 体重(kg) ÷ 身高(m)²</span>
         </div>
       </el-card>
@@ -157,11 +159,68 @@
         </div>
       </div>
     </el-card>
+
+    <el-card class="bmi-card chart-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">体重趋势</div>
+            <div class="card-subtitle">追踪体重变化，掌握健康走势</div>
+          </div>
+          <div class="time-range-selector">
+            <el-radio-group v-model="chartRange" size="small" @change="loadWeightHistory">
+              <el-radio-button :value="7">1周</el-radio-button>
+              <el-radio-button :value="30">1月</el-radio-button>
+              <el-radio-button :value="90">3月</el-radio-button>
+              <el-radio-button :value="180">6月</el-radio-button>
+              <el-radio-button :value="365">1年</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+      </template>
+      <div v-if="weightHistory.length" ref="chartRef" class="weight-chart-container"></div>
+      <div v-else class="chart-empty">暂无体重记录，点击「今日体重」开始记录</div>
+    </el-card>
+
+    <el-card class="bmi-card analysis-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">AI 体重分析</div>
+            <div class="card-subtitle">基于近3个月数据的智能健康分析</div>
+          </div>
+          <el-button size="small" type="primary" :loading="analyzingWeight" @click="requestWeightAnalysis">
+            {{ analyzingWeight ? '分析中...' : '🤖 生成分析' }}
+          </el-button>
+        </div>
+      </template>
+      <div v-if="weightAnalysis" class="analysis-content" v-html="renderedAnalysis"></div>
+      <div v-else class="analysis-placeholder">
+        点击「生成分析」按钮，AI 将根据您近期的体重数据提供个性化健康建议。
+      </div>
+    </el-card>
+
+    <el-dialog v-model="weightDialogVisible" title="记录今日体重" width="420px" :close-on-click-modal="false">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px">
+        每日体重仅可记录一次，记录后无法修改，请确认数据准确。
+      </el-alert>
+      <div class="weight-confirm-value">
+        当前体重: <strong>{{ form.weight }} kg</strong>
+      </div>
+      <template #footer>
+        <el-button @click="weightDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="recordingWeight" @click="confirmRecordWeight">
+          确认记录
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch, onMounted } from 'vue'
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
+import * as echarts from 'echarts'
 import api from '@/api'
 
 const FORM_DEFAULTS = {
@@ -211,7 +270,11 @@ const saveProfile = () => {
   }, 400)
 }
 
-onMounted(loadProfile)
+onMounted(async () => {
+  await loadProfile()
+  checkTodayWeight()
+  loadWeightHistory()
+})
 
 const normalMin = 18.5
 const normalMax = 23.9
@@ -395,9 +458,177 @@ watch(bmiPayload, scheduleAdviceRequest, { immediate: true, deep: true })
 
 watch(() => ({ gender: form.gender, age: form.age, height: form.height, weight: form.weight }), saveProfile, { deep: true })
 
-const resetForm = () => {
-  Object.assign(form, FORM_DEFAULTS)
+// Weight tracking state
+const todayWeightRecorded = ref(false)
+const weightDialogVisible = ref(false)
+const recordingWeight = ref(false)
+const chartRef = ref(null)
+const chartRange = ref(90)
+const weightHistory = ref([])
+const weightAnalysis = ref('')
+const analyzingWeight = ref(false)
+let chartInstance = null
+let resizeHandler = null
+
+const checkTodayWeight = async () => {
+  try {
+    const res = await api.getTodayWeight()
+    todayWeightRecorded.value = res?.data?.recorded === true
+  } catch (e) {
+    console.error('检查今日体重失败:', e)
+  }
 }
+
+const showWeightDialog = () => {
+  weightDialogVisible.value = true
+}
+
+const confirmRecordWeight = async () => {
+  recordingWeight.value = true
+  try {
+    await api.recordWeight({ weight: form.weight })
+    todayWeightRecorded.value = true
+    weightDialogVisible.value = false
+    ElMessage.success('今日体重已记录')
+    loadWeightHistory()
+  } catch (e) {
+    if (e.response?.status === 409) {
+      todayWeightRecorded.value = true
+      weightDialogVisible.value = false
+    }
+  } finally {
+    recordingWeight.value = false
+  }
+}
+
+const loadWeightHistory = async () => {
+  try {
+    const res = await api.getWeightHistory(chartRange.value)
+    weightHistory.value = res?.data?.data || []
+    await nextTick()
+    renderChart()
+  } catch (e) {
+    console.error('加载体重历史失败:', e)
+  }
+}
+
+const renderChart = () => {
+  if (!chartRef.value || !weightHistory.value.length) return
+  if (chartInstance) chartInstance.dispose()
+
+  chartInstance = echarts.init(chartRef.value)
+
+  const dates = weightHistory.value.map(r => r.date)
+  const weights = weightHistory.value.map(r => r.weight)
+
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(15, 23, 42, 0.92)',
+      borderColor: 'rgba(6, 182, 212, 0.3)',
+      borderWidth: 1,
+      textStyle: { color: '#f1f5f9', fontSize: 13 },
+      formatter: params => {
+        const p = params[0]
+        return `<span style="color:#94a3b8">${p.axisValue}</span><br/>体重: <strong style="color:#06b6d4">${p.value} kg</strong>`
+      }
+    },
+    grid: {
+      left: 55, right: 30, top: 30, bottom: 60
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLine: { lineStyle: { color: 'rgba(148,163,184,0.3)' } },
+      axisLabel: { color: '#64748b', fontSize: 11 },
+      splitLine: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      name: 'kg',
+      nameTextStyle: { color: '#64748b' },
+      axisLine: { show: false },
+      axisLabel: { color: '#64748b' },
+      splitLine: { lineStyle: { color: 'rgba(148,163,184,0.08)' } },
+      min: val => Math.floor(val.min - 2),
+      max: val => Math.ceil(val.max + 2)
+    },
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      {
+        type: 'slider',
+        height: 20,
+        bottom: 10,
+        borderColor: 'rgba(6,182,212,0.2)',
+        fillerColor: 'rgba(6,182,212,0.1)',
+        handleStyle: { color: '#06b6d4' },
+        textStyle: { color: '#64748b' }
+      }
+    ],
+    series: [{
+      type: 'line',
+      data: weights,
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 6,
+      lineStyle: {
+        color: '#06b6d4',
+        width: 2,
+        shadowColor: 'rgba(6,182,212,0.5)',
+        shadowBlur: 10
+      },
+      itemStyle: {
+        color: '#06b6d4',
+        borderColor: '#0b1121',
+        borderWidth: 2
+      },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(6,182,212,0.25)' },
+          { offset: 1, color: 'rgba(6,182,212,0.02)' }
+        ])
+      },
+      markLine: {
+        silent: true,
+        lineStyle: { color: 'rgba(16,185,129,0.4)', type: 'dashed' },
+        data: [{ type: 'average', name: '平均' }],
+        label: { color: '#64748b', fontSize: 11 }
+      }
+    }]
+  }
+
+  chartInstance.setOption(option)
+
+  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
+  resizeHandler = () => chartInstance?.resize()
+  window.addEventListener('resize', resizeHandler)
+}
+
+const renderedAnalysis = computed(() => {
+  if (!weightAnalysis.value) return ''
+  return weightAnalysis.value
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
+})
+
+const requestWeightAnalysis = async () => {
+  analyzingWeight.value = true
+  try {
+    const res = await api.analyzeWeight()
+    weightAnalysis.value = res?.data?.data?.analysis || ''
+  } catch (e) {
+    const msg = e.response?.data?.error || '分析生成失败'
+    ElMessage.error(msg)
+  } finally {
+    analyzingWeight.value = false
+  }
+}
+
+onBeforeUnmount(() => {
+  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
+  chartInstance?.dispose()
+})
 </script>
 
 <style scoped>
@@ -804,6 +1035,48 @@ const resetForm = () => {
 
 .guide-card {
   margin-top: 24px;
+}
+
+.chart-card,
+.analysis-card {
+  margin-top: 24px;
+}
+
+.weight-chart-container {
+  width: 100%;
+  height: 400px;
+}
+
+.chart-empty {
+  padding: 60px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.time-range-selector {
+  flex-shrink: 0;
+}
+
+.analysis-content {
+  line-height: 1.8;
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 8px 0;
+}
+
+.analysis-placeholder {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.weight-confirm-value {
+  text-align: center;
+  font-size: 18px;
+  padding: 20px 0;
+  color: var(--text-primary);
 }
 
 .guide-grid {

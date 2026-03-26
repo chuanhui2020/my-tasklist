@@ -8,9 +8,10 @@ import time
 
 import requests as http_requests
 
+from datetime import date, timedelta
 from database import get_db
 from auth_utils import get_current_user
-from models import User, BmiProfile
+from models import User, BmiProfile, WeightRecord
 
 bmi_router = APIRouter(prefix='/api/bmi')
 
@@ -113,7 +114,7 @@ def extract_advice(content, fallback):
         return normalize_advice(cleaned, fallback)
 
 
-def generate_with_openai(prompt):
+def generate_with_openai(prompt, max_tokens=MAX_TOKENS):
     api_key = os.environ.get('OPENAI_API_KEY')
     if not api_key:
         return None
@@ -129,7 +130,7 @@ def generate_with_openai(prompt):
             {'role': 'user', 'content': prompt}
         ],
         'temperature': 0.5,
-        'max_tokens': MAX_TOKENS
+        'max_tokens': max_tokens
     }
 
     response = http_requests.post(
@@ -146,7 +147,7 @@ def generate_with_openai(prompt):
     return result['choices'][0]['message']['content']
 
 
-def generate_with_gemini(prompt):
+def generate_with_gemini(prompt, max_tokens=MAX_TOKENS):
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
         return None
@@ -159,7 +160,7 @@ def generate_with_gemini(prompt):
         'contents': [{'parts': [{'text': prompt}]}],
         'generationConfig': {
             'temperature': 0.5,
-            'maxOutputTokens': MAX_TOKENS
+            'maxOutputTokens': max_tokens
         }
     }
 
@@ -175,7 +176,7 @@ def generate_with_gemini(prompt):
     return candidates[0]['content']['parts'][0]['text']
 
 
-def generate_with_compatible_api(prompt):
+def generate_with_compatible_api(prompt, max_tokens=MAX_TOKENS):
     api_key = os.environ.get('AI_API_KEY')
     if not api_key:
         return None
@@ -196,7 +197,7 @@ def generate_with_compatible_api(prompt):
             {'role': 'user', 'content': prompt}
         ],
         'temperature': 0.5,
-        'max_tokens': MAX_TOKENS,
+        'max_tokens': max_tokens,
         'stream': False
     }
 
@@ -213,7 +214,7 @@ def generate_with_compatible_api(prompt):
     return response_data['choices'][0]['message']['content']
 
 
-def generate_bmi_advice_with_ai(prompt):
+def generate_bmi_advice_with_ai(prompt, max_tokens=MAX_TOKENS):
     ai_service = os.environ.get('AI_SERVICE', 'openai').lower()
     openai_key = os.environ.get('OPENAI_API_KEY')
     gemini_key = os.environ.get('GEMINI_API_KEY')
@@ -221,20 +222,20 @@ def generate_bmi_advice_with_ai(prompt):
 
     content = None
     if ai_service in ['compatible', 'deepseek', 'siliconflow']:
-        content = generate_with_compatible_api(prompt)
+        content = generate_with_compatible_api(prompt, max_tokens)
     elif ai_service == 'gemini' and gemini_key:
-        content = generate_with_gemini(prompt)
+        content = generate_with_gemini(prompt, max_tokens)
     elif ai_service == 'openai' and openai_key:
-        content = generate_with_openai(prompt)
+        content = generate_with_openai(prompt, max_tokens)
     elif ai_service == 'local':
         content = None
     else:
         if compatible_key:
-            content = generate_with_compatible_api(prompt)
+            content = generate_with_compatible_api(prompt, max_tokens)
         elif openai_key:
-            content = generate_with_openai(prompt)
+            content = generate_with_openai(prompt, max_tokens)
         elif gemini_key:
-            content = generate_with_gemini(prompt)
+            content = generate_with_gemini(prompt, max_tokens)
 
     return content
 
@@ -303,3 +304,112 @@ def save_bmi_profile(body: dict, db: Session = Depends(get_db), user: User = Dep
         db.add(profile)
     db.commit()
     return {'success': True, 'data': profile.to_dict()}
+
+
+def build_weight_analysis_prompt(records, profile):
+    data_lines = '\n'.join(
+        f"  {r.date.strftime('%Y-%m-%d')}: {r.weight} kg"
+        for r in records
+    )
+    height_m = profile.height / 100 if profile else 1.70
+    latest_weight = records[-1].weight
+    earliest_weight = records[0].weight
+    weight_change = latest_weight - earliest_weight
+    current_bmi = round(latest_weight / (height_m * height_m), 1)
+
+    return (
+        "你是一位专业的健康管理顾问。请根据以下用户的体重记录数据进行分析。\n\n"
+        f"用户信息：性别 {'男' if not profile or profile.gender == 'male' else '女'}，"
+        f"年龄 {profile.age if profile else 28} 岁，"
+        f"身高 {profile.height if profile else 170} cm\n\n"
+        f"体重记录（共 {len(records)} 条，时间跨度 {(records[-1].date - records[0].date).days} 天）：\n"
+        f"{data_lines}\n\n"
+        f"当前BMI: {current_bmi}\n"
+        f"期间体重变化: {weight_change:+.1f} kg\n\n"
+        "请从以下几个方面进行分析：\n"
+        "1. 体重变化趋势总结（上升/下降/波动/平稳）\n"
+        "2. 变化速率是否健康合理\n"
+        "3. 基于BMI的健康评估\n"
+        "4. 针对性的饮食和运动建议\n"
+        "5. 需要注意的健康风险（如有）\n\n"
+        "要求：\n"
+        "- 使用中文回答\n"
+        "- 语气专业但亲切\n"
+        "- 总字数控制在300字以内\n"
+        "- 使用简洁的段落格式"
+    )
+
+
+@bmi_router.post('/weight')
+def record_weight(body: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    try:
+        weight = float(body.get('weight', 0))
+    except (TypeError, ValueError):
+        return JSONResponse({'error': '体重数据无效'}, status_code=400)
+
+    if weight < 30 or weight > 300:
+        return JSONResponse({'error': '体重数据无效，请输入30-300kg之间的值'}, status_code=400)
+
+    today = date.today()
+    existing = db.query(WeightRecord).filter_by(user_id=user.id, date=today).first()
+    if existing:
+        return JSONResponse({'error': '今日体重已记录，无法修改'}, status_code=409)
+
+    record = WeightRecord(user_id=user.id, weight=weight, date=today)
+    db.add(record)
+
+    profile = db.query(BmiProfile).filter_by(user_id=user.id).first()
+    if profile:
+        profile.weight = weight
+
+    db.commit()
+    return {'success': True, 'data': record.to_dict()}
+
+
+@bmi_router.get('/weight/today')
+def get_today_weight(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    today = date.today()
+    record = db.query(WeightRecord).filter_by(user_id=user.id, date=today).first()
+    if record:
+        return {'recorded': True, 'data': record.to_dict()}
+    return {'recorded': False, 'data': None}
+
+
+@bmi_router.get('/weight/history')
+def get_weight_history(days: int = 90, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    days = min(max(days, 7), 365)
+    start_date = date.today() - timedelta(days=days)
+    records = (
+        db.query(WeightRecord)
+        .filter(WeightRecord.user_id == user.id, WeightRecord.date >= start_date)
+        .order_by(WeightRecord.date.asc())
+        .all()
+    )
+    return {'success': True, 'data': [r.to_dict() for r in records]}
+
+
+@bmi_router.post('/weight/analysis')
+def analyze_weight(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    start_date = date.today() - timedelta(days=90)
+    records = (
+        db.query(WeightRecord)
+        .filter(WeightRecord.user_id == user.id, WeightRecord.date >= start_date)
+        .order_by(WeightRecord.date.asc())
+        .all()
+    )
+
+    if len(records) < 3:
+        return JSONResponse({'error': '体重记录不足，至少需要3条记录才能进行分析'}, status_code=400)
+
+    profile = db.query(BmiProfile).filter_by(user_id=user.id).first()
+    prompt = build_weight_analysis_prompt(records, profile)
+
+    start_time = time.time()
+    content = generate_bmi_advice_with_ai(prompt, max_tokens=800)
+    duration = time.time() - start_time
+    print(f"📌 体重分析生成完成，耗时 {duration:.2f}s")
+
+    if not content:
+        return JSONResponse({'error': 'AI 分析服务暂不可用，请稍后再试'}, status_code=503)
+
+    return {'success': True, 'data': {'analysis': content}}

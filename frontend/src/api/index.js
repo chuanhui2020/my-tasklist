@@ -130,6 +130,22 @@ export default {
     return api.put('/bmi/profile', data)
   },
 
+  recordWeight(data) {
+    return api.post('/bmi/weight', data)
+  },
+
+  getTodayWeight() {
+    return api.get('/bmi/weight/today')
+  },
+
+  getWeightHistory(days = 90) {
+    return api.get('/bmi/weight/history', { params: { days } })
+  },
+
+  analyzeWeight() {
+    return api.post('/bmi/weight/analysis')
+  },
+
   getSecureNotes() {
     return api.get('/secure-notes')
   },

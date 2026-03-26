@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, Float, ForeignKey, func
+from sqlalchemy import Integer, String, Text, Enum, DateTime, Date, Float, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from database import Base
 
@@ -127,4 +127,26 @@ class SecureNote(Base):
             'title': self.title,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None,
+        }
+
+
+class WeightRecord(Base):
+    __tablename__ = 'weight_records'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    weight: Mapped[float] = mapped_column(Float, nullable=False)
+    date = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'date', name='uq_weight_user_date'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'weight': float(self.weight),
+            'date': self.date.strftime('%Y-%m-%d'),
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
         }
