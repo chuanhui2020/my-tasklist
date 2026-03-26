@@ -11,8 +11,8 @@
                 <div class="fortune-header">
                     <div class="header-icon">🎋</div>
                     <div>
-                        <h2 class="fortune-title">靈籤占卜</h2>
-                        <p class="fortune-subtitle">誠心祈願，靜待天機</p>
+                        <h2 class="fortune-title">灵签占卜</h2>
+                        <p class="fortune-subtitle">诚心祈愿，静待天机</p>
                     </div>
                 </div>
             </template>
@@ -20,7 +20,7 @@
             <div class="fortune-content">
                 <!-- 加载中 -->
                 <div v-if="pageLoading" class="page-loading">
-                    <div class="waiting-text">🏮 正在請示神明...</div>
+                    <div class="waiting-text">🏮 正在请示神明...</div>
                     <div class="waiting-dots">
                         <span class="dot" v-for="i in 3" :key="i" :style="{ animationDelay: (i - 1) * 0.3 + 's' }"></span>
                     </div>
@@ -67,7 +67,7 @@
                             <line x1="140" y1="220" x2="140" y2="380" stroke="#FFD700" stroke-width="1" opacity="0.4" />
                             <line x1="260" y1="220" x2="260" y2="380" stroke="#FFD700" stroke-width="1" opacity="0.4" />
                             <text x="200" y="310" text-anchor="middle" fill="#FFD700" font-size="24"
-                                font-family="KaiTi, serif" opacity="0.6">籤</text>
+                                font-family="KaiTi, serif" opacity="0.6">签</text>
                         </g>
 
                         <!-- 签子们（在筒内） -->
@@ -94,9 +94,9 @@
                 <div class="fortune-actions" v-if="!pageLoading && !showResult">
                     <el-button type="primary" size="large" :loading="isShaking || isGenerating"
                         :disabled="alreadyDrawn" @click="startFortune" class="draw-button">
-                        <span v-if="alreadyDrawn">🚫 今日已求籤</span>
-                        <span v-else-if="!isShaking && !isGenerating">🙏 誠心求籤</span>
-                        <span v-else-if="isShaking">🎋 搖籤中...</span>
+                        <span v-if="alreadyDrawn">🚫 今日已求签</span>
+                        <span v-else-if="!isShaking && !isGenerating">🙏 诚心求签</span>
+                        <span v-else-if="isShaking">🎋 摇签中...</span>
                         <span v-else>{{ currentHint }}</span>
                     </el-button>
                 </div>
@@ -116,18 +116,18 @@
                     <div v-if="showResult" class="fortune-result">
                         <div class="result-card">
                             <div class="result-header">
-                                <div class="result-number">第 {{ fortuneNumber }} 籤</div>
+                                <div class="result-number">第 {{ fortuneNumber }} 签</div>
                                 <div class="result-type" :class="fortuneData.type">{{ fortuneData.typeText }}</div>
                             </div>
 
                             <div class="result-content">
                                 <div class="result-poem">
-                                    <div class="poem-title">【籤詩】</div>
+                                    <div class="poem-title">【签诗】</div>
                                     <div class="poem-text" v-html="formatPoem(fortuneData.poem)"></div>
                                 </div>
 
                                 <div class="result-interpretation">
-                                    <div class="interpretation-title">【解籤】</div>
+                                    <div class="interpretation-title">【解签】</div>
                                     <div class="interpretation-text">{{ fortuneData.interpretation }}</div>
                                 </div>
 
@@ -143,13 +143,13 @@
                                 </div>
 
                                 <div v-if="fortuneData.work_fortune" class="result-work-fortune">
-                                    <div class="work-fortune-title">【今日打工人運勢】</div>
+                                    <div class="work-fortune-title">【今日打工人运势】</div>
                                     <div class="work-fortune-text">{{ fortuneData.work_fortune }}</div>
                                 </div>
                             </div>
 
                             <el-button v-if="!alreadyDrawn" type="primary" plain @click="reset" class="reset-button">
-                                🔄 重新求籤
+                                🔄 重新求签
                             </el-button>
                         </div>
                     </div>
@@ -163,8 +163,8 @@
                 <div class="fortune-header">
                     <div class="header-icon">📜</div>
                     <div>
-                        <h2 class="fortune-title">求籤記錄</h2>
-                        <p class="fortune-subtitle">最近十次靈籤記錄</p>
+                        <h2 class="fortune-title">求签记录</h2>
+                        <p class="fortune-subtitle">最近十次灵签记录</p>
                     </div>
                 </div>
             </template>
@@ -174,7 +174,7 @@
                     :class="{ expanded: expandedId === record.id }" @click="toggleExpand(record.id)">
                     <div class="history-summary">
                         <span class="history-date">{{ formatDate(record.created_at) }}</span>
-                        <span class="history-number">第 {{ record.fortuneNumber }} 籤</span>
+                        <span class="history-number">第 {{ record.fortuneNumber }} 签</span>
                         <span class="result-type history-badge" :class="record.type">{{ record.typeText }}</span>
                         <span class="history-poem-preview">{{ record.poem.slice(0, 20) }}…</span>
                         <span class="history-arrow">{{ expandedId === record.id ? '▲' : '▼' }}</span>
@@ -182,11 +182,11 @@
                     <transition name="expand">
                         <div v-if="expandedId === record.id" class="history-detail">
                             <div class="result-poem">
-                                <div class="poem-title">【籤詩】</div>
+                                <div class="poem-title">【签诗】</div>
                                 <div class="poem-text" v-html="formatPoem(record.poem)"></div>
                             </div>
                             <div class="result-interpretation">
-                                <div class="interpretation-title">【解籤】</div>
+                                <div class="interpretation-title">【解签】</div>
                                 <div class="interpretation-text">{{ record.interpretation }}</div>
                             </div>
                             <div class="result-advice">
@@ -199,7 +199,7 @@
                                 </div>
                             </div>
                             <div v-if="record.work_fortune" class="result-work-fortune">
-                                <div class="work-fortune-title">【今日打工人運勢】</div>
+                                <div class="work-fortune-title">【今日打工人运势】</div>
                                 <div class="work-fortune-text">{{ record.work_fortune }}</div>
                             </div>
                         </div>
@@ -232,12 +232,12 @@ const expandedId = ref(null)
 const historyRecords = ref([])
 
 const waitingHints = [
-    '📿 靈籤感應中...',
-    '🔮 正在解讀天機...',
-    '✨ 法師正在解籤...',
-    '🌙 卜算星象運勢...',
-    '🏮 焚香禱告中...',
-    '📜 翻閱古籍對照...',
+    '📿 灵签感应中...',
+    '🔮 正在解读天机...',
+    '✨ 法师正在解签...',
+    '🌙 卜算星象运势...',
+    '🏮 焚香祷告中...',
+    '📜 翻阅古籍对照...',
     '🎴 推演卦象吉凶...',
 ]
 const currentHint = ref(waitingHints[0])
@@ -263,7 +263,7 @@ const stopHintRotation = () => {
 onUnmounted(stopHintRotation)
 const fortuneData = ref({
     type: 'great',
-    typeText: '上上籤',
+    typeText: '上上签',
     poem: '',
     interpretation: '',
     advice: []
@@ -344,19 +344,19 @@ const generateFortune = async (number) => {
                 fortuneData.value = data
                 fortuneNumber.value = data.fortuneNumber
             }
-            ElMessage.warning('今日已求過籤，每日僅可求籤一次')
+            ElMessage.warning('今日已求过签，每日仅可求签一次')
         } else {
-            ElMessage.error('求籤失敗，請重試')
+            ElMessage.error('求签失败，请重试')
             fortuneData.value = {
                 type: 'medium',
-                typeText: '中籤',
-                poem: '雲開見月明，守得花開時，耐心待時機，好運必相隨。',
-                interpretation: '此籤暗示需要等待時機，不宜急進。當前雖有困頓，但守得雲開見月明，耐心等待必有收穫。',
+                typeText: '中签',
+                poem: '云开见月明，守得花开时，耐心待时机，好运必相随。',
+                interpretation: '此签暗示需要等待时机，不宜急进。当前虽有困顿，但守得云开见月明，耐心等待必有收获。',
                 advice: [
-                    { label: '事業', value: '穩中求進，切勿冒進' },
-                    { label: '財運', value: '量入為出，理財有道' },
-                    { label: '感情', value: '耐心等待，緣分自來' },
-                    { label: '健康', value: '規律作息，身心安康' }
+                    { label: '事业', value: '稳中求进，切勿冒进' },
+                    { label: '财运', value: '量入为出，理财有道' },
+                    { label: '感情', value: '耐心等待，缘分自来' },
+                    { label: '健康', value: '规律作息，身心安康' }
                 ]
             }
         }
