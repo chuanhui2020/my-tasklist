@@ -62,33 +62,38 @@ const currentIndex = ref(0)
 const paused = ref(false)
 const progressPercent = ref(0)
 
-let timer = null
-let progressTimer = null
+let rafId = null
+let lastTime = 0
 let elapsed = 0
-const TICK = 50
 
 const resetProgress = () => {
   elapsed = 0
+  lastTime = 0
   progressPercent.value = 0
 }
 
-const startTimers = () => {
-  stopTimers()
-  resetProgress()
-  progressTimer = setInterval(() => {
-    if (paused.value) return
-    elapsed += TICK
-    progressPercent.value = Math.min((elapsed / INTERVAL) * 100, 100)
-    if (elapsed >= INTERVAL) {
-      currentIndex.value = (currentIndex.value + 1) % animations.length
-      resetProgress()
-    }
-  }, TICK)
+const tick = (timestamp) => {
+  rafId = requestAnimationFrame(tick)
+  if (!lastTime) { lastTime = timestamp; return }
+  const delta = timestamp - lastTime
+  lastTime = timestamp
+  if (paused.value) return
+  elapsed += delta
+  progressPercent.value = Math.min((elapsed / INTERVAL) * 100, 100)
+  if (elapsed >= INTERVAL) {
+    currentIndex.value = (currentIndex.value + 1) % animations.length
+    elapsed = 0
+    progressPercent.value = 0
+  }
 }
 
-const stopTimers = () => {
-  if (timer) { clearInterval(timer); timer = null }
-  if (progressTimer) { clearInterval(progressTimer); progressTimer = null }
+const startTimer = () => {
+  resetProgress()
+  rafId = requestAnimationFrame(tick)
+}
+
+const stopTimer = () => {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null }
 }
 
 const goTo = (idx) => {
@@ -96,8 +101,8 @@ const goTo = (idx) => {
   resetProgress()
 }
 
-onMounted(startTimers)
-onBeforeUnmount(stopTimers)
+onMounted(startTimer)
+onBeforeUnmount(stopTimer)
 </script>
 
 <style scoped>
