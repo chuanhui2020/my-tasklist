@@ -133,13 +133,27 @@ frontend/src/
 │   └── index.js            # Axios instance, API methods, auth storage
 ├── views/
 │   ├── Login.vue           # Login page
-│   ├── TaskList.vue        # Task management (main feature)
+│   ├── TaskList.vue        # Task management + 3D animation carousel
 │   ├── Home.vue            # Home/dashboard
 │   ├── Fortune.vue         # Fortune telling feature
 │   ├── BmiManager.vue      # BMI calculator
 │   ├── AdminUsers.vue      # User management (admin only)
+│   ├── SecureNotes.vue     # Encrypted notes
 │   └── ChangePassword.vue  # Password change
-└── components/             # Reusable components
+├── components/
+│   ├── MilkDragon.vue      # 3D voxel dragon scene (Three.js)
+│   └── relax/              # 9 Three.js 3D relaxation animations
+│       ├── BreathingCircle.vue    # 极光 (Aurora ribbons + ShaderMaterial)
+│       ├── PendulumWave.vue       # 数字雨 (Matrix-style 3D text rain)
+│       ├── RainDrops.vue          # 粒子星系 (8000-particle spiral galaxy)
+│       ├── LavaLamp.vue           # 几何隧道 (Neon geometric tunnel)
+│       ├── BouncingBalls.vue      # 粒子网络 (Node network with dynamic connections)
+│       ├── Kaleidoscope.vue       # 流光线条 (Glowing spiral curves)
+│       ├── ParticleFireworks.vue  # 分形生长 (Fractal tree growth animation)
+│       ├── WaterRipple.vue        # 波形山脉 (Synthwave wireframe terrain)
+│       └── StarrySky.vue          # DNA螺旋 (Double helix with particles)
+└── composables/
+    └── useAuth.js          # Auth state composable
 ```
 
 **Key Patterns:**
@@ -173,6 +187,14 @@ frontend/src/
 - BMI calculation with AI-generated health advice
 - Stores BMI records per user
 - Extended timeout for AI advice generation
+
+### 3D Animation Carousel (TaskList.vue sidebar)
+- 10 Three.js 3D scenes auto-rotating every 10 seconds in the "体素花园" sidebar
+- Components in `components/relax/` + `MilkDragon.vue`
+- All components use `markRaw()` to prevent Vue deep reactivity on Three.js objects
+- Each component manages its own `requestAnimationFrame` loop and cleanup via `onBeforeUnmount`
+- Controls: previous/pause/next buttons + clickable navigation dots
+- Uses Additive Blending, GLSL ShaderMaterial, BufferGeometry particles, InstancedMesh
 
 ## Database Migrations
 
