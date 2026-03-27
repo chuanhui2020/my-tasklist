@@ -64,7 +64,7 @@ const handleLogout = () => {
 }
 
 const openGrafana = () => {
-  window.open('/grafana/', '_blank')
+  window.open(`${window.location.protocol}//${window.location.hostname}:3001`, '_blank')
 }
 </script>
 
