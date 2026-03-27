@@ -12,12 +12,31 @@
                 </el-icon>
                 <span>体素花园</span>
               </div>
-              <div class="card-subtitle">放松一下，看看奶龙</div>
+              <div class="card-subtitle">{{ animList[animIndex].name }} · {{ animPaused ? '已暂停' : `${10 - animSeconds}s` }}</div>
             </div>
           </div>
 
           <div class="animation-shell">
-            <MilkDragon />
+            <div class="anim-wrapper" :style="{ opacity: animVisible ? 1 : 0 }">
+              <component :is="animList[animIndex].comp" />
+            </div>
+          </div>
+
+          <div class="anim-controls">
+            <button class="anim-btn" @click="animPrev">上一个</button>
+            <button class="anim-btn" @click="animPaused = !animPaused">{{ animPaused ? '继续' : '暂停' }}</button>
+            <button class="anim-btn" @click="animNext">下一个</button>
+          </div>
+
+          <div class="anim-dots">
+            <span
+              v-for="(a, i) in animList"
+              :key="i"
+              class="anim-dot"
+              :class="{ active: i === animIndex }"
+              :title="a.name"
+              @click="animGoTo(i)"
+            ></span>
           </div>
         </el-card>
       </aside>
@@ -85,20 +104,41 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, markRaw } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, Odometer } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
 import MilkDragon from '@/components/MilkDragon.vue'
+import BreathingCircle from '@/components/relax/BreathingCircle.vue'
+import PendulumWave from '@/components/relax/PendulumWave.vue'
+import RainDrops from '@/components/relax/RainDrops.vue'
+import LavaLamp from '@/components/relax/LavaLamp.vue'
+import BouncingBalls from '@/components/relax/BouncingBalls.vue'
+import Kaleidoscope from '@/components/relax/Kaleidoscope.vue'
+import ParticleFireworks from '@/components/relax/ParticleFireworks.vue'
+import WaterRipple from '@/components/relax/WaterRipple.vue'
+import StarrySky from '@/components/relax/StarrySky.vue'
+
+const animList = [
+  { name: '奶龙', comp: markRaw(MilkDragon) },
+  { name: '呼吸圆', comp: markRaw(BreathingCircle) },
+  { name: '钟摆波', comp: markRaw(PendulumWave) },
+  { name: '下雨', comp: markRaw(RainDrops) },
+  { name: '熔岩灯', comp: markRaw(LavaLamp) },
+  { name: '弹力球', comp: markRaw(BouncingBalls) },
+  { name: '万花筒', comp: markRaw(Kaleidoscope) },
+  { name: '粒子烟花', comp: markRaw(ParticleFireworks) },
+  { name: '水波纹', comp: markRaw(WaterRipple) },
+  { name: '星空', comp: markRaw(StarrySky) }
+]
 
 export default {
   name: 'TaskList',
   components: {
     TaskCard,
     TaskForm,
-    MilkDragon,
     Plus,
     MagicStick,
     Odometer
@@ -110,6 +150,34 @@ export default {
     const sortBy = ref('due_date')
     const showTaskForm = ref(false)
     const editingTask = ref(null)
+
+    // Animation rotation
+    const animIndex = ref(0)
+    const animPaused = ref(false)
+    const animSeconds = ref(0)
+    const animVisible = ref(true)
+    let animTimerId = null
+
+    const animSwitchTo = (idx) => {
+      animVisible.value = false
+      setTimeout(() => {
+        animIndex.value = idx
+        animSeconds.value = 0
+        animVisible.value = true
+      }, 300)
+    }
+
+    const animNext = () => {
+      animSwitchTo((animIndex.value + 1) % animList.length)
+    }
+
+    const animPrev = () => {
+      animSwitchTo((animIndex.value - 1 + animList.length) % animList.length)
+    }
+
+    const animGoTo = (idx) => {
+      if (idx !== animIndex.value) animSwitchTo(idx)
+    }
 
     const statusFilterLabel = computed(() => {
       if (statusFilter.value === 'pending') return '待完成'
@@ -188,8 +256,19 @@ export default {
       loadTasks()
     })
 
+    onBeforeUnmount(() => {
+      if (animTimerId) clearInterval(animTimerId)
+    })
+
     onMounted(async () => {
       await loadTasks()
+      animTimerId = setInterval(() => {
+        if (animPaused.value) return
+        animSeconds.value++
+        if (animSeconds.value >= 10) {
+          animNext()
+        }
+      }, 1000)
     })
 
     return {
@@ -205,7 +284,15 @@ export default {
       handleToggleStatus,
       handleEdit,
       handleDelete,
-      handleTaskSubmit
+      handleTaskSubmit,
+      animList,
+      animIndex,
+      animPaused,
+      animSeconds,
+      animVisible,
+      animNext,
+      animPrev,
+      animGoTo
     }
   }
 }
@@ -284,10 +371,64 @@ export default {
 
 /* Animation Section */
 .animation-shell {
-  margin: 0 -20px -20px;
-  border-radius: 0 0 24px 24px;
+  margin: 0 -20px;
   overflow: hidden;
   min-height: 400px;
+}
+
+.anim-wrapper {
+  width: 100%;
+  height: 400px;
+  transition: opacity 0.3s ease;
+}
+
+.anim-controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 0 8px;
+}
+
+.anim-btn {
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.anim-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+}
+
+.anim-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+
+.anim-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.anim-dot:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.anim-dot.active {
+  background: var(--primary-color);
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
 }
 
 /* Toolbar */

@@ -15,7 +15,6 @@
               <router-link to="/fortune" class="nav-link" active-class="active">灵签占卜</router-link>
               <router-link to="/bmi" class="nav-link" active-class="active">BMI管理</router-link>
               <router-link to="/secure-notes" class="nav-link" active-class="active">密钥盒子</router-link>
-              <router-link to="/relax" class="nav-link" active-class="active">解压</router-link>
             </nav>
             <div class="user-box">
               <span class="user-name">{{ authState.user?.username }}</span>

@@ -7,7 +7,6 @@ import ChangePassword from './views/ChangePassword.vue'
 import Fortune from './views/Fortune.vue'
 import BmiManager from './views/BmiManager.vue'
 import SecureNotes from './views/SecureNotes.vue'
-import Relax from './views/Relax.vue'
 
 const routes = [
   {
@@ -53,12 +52,6 @@ const routes = [
     path: '/change-password',
     name: 'ChangePassword',
     component: ChangePassword,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/relax',
-    name: 'Relax',
-    component: Relax,
     meta: { requiresAuth: true }
   }
 ]
