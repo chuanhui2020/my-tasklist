@@ -11,6 +11,7 @@
     <div
       class="animation-stage"
       @click="paused = !paused"
+      @dblclick.prevent="goNext"
     >
       <transition name="anim-fade" mode="out-in">
         <component :is="animations[currentIndex].component" :key="currentIndex" />
@@ -98,6 +99,11 @@ const stopTimer = () => {
 
 const goTo = (idx) => {
   currentIndex.value = idx
+  resetProgress()
+}
+
+const goNext = () => {
+  currentIndex.value = (currentIndex.value + 1) % animations.length
   resetProgress()
 }
 
