@@ -8,6 +8,10 @@ __pycache__/
 # Environment variables
 .env
 
+# Monitoring data
+prometheus_data/
+grafana_data/
+
 # Build outputs
 dist/
 build/
