@@ -64,7 +64,7 @@ const handleLogout = () => {
 }
 
 const openGrafana = () => {
-  window.open(`${window.location.protocol}//${window.location.hostname}:3001`, '_blank')
+  window.open('https://grafana.ch-tools.org', '_blank')
 }
 </script>
 
