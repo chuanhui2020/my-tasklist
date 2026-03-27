@@ -2,6 +2,7 @@
   <div class="relax-page">
     <div class="relax-header">
       <h2 class="relax-title">{{ animations[currentIndex].name }}</h2>
+      <div class="relax-hint" v-if="paused">已暂停 · 点击画面继续</div>
       <div class="progress-bar">
         <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
       </div>
@@ -9,8 +10,7 @@
 
     <div
       class="animation-stage"
-      @mouseenter="paused = true"
-      @mouseleave="paused = false"
+      @click="paused = !paused"
     >
       <transition name="anim-fade" mode="out-in">
         <component :is="animations[currentIndex].component" :key="currentIndex" />
@@ -114,10 +114,15 @@ onBeforeUnmount(stopTimers)
 }
 
 .relax-title {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   font-size: 20px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.relax-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .progress-bar {
