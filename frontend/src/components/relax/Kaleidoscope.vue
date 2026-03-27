@@ -1,112 +1,132 @@
 <template>
-  <canvas ref="canvas" class="relax-canvas"></canvas>
+  <div ref="container" class="relax-canvas"></div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import * as THREE from 'three'
 
-const canvas = ref(null)
-let animationId = null
+const container = ref(null)
+let renderer, scene, camera, animationId
 
 const init = () => {
-  const cvs = canvas.value
-  if (!cvs) return
-  const ctx = cvs.getContext('2d')
-  const resize = () => {
-    cvs.width = cvs.clientWidth * devicePixelRatio
-    cvs.height = cvs.clientHeight * devicePixelRatio
-    ctx.scale(devicePixelRatio, devicePixelRatio)
-  }
-  resize()
-  window.addEventListener('resize', resize)
+  if (!container.value) return
+  const w = container.value.clientWidth
+  const h = container.value.clientHeight
 
-  const w = () => cvs.clientWidth
-  const h = () => cvs.clientHeight
-  const SEGMENTS = 8
+  scene = new THREE.Scene()
+  camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 200)
+  camera.position.set(0, 0, 20)
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setSize(w, h)
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  container.value.appendChild(renderer.domElement)
+
+  // Flow lines
+  const lineCount = 12
+  const flowLines = []
+
+  for (let l = 0; l < lineCount; l++) {
+    const points = 100
+    const positions = new Float32Array(points * 3)
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+
+    const hue = l / lineCount
+    const mat = new THREE.LineBasicMaterial({
+      color: new THREE.Color().setHSL(hue, 0.9, 0.6),
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+    const line = new THREE.Line(geo, mat)
+    scene.add(line)
+
+    flowLines.push({
+      line, geo, points,
+      phase: l * 0.5,
+      radius: 3 + l * 0.8,
+      speed: 0.5 + l * 0.05,
+      waveFreq: 2 + l * 0.3
+    })
+  }
+
+  // Glow particles along lines
+  const particleGeo = new THREE.BufferGeometry()
+  const pCount = 200
+  const pPositions = new Float32Array(pCount * 3)
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3))
+  const pMat = new THREE.PointsMaterial({
+    color: 0x88ffff,
+    size: 0.15,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  })
+  const particles = new THREE.Points(particleGeo, pMat)
+  scene.add(particles)
 
   const animate = (time) => {
     animationId = requestAnimationFrame(animate)
-    const cw = w(), ch = h()
-    ctx.clearRect(0, 0, cw, ch)
+    const t = time * 0.001
 
-    const t = time * 0.0005
-    const cx = cw / 2, cy = ch / 2
-    const maxR = Math.min(cw, ch) * 0.42
-
-    ctx.save()
-    ctx.translate(cx, cy)
-
-    for (let s = 0; s < SEGMENTS; s++) {
-      ctx.save()
-      ctx.rotate((s * Math.PI * 2) / SEGMENTS)
-
-      // Clip to segment
-      ctx.beginPath()
-      ctx.moveTo(0, 0)
-      ctx.lineTo(maxR, 0)
-      ctx.arc(0, 0, maxR, 0, Math.PI * 2 / SEGMENTS)
-      ctx.closePath()
-      ctx.clip()
-
-      // Draw shapes
-      for (let i = 0; i < 6; i++) {
-        const angle = t + i * 0.5
-        const dist = 30 + i * (maxR / 7)
-        const x = Math.cos(angle) * dist
-        const y = Math.sin(angle * 0.7) * dist * 0.4
-        const size = 10 + Math.sin(t * 2 + i) * 8 + i * 3
-        const hue = (t * 50 + i * 45 + s * 20) % 360
-
-        ctx.beginPath()
-        if (i % 3 === 0) {
-          ctx.arc(x, y, size, 0, Math.PI * 2)
-        } else if (i % 3 === 1) {
-          // Diamond
-          ctx.moveTo(x, y - size)
-          ctx.lineTo(x + size, y)
-          ctx.lineTo(x, y + size)
-          ctx.lineTo(x - size, y)
-          ctx.closePath()
-        } else {
-          // Triangle
-          for (let v = 0; v < 3; v++) {
-            const a = (v * Math.PI * 2) / 3 + t
-            ctx.lineTo(x + Math.cos(a) * size, y + Math.sin(a) * size)
-          }
-          ctx.closePath()
-        }
-
-        ctx.fillStyle = `hsla(${hue}, 80%, 60%, 0.5)`
-        ctx.fill()
-        ctx.strokeStyle = `hsla(${hue}, 90%, 70%, 0.7)`
-        ctx.lineWidth = 1.5
-        ctx.stroke()
+    for (const fl of flowLines) {
+      const pos = fl.geo.attributes.position.array
+      for (let i = 0; i < fl.points; i++) {
+        const u = i / fl.points
+        const angle = u * Math.PI * 4 + t * fl.speed + fl.phase
+        const r = fl.radius + Math.sin(u * fl.waveFreq + t) * 2
+        pos[i * 3] = Math.cos(angle) * r
+        pos[i * 3 + 1] = Math.sin(angle) * r
+        pos[i * 3 + 2] = (u - 0.5) * 20 + Math.sin(u * 3 + t * 0.5) * 3
       }
+      fl.geo.attributes.position.needsUpdate = true
 
-      ctx.restore()
+      const hue = (fl.phase * 0.1 + t * 0.03) % 1
+      fl.line.material.color.setHSL(hue, 0.9, 0.6)
     }
 
-    ctx.restore()
+    // Update particles
+    const pp = particles.geometry.attributes.position.array
+    for (let i = 0; i < pCount; i++) {
+      const fl = flowLines[i % flowLines.length]
+      const u = ((t * fl.speed * 0.3 + i * 0.05) % 1)
+      const angle = u * Math.PI * 4 + t * fl.speed + fl.phase
+      const r = fl.radius + Math.sin(u * fl.waveFreq + t) * 2
+      pp[i * 3] = Math.cos(angle) * r + (Math.random() - 0.5) * 0.3
+      pp[i * 3 + 1] = Math.sin(angle) * r + (Math.random() - 0.5) * 0.3
+      pp[i * 3 + 2] = (u - 0.5) * 20 + Math.sin(u * 3 + t * 0.5) * 3
+    }
+    particles.geometry.attributes.position.needsUpdate = true
 
-    // Center circle
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20)
-    grad.addColorStop(0, `hsla(${(t * 60) % 360}, 80%, 70%, 0.8)`)
-    grad.addColorStop(1, `hsla(${(t * 60 + 60) % 360}, 80%, 50%, 0)`)
-    ctx.beginPath()
-    ctx.arc(cx, cy, 20, 0, Math.PI * 2)
-    ctx.fillStyle = grad
-    ctx.fill()
+    camera.position.x = Math.sin(t * 0.2) * 8
+    camera.position.y = Math.cos(t * 0.15) * 5
+    camera.position.z = 18 + Math.sin(t * 0.1) * 3
+    camera.lookAt(0, 0, 0)
+    renderer.render(scene, camera)
   }
-
   animationId = requestAnimationFrame(animate)
+
+  const onResize = () => {
+    if (!container.value) return
+    const w = container.value.clientWidth, h = container.value.clientHeight
+    camera.aspect = w / h
+    camera.updateProjectionMatrix()
+    renderer.setSize(w, h)
+  }
+  window.addEventListener('resize', onResize)
 }
 
 onMounted(init)
 onBeforeUnmount(() => {
   if (animationId) cancelAnimationFrame(animationId)
+  if (renderer) { renderer.dispose(); renderer.forceContextLoss() }
 })
 </script>
 
 <style scoped>
-.relax-canvas { width: 100%; height: 100%; display: block; }
+.relax-canvas { width: 100%; height: 100%; }
 </style>

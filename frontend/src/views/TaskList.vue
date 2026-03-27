@@ -123,15 +123,15 @@ import StarrySky from '@/components/relax/StarrySky.vue'
 
 const animList = [
   { name: '奶龙', comp: markRaw(MilkDragon) },
-  { name: '呼吸圆', comp: markRaw(BreathingCircle) },
-  { name: '钟摆波', comp: markRaw(PendulumWave) },
-  { name: '下雨', comp: markRaw(RainDrops) },
-  { name: '熔岩灯', comp: markRaw(LavaLamp) },
-  { name: '弹力球', comp: markRaw(BouncingBalls) },
-  { name: '万花筒', comp: markRaw(Kaleidoscope) },
-  { name: '粒子烟花', comp: markRaw(ParticleFireworks) },
-  { name: '水波纹', comp: markRaw(WaterRipple) },
-  { name: '星空', comp: markRaw(StarrySky) }
+  { name: '极光', comp: markRaw(BreathingCircle) },
+  { name: '数字雨', comp: markRaw(PendulumWave) },
+  { name: '粒子星系', comp: markRaw(RainDrops) },
+  { name: '几何隧道', comp: markRaw(LavaLamp) },
+  { name: '粒子网络', comp: markRaw(BouncingBalls) },
+  { name: '流光线条', comp: markRaw(Kaleidoscope) },
+  { name: '分形生长', comp: markRaw(ParticleFireworks) },
+  { name: '波形山脉', comp: markRaw(WaterRipple) },
+  { name: 'DNA螺旋', comp: markRaw(StarrySky) }
 ]
 
 export default {

@@ -1,89 +1,107 @@
 <template>
-  <canvas ref="canvas" class="relax-canvas"></canvas>
+  <div ref="container" class="relax-canvas"></div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import * as THREE from 'three'
 
-const canvas = ref(null)
-let animationId = null
+const container = ref(null)
+let renderer, scene, camera, animationId
 
 const init = () => {
-  const cvs = canvas.value
-  if (!cvs) return
-  const ctx = cvs.getContext('2d')
-  const resize = () => {
-    cvs.width = cvs.clientWidth * devicePixelRatio
-    cvs.height = cvs.clientHeight * devicePixelRatio
-    ctx.scale(devicePixelRatio, devicePixelRatio)
+  if (!container.value) return
+  const w = container.value.clientWidth
+  const h = container.value.clientHeight
+
+  scene = new THREE.Scene()
+  camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 500)
+  camera.position.set(0, 20, 60)
+  camera.lookAt(0, 0, 0)
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setSize(w, h)
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  container.value.appendChild(renderer.domElement)
+
+  // Spiral galaxy particles
+  const COUNT = 8000
+  const geometry = new THREE.BufferGeometry()
+  const positions = new Float32Array(COUNT * 3)
+  const colors = new Float32Array(COUNT * 3)
+  const sizes = new Float32Array(COUNT)
+  const arms = 3
+  const color = new THREE.Color()
+
+  for (let i = 0; i < COUNT; i++) {
+    const arm = i % arms
+    const armAngle = (arm / arms) * Math.PI * 2
+    const dist = Math.random() * 40
+    const spread = (Math.random() - 0.5) * (dist * 0.15)
+    const spreadY = (Math.random() - 0.5) * 1.5
+    const spiralAngle = dist * 0.3 + armAngle
+
+    positions[i * 3] = Math.cos(spiralAngle) * dist + spread
+    positions[i * 3 + 1] = spreadY
+    positions[i * 3 + 2] = Math.sin(spiralAngle) * dist + spread
+
+    const hue = 0.55 + dist * 0.005 + (Math.random() - 0.5) * 0.1
+    color.setHSL(hue, 0.8, 0.5 + Math.random() * 0.3)
+    colors[i * 3] = color.r
+    colors[i * 3 + 1] = color.g
+    colors[i * 3 + 2] = color.b
+    sizes[i] = 0.3 + Math.random() * 0.5
   }
-  resize()
-  window.addEventListener('resize', resize)
 
-  const w = () => cvs.clientWidth
-  const h = () => cvs.clientHeight
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
 
-  const drops = []
-  const ripples = []
+  const material = new THREE.PointsMaterial({
+    size: 0.4,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  })
 
-  for (let i = 0; i < 120; i++) {
-    drops.push({
-      x: Math.random() * 2000,
-      y: Math.random() * 1000,
-      speed: 4 + Math.random() * 6,
-      length: 15 + Math.random() * 20,
-      opacity: 0.2 + Math.random() * 0.4
-    })
-  }
+  const galaxy = new THREE.Points(geometry, material)
+  scene.add(galaxy)
 
-  const animate = () => {
+  // Core glow
+  const coreGeo = new THREE.SphereGeometry(2, 32, 32)
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.3 })
+  scene.add(new THREE.Mesh(coreGeo, coreMat))
+
+  const animate = (time) => {
     animationId = requestAnimationFrame(animate)
-    const cw = w(), ch = h()
-    ctx.clearRect(0, 0, cw, ch)
-
-    // Drops
-    ctx.strokeStyle = 'rgba(150, 200, 255, 0.4)'
-    ctx.lineWidth = 1.5
-    for (const d of drops) {
-      ctx.globalAlpha = d.opacity
-      ctx.beginPath()
-      ctx.moveTo(d.x, d.y)
-      ctx.lineTo(d.x + 1, d.y + d.length)
-      ctx.stroke()
-
-      d.y += d.speed
-      if (d.y > ch) {
-        ripples.push({ x: d.x, y: ch - 20 + Math.random() * 20, radius: 0, maxRadius: 15 + Math.random() * 20, opacity: 0.6 })
-        d.y = -d.length
-        d.x = Math.random() * cw
-      }
-    }
-    ctx.globalAlpha = 1
-
-    // Ripples
-    for (let i = ripples.length - 1; i >= 0; i--) {
-      const r = ripples[i]
-      r.radius += 0.8
-      r.opacity -= 0.015
-      if (r.opacity <= 0) { ripples.splice(i, 1); continue }
-
-      ctx.beginPath()
-      ctx.ellipse(r.x, r.y, r.radius, r.radius * 0.3, 0, 0, Math.PI * 2)
-      ctx.strokeStyle = `rgba(150, 200, 255, ${r.opacity})`
-      ctx.lineWidth = 1
-      ctx.stroke()
-    }
+    const t = time * 0.0003
+    galaxy.rotation.y = t
+    camera.position.x = Math.sin(t * 0.5) * 15
+    camera.position.z = 50 + Math.cos(t * 0.3) * 10
+    camera.lookAt(0, 0, 0)
+    renderer.render(scene, camera)
   }
-
   animationId = requestAnimationFrame(animate)
+
+  const onResize = () => {
+    if (!container.value) return
+    const w = container.value.clientWidth, h = container.value.clientHeight
+    camera.aspect = w / h
+    camera.updateProjectionMatrix()
+    renderer.setSize(w, h)
+  }
+  window.addEventListener('resize', onResize)
 }
 
 onMounted(init)
 onBeforeUnmount(() => {
   if (animationId) cancelAnimationFrame(animationId)
+  if (renderer) { renderer.dispose(); renderer.forceContextLoss() }
 })
 </script>
 
 <style scoped>
-.relax-canvas { width: 100%; height: 100%; display: block; }
+.relax-canvas { width: 100%; height: 100%; }
 </style>

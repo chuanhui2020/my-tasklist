@@ -1,133 +1,185 @@
 <template>
-  <canvas ref="canvas" class="relax-canvas"></canvas>
+  <div ref="container" class="relax-canvas"></div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import * as THREE from 'three'
 
-const canvas = ref(null)
-let animationId = null
+const container = ref(null)
+let renderer, scene, camera, animationId
 
 const init = () => {
-  const cvs = canvas.value
-  if (!cvs) return
-  const ctx = cvs.getContext('2d')
-  const resize = () => {
-    cvs.width = cvs.clientWidth * devicePixelRatio
-    cvs.height = cvs.clientHeight * devicePixelRatio
-    ctx.scale(devicePixelRatio, devicePixelRatio)
-  }
-  resize()
-  window.addEventListener('resize', resize)
+  if (!container.value) return
+  const w = container.value.clientWidth
+  const h = container.value.clientHeight
 
-  const w = () => cvs.clientWidth
-  const h = () => cvs.clientHeight
+  scene = new THREE.Scene()
+  camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 200)
+  camera.position.set(0, 5, 12)
+  camera.lookAt(0, 4, 0)
 
-  const fireworks = []
-  const particles = []
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setSize(w, h)
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  container.value.appendChild(renderer.domElement)
 
-  const launch = () => {
-    const cw = w(), ch = h()
-    fireworks.push({
-      x: cw * 0.2 + Math.random() * cw * 0.6,
-      y: ch,
-      targetY: ch * 0.15 + Math.random() * ch * 0.35,
-      speed: 4 + Math.random() * 2,
-      hue: Math.random() * 360,
-      trail: []
-    })
-  }
+  // Fractal tree using lines
+  const maxDepth = 10
+  const branchData = []
 
-  const explode = (x, y, hue) => {
-    const count = 60 + Math.floor(Math.random() * 40)
-    for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.3
-      const speed = 1.5 + Math.random() * 3
-      particles.push({
-        x, y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1,
-        decay: 0.01 + Math.random() * 0.015,
-        hue: hue + (Math.random() - 0.5) * 30,
-        size: 2 + Math.random() * 2
-      })
+  const generateTree = (x, y, z, angle, angleZ, length, depth) => {
+    if (depth > maxDepth || length < 0.1) return
+    const endX = x + Math.sin(angle) * Math.cos(angleZ) * length
+    const endY = y + Math.cos(angle) * length
+    const endZ = z + Math.sin(angle) * Math.sin(angleZ) * length
+    branchData.push({ sx: x, sy: y, sz: z, ex: endX, ey: endY, ez: endZ, depth })
+
+    const spread = 0.4 + depth * 0.05
+    const shrink = 0.68 + Math.random() * 0.08
+    generateTree(endX, endY, endZ, angle - spread, angleZ + 0.3, length * shrink, depth + 1)
+    generateTree(endX, endY, endZ, angle + spread, angleZ - 0.3, length * shrink, depth + 1)
+    if (depth < 4) {
+      generateTree(endX, endY, endZ, angle, angleZ + spread, length * shrink * 0.9, depth + 1)
     }
   }
 
-  let lastLaunch = 0
+  generateTree(0, 0, 0, 0, 0, 3, 0)
+
+  // Create line segments
+  const positions = new Float32Array(branchData.length * 6)
+  const colors = new Float32Array(branchData.length * 6)
+  const targetPositions = new Float32Array(branchData.length * 6)
+  const color = new THREE.Color()
+
+  for (let i = 0; i < branchData.length; i++) {
+    const b = branchData[i]
+    const idx = i * 6
+    // Start collapsed at base
+    positions[idx] = 0; positions[idx + 1] = 0; positions[idx + 2] = 0
+    positions[idx + 3] = 0; positions[idx + 4] = 0; positions[idx + 5] = 0
+    // Target
+    targetPositions[idx] = b.sx; targetPositions[idx + 1] = b.sy; targetPositions[idx + 2] = b.sz
+    targetPositions[idx + 3] = b.ex; targetPositions[idx + 4] = b.ey; targetPositions[idx + 5] = b.ez
+
+    const hue = 0.3 - b.depth * 0.03
+    const lightness = 0.5 + b.depth * 0.03
+    color.setHSL(hue, 0.8, lightness)
+    colors[idx] = color.r; colors[idx + 1] = color.g; colors[idx + 2] = color.b
+    colors[idx + 3] = color.r; colors[idx + 4] = color.g; colors[idx + 5] = color.b
+  }
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+
+  const mat = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  })
+  const tree = new THREE.LineSegments(geo, mat)
+  scene.add(tree)
+
+  // Leaf particles
+  const leafCount = 300
+  const leafGeo = new THREE.BufferGeometry()
+  const leafPos = new Float32Array(leafCount * 3)
+  const leafCol = new Float32Array(leafCount * 3)
+  for (let i = 0; i < leafCount; i++) {
+    leafPos[i * 3] = 0; leafPos[i * 3 + 1] = 0; leafPos[i * 3 + 2] = 0
+    const lc = new THREE.Color().setHSL(0.3 + Math.random() * 0.15, 0.9, 0.6)
+    leafCol[i * 3] = lc.r; leafCol[i * 3 + 1] = lc.g; leafCol[i * 3 + 2] = lc.b
+  }
+  leafGeo.setAttribute('position', new THREE.BufferAttribute(leafPos, 3))
+  leafGeo.setAttribute('color', new THREE.BufferAttribute(leafCol, 3))
+  const leafMat = new THREE.PointsMaterial({
+    size: 0.15,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  })
+  const leaves = new THREE.Points(leafGeo, leafMat)
+  scene.add(leaves)
+
+  const CYCLE = 12 // seconds per grow cycle
 
   const animate = (time) => {
     animationId = requestAnimationFrame(animate)
-    const cw = w(), ch = h()
+    const t = time * 0.001
+    const cycleT = (t % CYCLE) / CYCLE // 0 to 1
 
-    // Fade trail
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'
-    ctx.fillRect(0, 0, cw, ch)
+    // Grow animation
+    const pos = tree.geometry.attributes.position.array
+    const col = tree.geometry.attributes.color.array
+    for (let i = 0; i < branchData.length; i++) {
+      const b = branchData[i]
+      const branchStart = b.depth / (maxDepth + 1)
+      const branchEnd = (b.depth + 1) / (maxDepth + 1)
+      const growProgress = Math.max(0, Math.min(1, (cycleT * 1.3 - branchStart) / (branchEnd - branchStart)))
 
-    // Auto launch
-    if (time - lastLaunch > 800 + Math.random() * 600) {
-      launch()
-      lastLaunch = time
+      const idx = i * 6
+      pos[idx] = targetPositions[idx]
+      pos[idx + 1] = targetPositions[idx + 1]
+      pos[idx + 2] = targetPositions[idx + 2]
+      pos[idx + 3] = targetPositions[idx] + (targetPositions[idx + 3] - targetPositions[idx]) * growProgress
+      pos[idx + 4] = targetPositions[idx + 1] + (targetPositions[idx + 4] - targetPositions[idx + 1]) * growProgress
+      pos[idx + 5] = targetPositions[idx + 2] + (targetPositions[idx + 5] - targetPositions[idx + 2]) * growProgress
+
+      // Color shift over time
+      const hue = (0.3 + t * 0.02 - b.depth * 0.03) % 1
+      color.setHSL(hue, 0.8, 0.5 + b.depth * 0.03)
+      col[idx] = color.r; col[idx + 1] = color.g; col[idx + 2] = color.b
+      col[idx + 3] = color.r; col[idx + 4] = color.g; col[idx + 5] = color.b
     }
+    tree.geometry.attributes.position.needsUpdate = true
+    tree.geometry.attributes.color.needsUpdate = true
 
-    // Fireworks rising
-    for (let i = fireworks.length - 1; i >= 0; i--) {
-      const f = fireworks[i]
-      f.trail.push({ x: f.x, y: f.y })
-      if (f.trail.length > 6) f.trail.shift()
-
-      f.y -= f.speed
-      f.x += Math.sin(f.y * 0.02) * 0.5
-
-      // Trail
-      for (let j = 0; j < f.trail.length; j++) {
-        const alpha = j / f.trail.length * 0.5
-        ctx.beginPath()
-        ctx.arc(f.trail[j].x, f.trail[j].y, 2, 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(${f.hue}, 80%, 70%, ${alpha})`
-        ctx.fill()
+    // Leaves appear at tips when grown
+    const lp = leaves.geometry.attributes.position.array
+    const tipBranches = branchData.filter(b => b.depth >= maxDepth - 2)
+    for (let i = 0; i < leafCount; i++) {
+      if (cycleT > 0.5) {
+        const tb = tipBranches[i % tipBranches.length]
+        const drift = Math.sin(t * 2 + i) * 0.3
+        lp[i * 3] = tb.ex + drift
+        lp[i * 3 + 1] = tb.ey + Math.sin(t + i * 0.5) * 0.2
+        lp[i * 3 + 2] = tb.ez + Math.cos(t * 1.5 + i) * 0.2
+      } else {
+        lp[i * 3] = 0; lp[i * 3 + 1] = -100; lp[i * 3 + 2] = 0
       }
-
-      // Head
-      ctx.beginPath()
-      ctx.arc(f.x, f.y, 3, 0, Math.PI * 2)
-      ctx.fillStyle = `hsla(${f.hue}, 90%, 80%, 1)`
-      ctx.fill()
-
-      if (f.y <= f.targetY) {
-        explode(f.x, f.y, f.hue)
-        fireworks.splice(i, 1)
-      }
     }
+    leaves.geometry.attributes.position.needsUpdate = true
+    leafMat.opacity = cycleT > 0.5 ? Math.min(0.8, (cycleT - 0.5) * 4) : 0
 
-    // Particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i]
-      p.x += p.vx
-      p.y += p.vy
-      p.vy += 0.03
-      p.vx *= 0.99
-      p.life -= p.decay
-
-      if (p.life <= 0) { particles.splice(i, 1); continue }
-
-      ctx.beginPath()
-      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2)
-      ctx.fillStyle = `hsla(${p.hue}, 80%, 60%, ${p.life})`
-      ctx.fill()
-    }
+    tree.rotation.y = Math.sin(t * 0.1) * 0.3
+    camera.position.x = Math.sin(t * 0.15) * 4
+    camera.lookAt(0, 4, 0)
+    renderer.render(scene, camera)
   }
-
   animationId = requestAnimationFrame(animate)
+
+  const onResize = () => {
+    if (!container.value) return
+    const w = container.value.clientWidth, h = container.value.clientHeight
+    camera.aspect = w / h
+    camera.updateProjectionMatrix()
+    renderer.setSize(w, h)
+  }
+  window.addEventListener('resize', onResize)
 }
 
 onMounted(init)
 onBeforeUnmount(() => {
   if (animationId) cancelAnimationFrame(animationId)
+  if (renderer) { renderer.dispose(); renderer.forceContextLoss() }
 })
 </script>
 
 <style scoped>
-.relax-canvas { width: 100%; height: 100%; display: block; }
+.relax-canvas { width: 100%; height: 100%; }
 </style>
