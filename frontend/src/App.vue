@@ -18,6 +18,7 @@
             </nav>
             <div class="user-box">
               <span class="user-name">{{ authState.user?.username }}</span>
+              <el-button v-if="isAdmin" type="warning" plain size="small" class="ops-btn" @click="openGrafana">运维</el-button>
               <el-button type="primary" plain size="small" class="logout-btn" @click="handleLogout">退出</el-button>
             </div>
           </div>
@@ -60,6 +61,10 @@ const goLogin = () => {
 const handleLogout = () => {
   clearAuth()
   router.replace({ path: '/login', query: { redirect: '/' } })
+}
+
+const openGrafana = () => {
+  window.open('/grafana/', '_blank')
 }
 </script>
 
@@ -174,6 +179,17 @@ const handleLogout = () => {
 .logout-btn:hover {
   border-color: var(--text-secondary) !important;
   color: var(--text-primary) !important;
+}
+
+.ops-btn {
+  background: transparent !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+  color: #F59E0B !important;
+}
+
+.ops-btn:hover {
+  border-color: #F59E0B !important;
+  color: #FBBF24 !important;
 }
 
 .app-main {
