@@ -6,17 +6,26 @@
 用户浏览器 --HTTPS(443)--> Cloudflare CDN/WAF --HTTPS(443)--> Nginx(前端容器:443)
                                                                   ├── 静态文件(Vue 3)
                                                                   └── /api/ --HTTP--> Uvicorn(后端容器:8000) --MySQL--> MySQL 8.4(数据库容器:3306)
+
+用户浏览器 --HTTPS(443)--> Cloudflare --HTTPS(443)--> Nginx(前端容器:443) --HTTP--> Grafana(3000)
+                                                      (grafana.ch-tools.org)
+
+Prometheus(9090) --scrape--> FastAPI(8000/metrics)
+                 --scrape--> MySQL Exporter(9104)
 ```
 
 **容器组成（Docker Compose）：**
 
 | 容器 | 服务 | 端口 | 说明 |
 |------|------|------|------|
-| `tasklist-frontend` | Nginx | 80, 443 | 托管 Vue 静态文件，反代 API 到后端 |
+| `tasklist-frontend` | Nginx | 80, 443 | 托管 Vue 静态文件，反代 API 和 Grafana |
 | `tasklist-backend` | Uvicorn (单 worker) | 8000 | 运行 FastAPI 应用 |
 | `tasklist-db` | MySQL 8.4 | 3306 | 数据持久化到 `mysql_data` volume |
+| `tasklist-prometheus` | Prometheus | 9090 | 监控数据采集，15 天数据保留 |
+| `tasklist-grafana` | Grafana | 3000 | 监控可视化面板 |
+| `tasklist-mysql-exporter` | MySQL Exporter | 9104 | 采集 MySQL 指标 |
 
-三个容器通过内部网络 `tasklist_network` 通信。
+六个容器通过内部网络 `tasklist_network` 通信。
 
 **HTTPS 全链路加密：**
 
@@ -415,6 +424,39 @@ echo "Backup completed: $BACKUP_DIR/db_$DATE.sql"
 ```
 
 ### 5. 监控和日志
+
+**Prometheus + Grafana 监控栈：**
+
+项目已集成 Prometheus + Grafana 监控，自动随 `docker compose up` 启动。
+
+- Grafana 面板：`https://grafana.ch-tools.org`（通过 Nginx 反代 + Cloudflare HTTPS）
+- Grafana 默认密码：`.env` 中的 `GRAFANA_PASSWORD`（默认 `admin123`）
+- Prometheus 自动采集 FastAPI 应用指标和 MySQL 数据库指标
+- 数据保留 15 天
+
+**监控相关文件：**
+
+```
+prometheus/prometheus.yml          # Prometheus 采集配置
+grafana/provisioning/datasources/  # Grafana 数据源自动配置
+mysql-exporter/.my.cnf             # MySQL Exporter 连接配置
+mysql-exporter/init-exporter-user.sql  # MySQL Exporter 专用用户初始化
+```
+
+**查看监控服务状态：**
+
+```bash
+# 检查监控容器
+docker compose ps prometheus grafana mysql-exporter
+
+# 查看 Prometheus 日志
+docker compose logs prometheus
+
+# 查看 Grafana 日志
+docker compose logs grafana
+```
+
+**Docker 日志驱动：**
 
 使用 Docker 日志驱动：
 

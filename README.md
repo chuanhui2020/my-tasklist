@@ -40,6 +40,7 @@
 - 🎨 **现代化界面** - Element Plus UI 组件库
 - 📊 **RESTful API** - 标准化接口设计
 - 💾 **数据持久化** - MySQL 数据库 + Docker Volume
+- 📈 **监控体系** - Prometheus + Grafana 全栈监控
 
 ---
 
@@ -111,6 +112,9 @@ SECRET_KEY=your-random-secret-key-here
 
 # 前端端口（可选，默认 3000）
 FRONTEND_PORT=3000
+
+# Grafana 管理员密码（可选，默认 admin123）
+GRAFANA_PASSWORD=your_grafana_password_here
 ```
 
 **生成随机密钥：**
@@ -149,6 +153,11 @@ python -c "import secrets; print(secrets.token_hex(32))"
 - **Docker Compose** - 服务编排
 - **Nginx** - 反向代理
 
+### 监控
+- **Prometheus** - 指标采集
+- **Grafana** - 监控可视化（`grafana.ch-tools.org`）
+- **MySQL Exporter** - MySQL 指标采集
+
 ---
 
 ## 📁 项目结构
@@ -183,6 +192,14 @@ my-tasklist/
 ├── Dockerfile.frontend         # 前端镜像
 ├── docker-compose.yml          # Docker 编排
 ├── nginx.conf                  # Nginx 配置
+├── prometheus/                 # Prometheus 监控配置
+│   └── prometheus.yml          # 采集目标配置
+├── grafana/                    # Grafana 配置
+│   └── provisioning/
+│       └── datasources/        # 数据源自动配置
+├── mysql-exporter/             # MySQL Exporter 配置
+│   ├── .my.cnf                 # 连接凭据
+│   └── init-exporter-user.sql  # 初始化专用用户
 ├── .env.example                # 环境变量模板
 ├── docker-start.sh             # 启动脚本
 └── README.md                   # 项目文档
@@ -407,10 +424,11 @@ echo "Backup completed: $BACKUP_DIR/backup_$DATE.sql"
 
 ## 🚀 性能优化
 
-- **资源限制**: 在 `docker-compose.yml` 中配置 CPU 和内存限制
+- **资源限制**: 在 `docker-compose.yml` 中配置 CPU 和内存限制（已针对 1C2G 服务器优化）
 - **数据库优化**: 根据负载调整 MySQL 配置
 - **前端缓存**: Nginx 已配置静态资源缓存
 - **日志管理**: 配置日志轮转，防止日志文件过大
+- **监控告警**: Prometheus + Grafana 实时监控 FastAPI 和 MySQL 指标
 
 ---
 
