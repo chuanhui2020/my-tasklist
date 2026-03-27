@@ -32,7 +32,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 import MilkDragon from '@/components/MilkDragon.vue'
 import BreathingCircle from '@/components/relax/BreathingCircle.vue'
@@ -58,43 +58,36 @@ const animations = [
   { name: '星空', component: StarrySky }
 ]
 
-const INTERVAL = 10000
+const INTERVAL = 10
 const currentIndex = ref(0)
 const paused = ref(false)
 const progressPercent = ref(0)
 
-let rafId = null
-let lastTime = 0
-let elapsed = 0
+let timerId = null
+let seconds = 0
 
 const resetProgress = () => {
-  elapsed = 0
-  lastTime = 0
+  seconds = 0
   progressPercent.value = 0
 }
 
-const tick = (timestamp) => {
-  rafId = requestAnimationFrame(tick)
-  if (!lastTime) { lastTime = timestamp; return }
-  const delta = timestamp - lastTime
-  lastTime = timestamp
-  if (paused.value) return
-  elapsed += delta
-  progressPercent.value = Math.min((elapsed / INTERVAL) * 100, 100)
-  if (elapsed >= INTERVAL) {
-    currentIndex.value = (currentIndex.value + 1) % animations.length
-    elapsed = 0
-    progressPercent.value = 0
-  }
-}
-
 const startTimer = () => {
+  stopTimer()
   resetProgress()
-  rafId = requestAnimationFrame(tick)
+  timerId = setInterval(() => {
+    if (paused.value) return
+    seconds++
+    progressPercent.value = (seconds / INTERVAL) * 100
+    if (seconds >= INTERVAL) {
+      currentIndex.value = (currentIndex.value + 1) % animations.length
+      seconds = 0
+      progressPercent.value = 0
+    }
+  }, 1000)
 }
 
 const stopTimer = () => {
-  if (rafId) { cancelAnimationFrame(rafId); rafId = null }
+  if (timerId) { clearInterval(timerId); timerId = null }
 }
 
 const goTo = (idx) => {
