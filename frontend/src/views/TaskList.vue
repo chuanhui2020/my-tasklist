@@ -17,10 +17,15 @@
           </div>
 
           <div ref="animationShell" class="animation-shell">
-            <transition name="anim-swap" mode="in-out">
-              <component :is="animList[animIndex].comp" :key="animIndex" class="animation-scene" />
-            </transition>
-            <div class="animation-mask" :class="{ active: animSwitching }"></div>
+            <div
+              v-for="scene in renderedScenes"
+              :key="scene.key"
+              class="animation-scene"
+              :class="{ active: scene.key === activeSceneKey }"
+              :data-scene-key="scene.key"
+            >
+              <component :is="scene.comp" />
+            </div>
           </div>
 
           <div class="anim-controls">
@@ -206,23 +211,24 @@ export default {
     const editingTask = ref(null)
 
     // Animation rotation
+    const createScene = (idx, token = 0) => ({
+      key: `scene-${idx}-${token}`,
+      idx,
+      comp: animList[idx].comp
+    })
+
+    const initialScene = createScene(0)
     const animIndex = ref(0)
     const animPaused = ref(false)
     const animSeconds = ref(0)
-    const animSwitching = ref(false)
+    const renderedScenes = ref([initialScene])
+    const activeSceneKey = ref(initialScene.key)
+    const pendingSceneKey = ref(null)
     let animTimerId = null
     let animReadyObserver = null
     let animReadyTimeoutId = null
-    let animMaskDelayId = null
     let animReadyFrameA = null
     let animSwitchToken = 0
-
-    const clearAnimMaskDelay = () => {
-      if (animMaskDelayId) {
-        clearTimeout(animMaskDelayId)
-        animMaskDelayId = null
-      }
-    }
 
     const clearAnimReadyWatch = () => {
       if (animReadyObserver) {
@@ -239,31 +245,38 @@ export default {
       }
     }
 
-    const finishAnimSwitch = (token) => {
+    const trimRenderedScenes = (keepKey) => {
+      renderedScenes.value = renderedScenes.value.filter((scene) => scene.key === keepKey)
+    }
+
+    const finishAnimSwitch = (token, scene) => {
       animReadyFrameA = requestAnimationFrame(() => {
         animReadyFrameA = null
         if (token !== animSwitchToken) return
+        activeSceneKey.value = scene.key
+        pendingSceneKey.value = null
+        animIndex.value = scene.idx
         clearAnimReadyWatch()
-        clearAnimMaskDelay()
-        animSwitching.value = false
+        nextTick(() => {
+          if (token !== animSwitchToken) return
+          trimRenderedScenes(scene.key)
+        })
       })
     }
 
-    const watchAnimReady = (token) => {
+    const watchAnimReady = (token, scene) => {
       clearAnimReadyWatch()
       const shell = animationShell.value
       if (!shell) {
-        animSwitching.value = false
         return
       }
 
       const maybeFinish = () => {
-        const scenes = shell.querySelectorAll('.animation-scene')
-        const newestScene = scenes[scenes.length - 1]
-        if (!newestScene) return
-        const canvas = newestScene.querySelector('canvas')
+        const sceneEl = shell.querySelector(`[data-scene-key="${scene.key}"]`)
+        if (!sceneEl) return
+        const canvas = sceneEl.querySelector('canvas')
         if (canvas) {
-          finishAnimSwitch(token)
+          finishAnimSwitch(token, scene)
         }
       }
 
@@ -275,42 +288,44 @@ export default {
 
       animReadyTimeoutId = setTimeout(() => {
         if (token !== animSwitchToken) return
-        clearAnimReadyWatch()
-        clearAnimMaskDelay()
-        animSwitching.value = false
-      }, 1200)
+        finishAnimSwitch(token, scene)
+      }, 1500)
 
       maybeFinish()
     }
 
     const animSwitchTo = (idx) => {
+      if (idx === animIndex.value && !pendingSceneKey.value) return
       animSwitchToken += 1
       const token = animSwitchToken
+      const scene = createScene(idx, token)
       clearAnimReadyWatch()
-      clearAnimMaskDelay()
-      animSwitching.value = false
-      animMaskDelayId = setTimeout(() => {
-        if (token === animSwitchToken) {
-          animSwitching.value = true
-        }
-      }, 72)
-      animIndex.value = idx
+      pendingSceneKey.value = scene.key
+      animLoaders[idx]()
+      preloadAdjacent(idx)
+      renderedScenes.value = renderedScenes.value.filter((item) => item.key === activeSceneKey.value)
+      renderedScenes.value.push(scene)
       animSeconds.value = 0
       nextTick(() => {
-        watchAnimReady(token)
+        watchAnimReady(token, scene)
       })
     }
 
+    const getCurrentTargetIndex = () => {
+      const pendingScene = renderedScenes.value.find((scene) => scene.key === pendingSceneKey.value)
+      return pendingScene ? pendingScene.idx : animIndex.value
+    }
+
     const animNext = () => {
-      animSwitchTo((animIndex.value + 1) % animList.length)
+      animSwitchTo((getCurrentTargetIndex() + 1) % animList.length)
     }
 
     const animPrev = () => {
-      animSwitchTo((animIndex.value - 1 + animList.length) % animList.length)
+      animSwitchTo((getCurrentTargetIndex() - 1 + animList.length) % animList.length)
     }
 
     const animGoTo = (idx) => {
-      if (idx !== animIndex.value) animSwitchTo(idx)
+      if (idx !== getCurrentTargetIndex()) animSwitchTo(idx)
     }
 
     const statusFilterLabel = computed(() => {
@@ -393,7 +408,6 @@ export default {
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
       clearAnimReadyWatch()
-      clearAnimMaskDelay()
     })
 
     onMounted(async () => {
@@ -427,11 +441,12 @@ export default {
       handleEdit,
       handleDelete,
       handleTaskSubmit,
+      renderedScenes,
+      activeSceneKey,
       animList,
       animIndex,
       animPaused,
       animSeconds,
-      animSwitching,
       animNext,
       animPrev,
       animGoTo
@@ -537,23 +552,15 @@ export default {
   position: absolute;
   inset: 0;
   z-index: 1;
-}
-
-.animation-mask {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 24% 24%, rgba(6, 182, 212, 0.05), transparent 38%),
-    radial-gradient(circle at 76% 76%, rgba(139, 92, 246, 0.05), transparent 40%),
-    rgba(15, 23, 42, 0.1);
-  transition: opacity 0.08s ease-out;
 }
 
-.animation-mask.active {
+.animation-scene.active {
   opacity: 1;
+  visibility: visible;
+  z-index: 2;
 }
 
 .animation-shell :deep(.relax-canvas) {
@@ -626,16 +633,6 @@ export default {
 .anim-dot.active {
   background: var(--primary-color);
   box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
-}
-
-.anim-swap-enter-active,
-.anim-swap-leave-active {
-  transition: opacity 0.12s ease-out;
-}
-
-.anim-swap-enter-from,
-.anim-swap-leave-to {
-  opacity: 0;
 }
 
 /* Toolbar */
