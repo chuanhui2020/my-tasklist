@@ -431,6 +431,7 @@ export default {
   margin: 0 -20px;
   overflow: hidden;
   min-height: 400px;
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .anim-wrapper {
