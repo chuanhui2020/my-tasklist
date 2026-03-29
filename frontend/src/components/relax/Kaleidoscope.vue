@@ -1,5 +1,9 @@
 <template>
-  <div ref="container" class="relax-canvas"></div>
+  <div ref="container" class="relax-canvas">
+    <div v-if="!ready" class="anim-placeholder">
+      <div class="anim-placeholder-pulse"></div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -7,7 +11,8 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as THREE from 'three'
 
 const container = ref(null)
-let renderer, scene, camera, animationId
+const ready = ref(false)
+let renderer, scene, camera, animationId, onResize
 
 const init = () => {
   if (!container.value) return
@@ -69,6 +74,9 @@ const init = () => {
   const particles = new THREE.Points(particleGeo, pMat)
   scene.add(particles)
 
+  renderer.render(scene, camera)
+  ready.value = true
+
   const animate = (time) => {
     animationId = requestAnimationFrame(animate)
     const t = time * 0.001
@@ -110,7 +118,7 @@ const init = () => {
   }
   animationId = requestAnimationFrame(animate)
 
-  const onResize = () => {
+  onResize = () => {
     if (!container.value) return
     const w = container.value.clientWidth, h = container.value.clientHeight
     camera.aspect = w / h
@@ -123,10 +131,20 @@ const init = () => {
 onMounted(init)
 onBeforeUnmount(() => {
   if (animationId) cancelAnimationFrame(animationId)
+  if (onResize) window.removeEventListener('resize', onResize)
   if (renderer) { renderer.dispose(); renderer.forceContextLoss() }
 })
 </script>
 
 <style scoped>
-.relax-canvas { width: 100%; height: 100%; }
+.relax-canvas { width: 100%; height: 100%; position: relative; }
+.anim-placeholder {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(139,92,246,0.08)); border-radius: 12px;
+}
+.anim-placeholder-pulse {
+  width: 40px; height: 40px; border: 3px solid rgba(6,182,212,0.2); border-top-color: rgba(6,182,212,0.8);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

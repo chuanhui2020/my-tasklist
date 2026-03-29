@@ -1,12 +1,6 @@
 ﻿import { createRouter, createWebHistory } from 'vue-router'
 
-import TaskList from './views/TaskList.vue'
 import Login from './views/Login.vue'
-import AdminUsers from './views/AdminUsers.vue'
-import ChangePassword from './views/ChangePassword.vue'
-import Fortune from './views/Fortune.vue'
-import BmiManager from './views/BmiManager.vue'
-import SecureNotes from './views/SecureNotes.vue'
 
 const routes = [
   {
@@ -21,37 +15,37 @@ const routes = [
   {
     path: '/tasks',
     name: 'TaskList',
-    component: TaskList,
+    component: () => import('./views/TaskList.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/admin/users',
     name: 'AdminUsers',
-    component: AdminUsers,
+    component: () => import('./views/AdminUsers.vue'),
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/fortune',
     name: 'Fortune',
-    component: Fortune,
+    component: () => import('./views/Fortune.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/bmi',
     name: 'BmiManager',
-    component: BmiManager,
+    component: () => import('./views/BmiManager.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/secure-notes',
     name: 'SecureNotes',
-    component: SecureNotes,
+    component: () => import('./views/SecureNotes.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/change-password',
     name: 'ChangePassword',
-    component: ChangePassword,
+    component: () => import('./views/ChangePassword.vue'),
     meta: { requiresAuth: true }
   }
 ]

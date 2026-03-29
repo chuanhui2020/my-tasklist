@@ -104,35 +104,67 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount, watch, markRaw } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, markRaw, defineAsyncComponent, h } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, Odometer } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
-import MilkDragon from '@/components/MilkDragon.vue'
-import BreathingCircle from '@/components/relax/BreathingCircle.vue'
-import PendulumWave from '@/components/relax/PendulumWave.vue'
-import RainDrops from '@/components/relax/RainDrops.vue'
-import LavaLamp from '@/components/relax/LavaLamp.vue'
-import BouncingBalls from '@/components/relax/BouncingBalls.vue'
-import Kaleidoscope from '@/components/relax/Kaleidoscope.vue'
-import ParticleFireworks from '@/components/relax/ParticleFireworks.vue'
-import WaterRipple from '@/components/relax/WaterRipple.vue'
-import StarrySky from '@/components/relax/StarrySky.vue'
+
+// CSS-only loading placeholder (zero JS cost)
+const AnimLoading = {
+  setup() {
+    return () => h('div', {
+      class: 'anim-loading-placeholder'
+    }, [
+      h('div', { class: 'anim-loading-spinner' })
+    ])
+  }
+}
+
+const animLoaders = [
+  () => import('@/components/MilkDragon.vue'),
+  () => import('@/components/relax/BreathingCircle.vue'),
+  () => import('@/components/relax/PendulumWave.vue'),
+  () => import('@/components/relax/RainDrops.vue'),
+  () => import('@/components/relax/LavaLamp.vue'),
+  () => import('@/components/relax/BouncingBalls.vue'),
+  () => import('@/components/relax/Kaleidoscope.vue'),
+  () => import('@/components/relax/ParticleFireworks.vue'),
+  () => import('@/components/relax/WaterRipple.vue'),
+  () => import('@/components/relax/StarrySky.vue')
+]
+
+const wrapAsync = (loader) => markRaw(defineAsyncComponent({
+  loader,
+  loadingComponent: AnimLoading,
+  delay: 0,
+}))
 
 const animList = [
-  { name: '奶龙', comp: markRaw(MilkDragon) },
-  { name: '极光', comp: markRaw(BreathingCircle) },
-  { name: '数字雨', comp: markRaw(PendulumWave) },
-  { name: '粒子星系', comp: markRaw(RainDrops) },
-  { name: '几何隧道', comp: markRaw(LavaLamp) },
-  { name: '粒子网络', comp: markRaw(BouncingBalls) },
-  { name: '流光线条', comp: markRaw(Kaleidoscope) },
-  { name: '分形生长', comp: markRaw(ParticleFireworks) },
-  { name: '波形山脉', comp: markRaw(WaterRipple) },
-  { name: 'DNA螺旋', comp: markRaw(StarrySky) }
+  { name: '奶龙', comp: wrapAsync(animLoaders[0]) },
+  { name: '极光', comp: wrapAsync(animLoaders[1]) },
+  { name: '数字雨', comp: wrapAsync(animLoaders[2]) },
+  { name: '粒子星系', comp: wrapAsync(animLoaders[3]) },
+  { name: '几何隧道', comp: wrapAsync(animLoaders[4]) },
+  { name: '粒子网络', comp: wrapAsync(animLoaders[5]) },
+  { name: '流光线条', comp: wrapAsync(animLoaders[6]) },
+  { name: '分形生长', comp: wrapAsync(animLoaders[7]) },
+  { name: '波形山脉', comp: wrapAsync(animLoaders[8]) },
+  { name: 'DNA螺旋', comp: wrapAsync(animLoaders[9]) }
 ]
+
+// Preload adjacent animations during idle time
+const preloadAdjacent = (currentIdx) => {
+  const next = (currentIdx + 1) % animLoaders.length
+  const prev = (currentIdx - 1 + animLoaders.length) % animLoaders.length
+  const doPreload = () => { animLoaders[next](); animLoaders[prev]() }
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(doPreload)
+  } else {
+    setTimeout(doPreload, 200)
+  }
+}
 
 export default {
   name: 'TaskList',
@@ -262,6 +294,7 @@ export default {
 
     onMounted(async () => {
       await loadTasks()
+      preloadAdjacent(animIndex.value)
       animTimerId = setInterval(() => {
         if (animPaused.value) return
         animSeconds.value++
@@ -269,6 +302,10 @@ export default {
           animNext()
         }
       }, 1000)
+    })
+
+    watch(animIndex, (idx) => {
+      preloadAdjacent(idx)
     })
 
     return {
@@ -513,5 +550,32 @@ export default {
   .layout-sidebar {
     order: 2;
   }
+}
+
+.anim-loading-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(139,92,246,0.08));
+  background-size: 200% 200%;
+  animation: shimmer 2s ease infinite;
+  border-radius: 12px;
+}
+
+.anim-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(6,182,212,0.2);
+  border-top-color: rgba(6,182,212,0.8);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 </style>

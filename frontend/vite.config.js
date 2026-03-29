@@ -12,6 +12,17 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'three': ['three'],
+          'element-plus': ['element-plus'],
+          'vendor': ['vue', 'vue-router', 'axios'],
+        }
+      }
+    }
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
