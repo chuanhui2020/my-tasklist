@@ -17,9 +17,7 @@
           </div>
 
           <div class="animation-shell">
-            <div class="anim-wrapper" :style="{ opacity: animVisible ? 1 : 0 }">
-              <component :is="animList[animIndex].comp" />
-            </div>
+            <component :is="animList[animIndex].comp" />
           </div>
 
           <div class="anim-controls">
@@ -207,16 +205,11 @@ export default {
     const animIndex = ref(0)
     const animPaused = ref(false)
     const animSeconds = ref(0)
-    const animVisible = ref(true)
     let animTimerId = null
 
     const animSwitchTo = (idx) => {
-      animVisible.value = false
-      setTimeout(() => {
-        animIndex.value = idx
-        animSeconds.value = 0
-        animVisible.value = true
-      }, 300)
+      animIndex.value = idx
+      animSeconds.value = 0
     }
 
     const animNext = () => {
@@ -346,7 +339,6 @@ export default {
       animIndex,
       animPaused,
       animSeconds,
-      animVisible,
       animNext,
       animPrev,
       animGoTo
@@ -436,13 +428,6 @@ export default {
 
 .animation-card :deep(.el-card__body) {
   background: transparent !important;
-}
-
-.anim-wrapper {
-  width: 100%;
-  height: 400px;
-  transition: opacity 0.3s ease;
-  background: radial-gradient(ellipse at 50% 50%, rgba(6, 182, 212, 0.06) 0%, rgba(139, 92, 246, 0.04) 50%, transparent 100%);
 }
 
 .anim-controls {
