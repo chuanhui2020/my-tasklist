@@ -17,7 +17,10 @@
           </div>
 
           <div class="animation-shell">
-            <component :is="animList[animIndex].comp" />
+            <transition name="anim-swap" mode="in-out">
+              <component :is="animList[animIndex].comp" :key="animIndex" class="animation-scene" />
+            </transition>
+            <div class="animation-mask" :class="{ active: animSwitching }"></div>
           </div>
 
           <div class="anim-controls">
@@ -205,11 +208,19 @@ export default {
     const animIndex = ref(0)
     const animPaused = ref(false)
     const animSeconds = ref(0)
+    const animSwitching = ref(false)
     let animTimerId = null
+    let animSwitchMaskId = null
 
     const animSwitchTo = (idx) => {
+      animSwitching.value = true
+      if (animSwitchMaskId) clearTimeout(animSwitchMaskId)
       animIndex.value = idx
       animSeconds.value = 0
+      animSwitchMaskId = setTimeout(() => {
+        animSwitching.value = false
+        animSwitchMaskId = null
+      }, 180)
     }
 
     const animNext = () => {
@@ -303,6 +314,7 @@ export default {
 
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
+      if (animSwitchMaskId) clearTimeout(animSwitchMaskId)
     })
 
     onMounted(async () => {
@@ -339,6 +351,7 @@ export default {
       animIndex,
       animPaused,
       animSeconds,
+      animSwitching,
       animNext,
       animPrev,
       animGoTo
@@ -423,7 +436,58 @@ export default {
   margin: 0 -20px;
   overflow: hidden;
   height: 400px;
+  position: relative;
+  isolation: isolate;
   background: #0f172a;
+}
+
+.animation-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(6, 182, 212, 0.14), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.14), transparent 44%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.98));
+  z-index: 0;
+  pointer-events: none;
+}
+
+.animation-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.animation-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 24% 24%, rgba(6, 182, 212, 0.1), transparent 38%),
+    radial-gradient(circle at 76% 76%, rgba(139, 92, 246, 0.1), transparent 40%),
+    rgba(15, 23, 42, 0.22);
+  transition: opacity 0.14s ease;
+}
+
+.animation-mask.active {
+  opacity: 1;
+}
+
+.animation-shell :deep(.relax-canvas) {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(6, 182, 212, 0.08), transparent 38%),
+    radial-gradient(circle at 78% 80%, rgba(139, 92, 246, 0.08), transparent 42%),
+    #0f172a;
+}
+
+.animation-shell :deep(canvas) {
+  display: block;
 }
 
 .animation-card :deep(.el-card__body) {
@@ -481,6 +545,16 @@ export default {
 .anim-dot.active {
   background: var(--primary-color);
   box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
+}
+
+.anim-swap-enter-active,
+.anim-swap-leave-active {
+  transition: opacity 0.16s ease;
+}
+
+.anim-swap-enter-from,
+.anim-swap-leave-to {
+  opacity: 0;
 }
 
 /* Toolbar */
