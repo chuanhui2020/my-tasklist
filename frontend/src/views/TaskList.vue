@@ -144,7 +144,7 @@ const wrapAsync = (loader) => markRaw(defineAsyncComponent({
 const animList = [
   { name: '奶龙', comp: wrapAsync(animLoaders[0]) },
   { name: '极光', comp: wrapAsync(animLoaders[1]) },
-  { name: '数字雨', comp: wrapAsync(animLoaders[2]) },
+  { name: '波浪摆', comp: wrapAsync(animLoaders[2]) },
   { name: '粒子星系', comp: wrapAsync(animLoaders[3]) },
   { name: '几何隧道', comp: wrapAsync(animLoaders[4]) },
   { name: '粒子网络', comp: wrapAsync(animLoaders[5]) },
