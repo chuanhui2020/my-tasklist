@@ -16,7 +16,7 @@
             </div>
           </div>
 
-          <div class="animation-shell">
+          <div ref="animationShell" class="animation-shell">
             <transition name="anim-swap" mode="in-out">
               <component :is="animList[animIndex].comp" :key="animIndex" class="animation-scene" />
             </transition>
@@ -105,7 +105,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount, watch, markRaw, defineAsyncComponent, h } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch, markRaw, defineAsyncComponent, h } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, Odometer } from '@element-plus/icons-vue'
 import api from '@/api'
@@ -197,6 +197,7 @@ export default {
     Odometer
   },
   setup() {
+    const animationShell = ref(null)
     const tasks = ref([])
     const loading = ref(false)
     const statusFilter = ref('pending')
@@ -210,17 +211,85 @@ export default {
     const animSeconds = ref(0)
     const animSwitching = ref(false)
     let animTimerId = null
-    let animSwitchMaskId = null
+    let animReadyObserver = null
+    let animReadyTimeoutId = null
+    let animReadyFrameA = null
+    let animReadyFrameB = null
+    let animSwitchToken = 0
+
+    const clearAnimReadyWatch = () => {
+      if (animReadyObserver) {
+        animReadyObserver.disconnect()
+        animReadyObserver = null
+      }
+      if (animReadyTimeoutId) {
+        clearTimeout(animReadyTimeoutId)
+        animReadyTimeoutId = null
+      }
+      if (animReadyFrameA) {
+        cancelAnimationFrame(animReadyFrameA)
+        animReadyFrameA = null
+      }
+      if (animReadyFrameB) {
+        cancelAnimationFrame(animReadyFrameB)
+        animReadyFrameB = null
+      }
+    }
+
+    const finishAnimSwitch = (token) => {
+      animReadyFrameA = requestAnimationFrame(() => {
+        animReadyFrameA = null
+        animReadyFrameB = requestAnimationFrame(() => {
+          animReadyFrameB = null
+          if (token !== animSwitchToken) return
+          clearAnimReadyWatch()
+          animSwitching.value = false
+        })
+      })
+    }
+
+    const watchAnimReady = (token) => {
+      clearAnimReadyWatch()
+      const shell = animationShell.value
+      if (!shell) {
+        animSwitching.value = false
+        return
+      }
+
+      const maybeFinish = () => {
+        const scenes = shell.querySelectorAll('.animation-scene')
+        const newestScene = scenes[scenes.length - 1]
+        if (!newestScene) return
+        const canvas = newestScene.querySelector('canvas')
+        if (canvas) {
+          finishAnimSwitch(token)
+        }
+      }
+
+      animReadyObserver = new MutationObserver(() => {
+        if (token !== animSwitchToken) return
+        maybeFinish()
+      })
+      animReadyObserver.observe(shell, { childList: true, subtree: true })
+
+      animReadyTimeoutId = setTimeout(() => {
+        if (token !== animSwitchToken) return
+        clearAnimReadyWatch()
+        animSwitching.value = false
+      }, 1200)
+
+      maybeFinish()
+    }
 
     const animSwitchTo = (idx) => {
+      animSwitchToken += 1
+      const token = animSwitchToken
       animSwitching.value = true
-      if (animSwitchMaskId) clearTimeout(animSwitchMaskId)
       animIndex.value = idx
       animSeconds.value = 0
-      animSwitchMaskId = setTimeout(() => {
-        animSwitching.value = false
-        animSwitchMaskId = null
-      }, 180)
+      nextTick(() => {
+        watchAnimReady(token)
+      })
     }
 
     const animNext = () => {
@@ -314,7 +383,7 @@ export default {
 
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
-      if (animSwitchMaskId) clearTimeout(animSwitchMaskId)
+      clearAnimReadyWatch()
     })
 
     onMounted(async () => {
@@ -340,6 +409,7 @@ export default {
       sortBy,
       showTaskForm,
       editingTask,
+      animationShell,
       statusFilterLabel,
       sortByLabel,
       showCreateForm,
@@ -488,6 +558,7 @@ export default {
 
 .animation-shell :deep(canvas) {
   display: block;
+  background: #0f172a;
 }
 
 .animation-card :deep(.el-card__body) {

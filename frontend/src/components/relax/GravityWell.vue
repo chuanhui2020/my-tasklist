@@ -189,7 +189,13 @@ onMounted(init)
 onBeforeUnmount(() => {
   if (animationId) cancelAnimationFrame(animationId)
   if (onResize) window.removeEventListener('resize', onResize)
-  if (renderer) { renderer.dispose(); renderer.forceContextLoss() }
+  if (renderer) {
+    renderer.dispose()
+    if (container.value?.contains(renderer.domElement)) {
+      container.value.removeChild(renderer.domElement)
+    }
+    renderer = null
+  }
 })
 </script>
 
