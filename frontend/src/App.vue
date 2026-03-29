@@ -29,7 +29,9 @@
         <el-main class="app-main">
           <router-view v-slot="{ Component }">
             <transition name="fade" mode="out-in">
-              <component :is="Component" />
+              <Suspense>
+                <component :is="Component" />
+              </Suspense>
             </transition>
           </router-view>
         </el-main>
