@@ -213,9 +213,16 @@ export default {
     let animTimerId = null
     let animReadyObserver = null
     let animReadyTimeoutId = null
+    let animMaskDelayId = null
     let animReadyFrameA = null
-    let animReadyFrameB = null
     let animSwitchToken = 0
+
+    const clearAnimMaskDelay = () => {
+      if (animMaskDelayId) {
+        clearTimeout(animMaskDelayId)
+        animMaskDelayId = null
+      }
+    }
 
     const clearAnimReadyWatch = () => {
       if (animReadyObserver) {
@@ -230,21 +237,15 @@ export default {
         cancelAnimationFrame(animReadyFrameA)
         animReadyFrameA = null
       }
-      if (animReadyFrameB) {
-        cancelAnimationFrame(animReadyFrameB)
-        animReadyFrameB = null
-      }
     }
 
     const finishAnimSwitch = (token) => {
       animReadyFrameA = requestAnimationFrame(() => {
         animReadyFrameA = null
-        animReadyFrameB = requestAnimationFrame(() => {
-          animReadyFrameB = null
-          if (token !== animSwitchToken) return
-          clearAnimReadyWatch()
-          animSwitching.value = false
-        })
+        if (token !== animSwitchToken) return
+        clearAnimReadyWatch()
+        clearAnimMaskDelay()
+        animSwitching.value = false
       })
     }
 
@@ -275,6 +276,7 @@ export default {
       animReadyTimeoutId = setTimeout(() => {
         if (token !== animSwitchToken) return
         clearAnimReadyWatch()
+        clearAnimMaskDelay()
         animSwitching.value = false
       }, 1200)
 
@@ -284,7 +286,14 @@ export default {
     const animSwitchTo = (idx) => {
       animSwitchToken += 1
       const token = animSwitchToken
-      animSwitching.value = true
+      clearAnimReadyWatch()
+      clearAnimMaskDelay()
+      animSwitching.value = false
+      animMaskDelayId = setTimeout(() => {
+        if (token === animSwitchToken) {
+          animSwitching.value = true
+        }
+      }, 72)
       animIndex.value = idx
       animSeconds.value = 0
       nextTick(() => {
@@ -384,6 +393,7 @@ export default {
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
       clearAnimReadyWatch()
+      clearAnimMaskDelay()
     })
 
     onMounted(async () => {
@@ -536,10 +546,10 @@ export default {
   opacity: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 24% 24%, rgba(6, 182, 212, 0.1), transparent 38%),
-    radial-gradient(circle at 76% 76%, rgba(139, 92, 246, 0.1), transparent 40%),
-    rgba(15, 23, 42, 0.22);
-  transition: opacity 0.14s ease;
+    radial-gradient(circle at 24% 24%, rgba(6, 182, 212, 0.05), transparent 38%),
+    radial-gradient(circle at 76% 76%, rgba(139, 92, 246, 0.05), transparent 40%),
+    rgba(15, 23, 42, 0.1);
+  transition: opacity 0.08s ease-out;
 }
 
 .animation-mask.active {
@@ -620,7 +630,7 @@ export default {
 
 .anim-swap-enter-active,
 .anim-swap-leave-active {
-  transition: opacity 0.16s ease;
+  transition: opacity 0.12s ease-out;
 }
 
 .anim-swap-enter-from,
