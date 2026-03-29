@@ -422,7 +422,7 @@ export default {
 .animation-shell {
   margin: 0 -20px;
   overflow: hidden;
-  min-height: 400px;
+  height: 400px;
   background: var(--bg-glass-heavy, rgba(15, 23, 42, 0.8));
 }
 
