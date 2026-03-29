@@ -27,12 +27,12 @@
           </div>
         </el-header>
         <el-main class="app-main">
-          <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
-              <Suspense>
-                <component :is="Component" />
-              </Suspense>
-            </transition>
+          <router-view v-slot="{ Component, route }">
+            <div class="route-stage">
+              <transition name="fade">
+                <component :is="Component" :key="route.fullPath" class="route-page" />
+              </transition>
+            </div>
           </router-view>
         </el-main>
       </el-container>
@@ -68,6 +68,12 @@ const handleLogout = () => {
 </script>
 
 <style scoped>
+#app {
+  min-height: 100vh;
+  position: relative;
+  background: var(--bg-primary);
+}
+
 .app-container {
   min-height: 100vh;
   position: relative;
@@ -184,12 +190,30 @@ const handleLogout = () => {
 .app-main {
   padding: 24px;
   overflow-x: hidden;
+  position: relative;
+}
+
+.route-stage {
+  position: relative;
+  min-height: calc(100vh - 112px);
+}
+
+.route-page {
+  position: relative;
+  z-index: 1;
 }
 
 /* Page Transitions */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.18s ease;
+}
+
+.fade-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
 }
 
 .fade-enter-from,
