@@ -423,11 +423,15 @@ export default {
   margin: 0 -20px;
   overflow: hidden;
   height: 400px;
-  background: var(--bg-glass-heavy, rgba(15, 23, 42, 0.8));
+  background: #0f172a;
 }
 
 .animation-card :deep(.el-card__body) {
-  background: transparent !important;
+  background: #0f172a !important;
+}
+
+.animation-card.tech-card {
+  background: #0f172a !important;
 }
 
 .anim-controls {
