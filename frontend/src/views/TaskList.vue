@@ -123,7 +123,6 @@ const AnimLoading = {
 }
 
 const animLoaders = [
-  () => import('@/components/MilkDragon.vue'),
   () => import('@/components/relax/BreathingCircle.vue'),
   () => import('@/components/relax/PendulumWave.vue'),
   () => import('@/components/relax/RainDrops.vue'),
@@ -132,7 +131,18 @@ const animLoaders = [
   () => import('@/components/relax/Kaleidoscope.vue'),
   () => import('@/components/relax/ParticleFireworks.vue'),
   () => import('@/components/relax/WaterRipple.vue'),
-  () => import('@/components/relax/StarrySky.vue')
+  () => import('@/components/relax/StarrySky.vue'),
+  () => import('@/components/relax/CyberGrid.vue'),
+  () => import('@/components/relax/PlasmaOrb.vue'),
+  () => import('@/components/relax/HologramRing.vue'),
+  () => import('@/components/relax/NeuralWeb.vue'),
+  () => import('@/components/relax/VortexField.vue'),
+  () => import('@/components/relax/DataStream.vue'),
+  () => import('@/components/relax/CrystalMatrix.vue'),
+  () => import('@/components/relax/GravityWell.vue'),
+  () => import('@/components/relax/CircuitPulse.vue'),
+  () => import('@/components/relax/CosmicDust.vue'),
+  () => import('@/components/relax/WaveFunction.vue')
 ]
 
 const wrapAsync = (loader) => markRaw(defineAsyncComponent({
@@ -142,16 +152,26 @@ const wrapAsync = (loader) => markRaw(defineAsyncComponent({
 }))
 
 const animList = [
-  { name: '奶龙', comp: wrapAsync(animLoaders[0]) },
-  { name: '极光', comp: wrapAsync(animLoaders[1]) },
-  { name: '波浪摆', comp: wrapAsync(animLoaders[2]) },
-  { name: '粒子星系', comp: wrapAsync(animLoaders[3]) },
-  { name: '几何隧道', comp: wrapAsync(animLoaders[4]) },
-  { name: '粒子网络', comp: wrapAsync(animLoaders[5]) },
-  { name: '流光线条', comp: wrapAsync(animLoaders[6]) },
-  { name: '分形生长', comp: wrapAsync(animLoaders[7]) },
-  { name: '波形山脉', comp: wrapAsync(animLoaders[8]) },
-  { name: 'DNA螺旋', comp: wrapAsync(animLoaders[9]) }
+  { name: '极光', comp: wrapAsync(animLoaders[0]) },
+  { name: '波浪摆', comp: wrapAsync(animLoaders[1]) },
+  { name: '粒子星系', comp: wrapAsync(animLoaders[2]) },
+  { name: '几何隧道', comp: wrapAsync(animLoaders[3]) },
+  { name: '粒子网络', comp: wrapAsync(animLoaders[4]) },
+  { name: '流光线条', comp: wrapAsync(animLoaders[5]) },
+  { name: '分形生长', comp: wrapAsync(animLoaders[6]) },
+  { name: '波形山脉', comp: wrapAsync(animLoaders[7]) },
+  { name: 'DNA螺旋', comp: wrapAsync(animLoaders[8]) },
+  { name: '赛博网格', comp: wrapAsync(animLoaders[9]) },
+  { name: '等离子球', comp: wrapAsync(animLoaders[10]) },
+  { name: '全息光环', comp: wrapAsync(animLoaders[11]) },
+  { name: '神经脉冲', comp: wrapAsync(animLoaders[12]) },
+  { name: '量子漩涡', comp: wrapAsync(animLoaders[13]) },
+  { name: '数据洪流', comp: wrapAsync(animLoaders[14]) },
+  { name: '晶体矩阵', comp: wrapAsync(animLoaders[15]) },
+  { name: '引力透镜', comp: wrapAsync(animLoaders[16]) },
+  { name: '电路脉冲', comp: wrapAsync(animLoaders[17]) },
+  { name: '星际尘埃', comp: wrapAsync(animLoaders[18]) },
+  { name: '量子波函', comp: wrapAsync(animLoaders[19]) }
 ]
 
 // Preload adjacent animations during idle time
