@@ -431,7 +431,7 @@ export default {
   margin: 0 -20px;
   overflow: hidden;
   min-height: 400px;
-  background: rgba(0, 0, 0, 0.3);
+  background: radial-gradient(ellipse at 50% 50%, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.05) 50%, rgba(15, 23, 42, 0.6) 100%);
 }
 
 .anim-wrapper {
