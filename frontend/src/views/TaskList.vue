@@ -431,13 +431,18 @@ export default {
   margin: 0 -20px;
   overflow: hidden;
   min-height: 400px;
-  background: radial-gradient(ellipse at 50% 50%, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.05) 50%, rgba(15, 23, 42, 0.6) 100%);
+  background: var(--bg-glass-heavy, rgba(15, 23, 42, 0.8));
+}
+
+.animation-card :deep(.el-card__body) {
+  background: transparent !important;
 }
 
 .anim-wrapper {
   width: 100%;
   height: 400px;
   transition: opacity 0.3s ease;
+  background: radial-gradient(ellipse at 50% 50%, rgba(6, 182, 212, 0.06) 0%, rgba(139, 92, 246, 0.04) 50%, transparent 100%);
 }
 
 .anim-controls {
