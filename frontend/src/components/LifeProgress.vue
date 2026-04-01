@@ -521,6 +521,16 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+/* 弹窗过渡 */
+.alert-fade-enter-active { transition: opacity 0.3s ease; }
+.alert-fade-leave-active { transition: opacity 0.2s ease; }
+.alert-fade-enter-from,
+.alert-fade-leave-to { opacity: 0; }
+</style>
+
+<style>
+/* Teleport 到 body 的样式不能 scoped */
+
 /* 提醒弹窗 */
 .timer-alert-overlay {
   position: fixed;
@@ -594,7 +604,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 24px var(--primary-glow);
 }
 
-/* 弹窗过渡 */
 .alert-fade-enter-active { transition: opacity 0.3s ease; }
 .alert-fade-leave-active { transition: opacity 0.2s ease; }
 .alert-fade-enter-from,
