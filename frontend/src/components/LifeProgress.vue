@@ -19,14 +19,7 @@
       >
         <div class="progress-meta">
           <div class="progress-info">
-            <span class="progress-label">
-              {{ bar.title }}
-              <el-icon
-                v-if="bar.id === 'life'"
-                class="config-icon"
-                @click="showBirthConfig = !showBirthConfig"
-              ><Setting /></el-icon>
-            </span>
+            <span class="progress-label">{{ bar.title }}</span>
             <span class="progress-desc">{{ bar.subtitle }}</span>
           </div>
           <span class="progress-value" :class="{ 'value-alert': bar.alert }">{{ bar.display }}</span>
@@ -39,18 +32,6 @@
           ></div>
         </div>
       </div>
-    </div>
-
-    <!-- 出生年份配置 -->
-    <div v-if="showBirthConfig" class="birth-config">
-      <span class="birth-label">出生年份</span>
-      <el-input-number
-        v-model="birthYear"
-        :min="1940"
-        :max="2015"
-        size="small"
-        @change="saveBirthYear"
-      />
     </div>
 
     <!-- 喝水/拉屎提醒弹窗 -->
@@ -71,23 +52,36 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { Odometer, Setting } from '@element-plus/icons-vue'
+import { Odometer } from '@element-plus/icons-vue'
 
 // --- 常量 ---
 const WORK_START = 9
-const WORK_END = 18
-const PAYDAY = 10
-const LIFESPAN = 75
-const WATER_MIN = 30 * 60  // 喝水间隔 30-60 分钟
-const WATER_MAX = 60 * 60
-const POOP_MIN = 90 * 60   // 拉屎间隔 1.5-3 小时
-const POOP_MAX = 180 * 60
+const WORK_END = 20.5  // 上海时间 20:30
+const PAYDAY = 5
+const WATER_MIN = 120 * 60  // 喝水间隔 2 小时
+const WATER_MAX = 120 * 60
+const POOP_MIN = 600 * 60   // 拉屎间隔 10 小时
+const POOP_MAX = 600 * 60
+
+// 中国法定节假日（数据来源：国务院办公厅）
+const HOLIDAYS = [
+  { name: '元旦', start: '2025-01-01', end: '2025-01-01' },
+  { name: '春节', start: '2025-01-28', end: '2025-02-04' },
+  { name: '清明节', start: '2025-04-04', end: '2025-04-06' },
+  { name: '劳动节', start: '2025-05-01', end: '2025-05-05' },
+  { name: '端午节', start: '2025-06-27', end: '2025-06-29' },
+  { name: '中秋节+国庆节', start: '2025-10-01', end: '2025-10-08' },
+  { name: '元旦', start: '2026-01-01', end: '2026-01-03' },
+  { name: '春节', start: '2026-02-15', end: '2026-02-23' },
+  { name: '清明节', start: '2026-04-04', end: '2026-04-06' },
+  { name: '劳动节', start: '2026-05-01', end: '2026-05-05' },
+  { name: '端午节', start: '2026-06-19', end: '2026-06-21' },
+  { name: '中秋节', start: '2026-09-25', end: '2026-09-27' },
+  { name: '国庆节', start: '2026-10-01', end: '2026-10-07' },
+]
 
 // --- 响应式状态 ---
 const now = ref(new Date())
-const showBirthConfig = ref(false)
-const birthYear = ref(parseInt(localStorage.getItem('life_progress_birth_year')) || 2000)
-
 // 倒计时（秒）
 const waterCountdown = ref(randomInt(WATER_MIN, WATER_MAX))
 const poopCountdown = ref(randomInt(POOP_MIN, POOP_MAX))
@@ -98,10 +92,6 @@ const alertData = ref({ icon: '', title: '', desc: '', btn: '' })
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min
-}
-
-function saveBirthYear(val) {
-  localStorage.setItem('life_progress_birth_year', val)
 }
 
 // --- 计算进度 ---
@@ -184,7 +174,45 @@ const bars = computed(() => {
     colorClass: !nextPayday ? 'fill-success' : 'fill-cyber',
   })
 
-  // 5. 喝水倒计时
+  // 5. 距离下次放假
+  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate())
+  let nextHoliday = null
+  let inHoliday = false
+  for (const h of HOLIDAYS) {
+    const start = new Date(h.start + 'T00:00:00')
+    const end = new Date(h.end + 'T00:00:00')
+    if (today >= start && today <= end) {
+      inHoliday = true
+      nextHoliday = h
+      break
+    }
+    if (start > today) {
+      nextHoliday = h
+      break
+    }
+  }
+  let holidayDisplay, holidayPct
+  if (inHoliday) {
+    holidayDisplay = `${nextHoliday.name} 放假中，快乐!`
+    holidayPct = 100
+  } else if (nextHoliday) {
+    const daysUntil = Math.ceil((new Date(nextHoliday.start + 'T00:00:00') - today) / 86400000)
+    holidayPct = Math.max((1 - daysUntil / 90) * 100, 0)
+    holidayDisplay = `${nextHoliday.name} 还有 ${daysUntil} 天`
+  } else {
+    holidayDisplay = '暂无假期数据'
+    holidayPct = 0
+  }
+  list.push({
+    id: 'holiday',
+    title: '距离下次放假',
+    subtitle: '上班是不可能上班的，放假才是真理',
+    percent: holidayPct.toFixed(1),
+    display: holidayDisplay,
+    colorClass: inHoliday ? 'fill-success' : 'fill-cyber',
+  })
+
+  // 6. 距离下次喝水
   const wSec = waterCountdown.value
   const waterAlert = wSec <= 0
   list.push({
@@ -197,7 +225,7 @@ const bars = computed(() => {
     alert: waterAlert,
   })
 
-  // 6. 拉屎倒计时
+  // 7. 拉屎倒计时
   const pSec = poopCountdown.value
   const poopAlert = pSec <= 0
   list.push({
@@ -208,25 +236,6 @@ const bars = computed(() => {
     display: poopAlert ? '憋不住了！快冲!' : formatCountdown(pSec),
     colorClass: poopAlert ? 'fill-alert-pulse' : 'fill-cyber',
     alert: poopAlert,
-  })
-
-  // 7. 人生进度
-  const age = n.getFullYear() - birthYear.value + n.getMonth() / 12
-  let lifePct = (age / LIFESPAN) * 100
-  let lifeDisplay
-  if (lifePct >= 100) {
-    lifePct = 100
-    lifeDisplay = '超时服役中，向您致敬!'
-  } else {
-    lifeDisplay = `已度过 ${lifePct.toFixed(1)}%`
-  }
-  list.push({
-    id: 'life',
-    title: '人生进度',
-    subtitle: '人生苦短，及时摸鱼',
-    percent: lifePct.toFixed(1),
-    display: lifeDisplay,
-    colorClass: 'fill-life',
   })
 
   return list
@@ -369,17 +378,6 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
-.config-icon {
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text-muted);
-  transition: color 0.2s;
-}
-
-.config-icon:hover {
-  color: var(--primary-color);
-}
-
 .progress-desc {
   font-size: 12px;
   color: var(--text-muted);
@@ -428,11 +426,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
 }
 
-.fill-life {
-  background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
-}
-
 .fill-alert-pulse {
   background: linear-gradient(90deg, #ef4444, #f97316);
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
@@ -442,24 +435,6 @@ onBeforeUnmount(() => {
 @keyframes bar-pulse {
   from { box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
   to { box-shadow: 0 0 20px rgba(239, 68, 68, 0.7); }
-}
-
-/* 出生年份配置 */
-.birth-config {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  border: 1px solid var(--glass-border);
-}
-
-.birth-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-  white-space: nowrap;
 }
 
 /* 弹窗过渡 */
