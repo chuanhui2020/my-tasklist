@@ -45,6 +45,8 @@
             ></span>
           </div>
         </el-card>
+
+        <LifeProgress style="margin-top: 24px;" />
       </aside>
 
       <!-- 任务列表主区域 -->
@@ -116,6 +118,7 @@ import { Plus, MagicStick, Odometer } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
+import LifeProgress from '@/components/LifeProgress.vue'
 
 // CSS-only loading placeholder (zero JS cost)
 const AnimLoading = {
@@ -197,6 +200,7 @@ export default {
   components: {
     TaskCard,
     TaskForm,
+    LifeProgress,
     Plus,
     MagicStick,
     Odometer
