@@ -3,7 +3,8 @@
     <div class="layout">
       <!-- 奶龙动画区域 -->
       <aside class="layout-sidebar">
-        <el-card class="tech-card animation-card" shadow="hover">
+        <Transition name="sidebar-fade" mode="out-in">
+          <el-card v-if="sidebarMode === 'anim'" key="anim" class="tech-card animation-card" shadow="hover">
           <div class="card-header">
             <div class="header-left">
               <div class="card-title">
@@ -46,7 +47,8 @@
           </div>
         </el-card>
 
-        <LifeProgress style="margin-top: 24px;" />
+        <LifeProgress v-else key="progress" />
+        </Transition>
       </aside>
 
       <!-- 任务列表主区域 -->
@@ -213,6 +215,10 @@ export default {
     const sortBy = ref('due_date')
     const showTaskForm = ref(false)
     const editingTask = ref(null)
+
+    // Sidebar toggle: anim <-> progress
+    const sidebarMode = ref('anim')
+    let sidebarTimerId = null
 
     // Animation rotation
     const createScene = (idx, token = 0) => ({
@@ -411,6 +417,7 @@ export default {
 
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
+      if (sidebarTimerId) clearInterval(sidebarTimerId)
       clearAnimReadyWatch()
     })
 
@@ -424,6 +431,9 @@ export default {
           animNext()
         }
       }, 1000)
+      sidebarTimerId = setInterval(() => {
+        sidebarMode.value = sidebarMode.value === 'anim' ? 'progress' : 'anim'
+      }, 30000)
     })
 
     watch(animIndex, (idx) => {
@@ -453,7 +463,8 @@ export default {
       animSeconds,
       animNext,
       animPrev,
-      animGoTo
+      animGoTo,
+      sidebarMode
     }
   }
 }
@@ -749,4 +760,10 @@ export default {
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
+
+/* Sidebar card toggle transition */
+.sidebar-fade-enter-active { transition: opacity 0.4s ease, transform 0.4s ease; }
+.sidebar-fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.sidebar-fade-enter-from { opacity: 0; transform: translateY(12px); }
+.sidebar-fade-leave-to { opacity: 0; transform: translateY(-12px); }
 </style>

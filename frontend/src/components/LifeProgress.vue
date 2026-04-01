@@ -53,20 +53,6 @@
       />
     </div>
 
-    <!-- 漂浮文字 -->
-    <Teleport to="body">
-      <div class="float-banner" aria-hidden="true">
-        <div
-          v-for="item in floatingItems"
-          :key="item.id"
-          class="float-item"
-          :style="item.style"
-        >
-          <span class="float-text" :class="item.colorClass">{{ item.text }}</span>
-        </div>
-      </div>
-    </Teleport>
-
     <!-- 喝水/拉屎提醒弹窗 -->
     <Teleport to="body">
       <Transition name="alert-fade">
@@ -84,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Odometer, Setting } from '@element-plus/icons-vue'
 
 // --- 常量 ---
@@ -96,8 +82,6 @@ const WATER_MIN = 30 * 60  // 喝水间隔 30-60 分钟
 const WATER_MAX = 60 * 60
 const POOP_MIN = 90 * 60   // 拉屎间隔 1.5-3 小时
 const POOP_MAX = 180 * 60
-const FLOAT_COUNT = 5       // 同时漂浮的文字数量
-const FLOAT_INTERVAL = 4000 // 每隔4秒换一批
 
 // --- 响应式状态 ---
 const now = ref(new Date())
@@ -286,51 +270,9 @@ function dismissAlert() {
   pendingAlertType = null
 }
 
-// --- 漂浮文字 ---
-const floatingItems = ref([])
-let floatId = 0
-let floatTimer = null
-
-const floatColors = ['float-cyan', 'float-purple', 'float-green', 'float-amber', 'float-pink']
-
-function generateFloatingItems() {
-  const texts = bars.value.map(b => {
-    // 随机选择显示标题+数值 或 副标题
-    return Math.random() > 0.4
-      ? `${b.title} · ${b.display}`
-      : b.subtitle
-  })
-  // 随机选 FLOAT_COUNT 条，打乱顺序
-  const shuffled = texts.sort(() => Math.random() - 0.5).slice(0, FLOAT_COUNT)
-  floatingItems.value = shuffled.map((text, i) => {
-    const id = ++floatId
-    const left = 5 + Math.random() * 80  // 5%~85% 水平位置
-    const duration = 12 + Math.random() * 10 // 12~22s 漂浮时长
-    const delay = i * 0.6 // 错开出现
-    const size = 12 + Math.random() * 4 // 12~16px
-    const blur = Math.random() > 0.6 ? 1 : 0 // 部分模糊，增加层次
-    return {
-      id,
-      text,
-      colorClass: floatColors[i % floatColors.length],
-      style: {
-        left: `${left}%`,
-        animationDuration: `${duration}s`,
-        animationDelay: `${delay}s`,
-        fontSize: `${size}px`,
-        filter: blur ? 'blur(0.5px)' : 'none',
-        opacity: 0.6 + Math.random() * 0.3,
-      }
-    }
-  })
-}
-
 // --- 定时器 ---
 let timer = null
 onMounted(() => {
-  generateFloatingItems()
-  floatTimer = setInterval(generateFloatingItems, FLOAT_INTERVAL)
-
   timer = setInterval(() => {
     now.value = new Date()
     if (waterCountdown.value > 0) waterCountdown.value--
@@ -347,7 +289,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
-  if (floatTimer) clearInterval(floatTimer)
 })
 </script>
 
@@ -608,61 +549,4 @@ onBeforeUnmount(() => {
 .alert-fade-leave-active { transition: opacity 0.2s ease; }
 .alert-fade-enter-from,
 .alert-fade-leave-to { opacity: 0; }
-
-/* 漂浮文字 */
-.float-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 64px;
-  pointer-events: none;
-  z-index: 100;
-  overflow: hidden;
-}
-
-.float-item {
-  position: absolute;
-  bottom: -30px;
-  animation: float-up linear forwards;
-  white-space: nowrap;
-}
-
-.float-text {
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-shadow: 0 0 12px currentColor, 0 0 24px currentColor;
-  animation: glow-pulse 2s ease-in-out infinite alternate;
-}
-
-.float-cyan { color: rgba(6, 182, 212, 0.8); }
-.float-purple { color: rgba(139, 92, 246, 0.8); }
-.float-green { color: rgba(16, 185, 129, 0.8); }
-.float-amber { color: rgba(245, 158, 11, 0.8); }
-.float-pink { color: rgba(236, 72, 153, 0.8); }
-
-@keyframes float-up {
-  0% {
-    transform: translateY(0) translateX(0);
-    opacity: 0;
-  }
-  8% {
-    opacity: 1;
-  }
-  50% {
-    transform: translateY(-40px) translateX(20px);
-  }
-  92% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-80px) translateX(-10px);
-    opacity: 0;
-  }
-}
-
-@keyframes glow-pulse {
-  from { text-shadow: 0 0 8px currentColor, 0 0 16px currentColor; }
-  to { text-shadow: 0 0 16px currentColor, 0 0 32px currentColor, 0 0 48px currentColor; }
-}
 </style>
