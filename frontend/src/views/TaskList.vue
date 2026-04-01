@@ -417,7 +417,7 @@ export default {
 
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
-      if (sidebarTimerId) clearInterval(sidebarTimerId)
+      if (sidebarTimerId) clearTimeout(sidebarTimerId)
       clearAnimReadyWatch()
     })
 
@@ -427,13 +427,19 @@ export default {
       animTimerId = setInterval(() => {
         if (animPaused.value) return
         animSeconds.value++
-        if (animSeconds.value >= 10) {
+        if (animSeconds.value >= 60) {
           animNext()
         }
       }, 1000)
-      sidebarTimerId = setInterval(() => {
-        sidebarMode.value = sidebarMode.value === 'anim' ? 'progress' : 'anim'
-      }, 30000)
+      function scheduleSidebar() {
+        // 花园动画显示1分钟，人生进度显示5分钟
+        const duration = sidebarMode.value === 'anim' ? 60000 : 300000
+        sidebarTimerId = setTimeout(() => {
+          sidebarMode.value = sidebarMode.value === 'anim' ? 'progress' : 'anim'
+          scheduleSidebar()
+        }, duration)
+      }
+      scheduleSidebar()
     })
 
     watch(animIndex, (idx) => {
