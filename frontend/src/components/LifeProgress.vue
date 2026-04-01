@@ -58,6 +58,7 @@ import { Odometer } from '@element-plus/icons-vue'
 const WORK_START = 9
 const WORK_END = 20.5  // 上海时间 20:30
 const PAYDAY = 5
+const RETIRE_AGE = 65
 const WATER_MIN = 120 * 60  // 喝水间隔 2 小时
 const WATER_MAX = 120 * 60
 const POOP_MIN = 600 * 60   // 拉屎间隔 10 小时
@@ -82,6 +83,7 @@ const HOLIDAYS = [
 
 // --- 响应式状态 ---
 const now = ref(new Date())
+const birthYear = ref(parseInt(localStorage.getItem('life_progress_birth_year')) || 2000)
 // 倒计时（秒）
 const waterCountdown = ref(randomInt(WATER_MIN, WATER_MAX))
 const poopCountdown = ref(randomInt(POOP_MIN, POOP_MAX))
@@ -147,7 +149,34 @@ const bars = computed(() => {
     colorClass: offWork ? 'fill-success' : 'fill-cyber',
   })
 
-  // 4. 距离发薪
+  // 4. 距离周末
+  const dayOfWeek = n.getDay() // 0=周日, 6=周六
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+  let weekendDisplay, weekendPct
+  if (isWeekend) {
+    weekendPct = 100
+    weekendDisplay = '周末快乐！但周一在逼近...'
+  } else {
+    // 周一=1 到 周五=5，距离周六还有 (6 - dayOfWeek) 天
+    const daysLeft = 6 - dayOfWeek
+    const hoursLeft = daysLeft * 24 - curHour
+    weekendPct = ((5 - daysLeft) / 5) * 100
+    if (daysLeft === 1) {
+      weekendDisplay = '明天就周末了，再撑撑!'
+    } else {
+      weekendDisplay = `还有 ${daysLeft} 天，熬住!`
+    }
+  }
+  list.push({
+    id: 'weekend',
+    title: '距离周末',
+    subtitle: '每周最大的盼头，没有之一',
+    percent: weekendPct.toFixed(1),
+    display: weekendDisplay,
+    colorClass: isWeekend ? 'fill-success' : 'fill-cyber',
+  })
+
+  // 5. 距离发薪
   let nextPayday
   if (n.getDate() < PAYDAY) {
     nextPayday = new Date(n.getFullYear(), n.getMonth(), PAYDAY)
@@ -236,6 +265,28 @@ const bars = computed(() => {
     display: poopAlert ? '憋不住了！快冲!' : formatCountdown(pSec),
     colorClass: poopAlert ? 'fill-alert-pulse' : 'fill-cyber',
     alert: poopAlert,
+  })
+
+  // 9. 距离退休
+  const age = n.getFullYear() - birthYear.value + n.getMonth() / 12
+  const yearsLeft = RETIRE_AGE - age
+  let retireDisplay, retirePct
+  if (yearsLeft <= 0) {
+    retirePct = 100
+    retireDisplay = '已退休！恭喜解放!'
+  } else {
+    retirePct = (age / RETIRE_AGE) * 100
+    const yrs = Math.floor(yearsLeft)
+    const mos = Math.floor((yearsLeft - yrs) * 12)
+    retireDisplay = `还剩 ${yrs}年${mos}月，再忍忍`
+  }
+  list.push({
+    id: 'retire',
+    title: '距离退休',
+    subtitle: '退休倒计时，每一天都是煎熬',
+    percent: retirePct.toFixed(1),
+    display: retireDisplay,
+    colorClass: yearsLeft <= 0 ? 'fill-success' : 'fill-cyber',
   })
 
   return list
