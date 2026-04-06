@@ -8,7 +8,23 @@
         </div>
         <div class="lp-subtitle">系统监测中...请勿关闭人生</div>
       </div>
+      <div class="lp-settings-btn" @click="showSettings = !showSettings" title="设置">
+        <el-icon><Setting /></el-icon>
+      </div>
     </div>
+
+    <Transition name="settings-slide">
+      <div v-if="showSettings" class="lp-settings">
+        <div class="setting-row">
+          <span class="setting-label">出生年份</span>
+          <input type="number" v-model.number="birthYear" min="1940" max="2020" class="setting-input" @change="saveSettings" />
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">退休年龄</span>
+          <input type="number" v-model.number="retireAge" min="40" max="80" class="setting-input" @change="saveSettings" />
+        </div>
+      </div>
+    </Transition>
 
     <div class="progress-list">
       <div
@@ -52,13 +68,12 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { Odometer } from '@element-plus/icons-vue'
+import { Odometer, Setting } from '@element-plus/icons-vue'
 
 // --- 常量 ---
 const WORK_START = 9
 const WORK_END = 20.5  // 上海时间 20:30
 const PAYDAY = 5
-const RETIRE_AGE = 65
 const WATER_HOURS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22] // 每2小时喝水
 const POOP_HOURS = [9, 13, 19] // 每日三次拉屎时刻
 
@@ -82,6 +97,8 @@ const HOLIDAYS = [
 // --- 响应式状态 ---
 const now = ref(new Date())
 const birthYear = ref(parseInt(localStorage.getItem('life_progress_birth_year')) || 2000)
+const retireAge = ref(parseInt(localStorage.getItem('life_progress_retire_age')) || 65)
+const showSettings = ref(false)
 
 // 提醒弹窗
 const alertVisible = ref(false)
@@ -90,6 +107,11 @@ const alertData = ref({ icon: '', title: '', desc: '', btn: '' })
 // 记录已弹过的时刻，避免同一时刻重复弹窗
 const alertedWaterHour = ref(-1)
 const alertedPoopHour = ref(-1)
+
+function saveSettings() {
+  localStorage.setItem('life_progress_birth_year', birthYear.value)
+  localStorage.setItem('life_progress_retire_age', retireAge.value)
+}
 
 // --- 计算进度 ---
 const bars = computed(() => {
@@ -430,13 +452,13 @@ const bars = computed(() => {
 
   // 9. 距离退休
   const age = n.getFullYear() - birthYear.value + n.getMonth() / 12
-  const yearsLeft = RETIRE_AGE - age
+  const yearsLeft = retireAge.value - age
   let retireDisplay, retirePct
   if (yearsLeft <= 0) {
     retirePct = 100
     retireDisplay = '已退休！恭喜解放!'
   } else {
-    retirePct = (age / RETIRE_AGE) * 100
+    retirePct = (age / retireAge.value) * 100
     const yrs = Math.floor(yearsLeft)
     const mos = Math.floor((yearsLeft - yrs) * 12)
     retireDisplay = `还剩 ${yrs}年${mos}月，再忍忍`
@@ -523,8 +545,67 @@ onBeforeUnmount(() => {
 }
 
 .lp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 20px;
 }
+
+.lp-settings-btn {
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.3s;
+  font-size: 18px;
+  padding: 4px;
+}
+.lp-settings-btn:hover {
+  color: var(--primary-color);
+}
+
+.lp-settings {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.setting-input {
+  width: 80px;
+  padding: 4px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+.setting-input:focus {
+  border-color: var(--primary-color);
+}
+
+.settings-slide-enter-active { transition: all 0.3s ease; }
+.settings-slide-leave-active { transition: all 0.2s ease; }
+.settings-slide-enter-from,
+.settings-slide-leave-to { opacity: 0; max-height: 0; margin-bottom: 0; overflow: hidden; }
+.settings-slide-enter-to,
+.settings-slide-leave-from { opacity: 1; max-height: 80px; }
 
 .lp-title {
   display: flex;
