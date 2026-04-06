@@ -45,14 +45,31 @@ def get_fortune_type_text(fortune_type):
     return '中签'
 
 
+def get_current_season():
+    month = date.today().month
+    if month in (3, 4, 5):
+        return '春'
+    elif month in (6, 7, 8):
+        return '夏'
+    elif month in (9, 10, 11):
+        return '秋'
+    else:
+        return '冬'
+
+
 def build_fortune_prompt(fortune_number, fortune_type):
     themes = ['事业前程', '姻缘桃花', '财运亨通', '学业进步', '健康平安', '家庭和睦', '旅行出行', '贵人相助']
-    seasons = ['春', '夏', '秋', '冬']
     elements = ['金', '木', '水', '火', '土']
+    imagery_styles = [
+        '山水意境', '花鸟虫鱼', '日月星辰', '风雨雷电',
+        '江河湖海', '松竹梅兰', '龙凤麒麟', '琴棋书画',
+        '云雾霞光', '剑胆琴心'
+    ]
 
     theme = random.choice(themes)
-    season = random.choice(seasons)
+    season = get_current_season()
     element = random.choice(elements)
+    imagery = random.choice(imagery_styles)
     today = date.today().strftime('%Y年%m月%d日')
     type_text = get_fortune_type_text(fortune_type)
 
@@ -62,6 +79,12 @@ def build_fortune_prompt(fortune_number, fortune_type):
 
 请根据签号、签型、时节与五行，生成一支独特的灵签。每次生成的签诗和解读都应不同，体现当下时运。
 签诗的意境和解读的语气必须与「{type_text}」的吉凶程度相符。
+
+**签诗创作要求（非常重要）：**
+- 本次签诗请以「{imagery}」为意象风格
+- 签诗四句中禁止直接出现"春""夏""秋""冬"这四个季节字，用其他意象来暗示时令
+- 每支签诗的用词、意象、典故都必须独特，不要套用常见模板
+- 避免使用"花开""春来""春风"等高频词汇
 
 **所有文字必须使用简体中文。**
 
@@ -399,15 +422,15 @@ def generate_with_compatible_api(prompt):
 
 def generate_fallback_fortune(fortune_number, fortune_type=None):
     poems = [
-        '春来花自开，福至心自宽，诚心祈善愿，吉庆自然来。',
-        '云开见月明，守得花开时，耐心待时机，好运必相随。',
+        '福至心自宽，云散天地阔，诚心祈善愿，吉庆自然来。',
+        '云开见月明，守得清风至，耐心待时机，好运必相随。',
         '登高望远处，前程似锦绣，勤勉不懈怠，功名可期待。',
         '水到渠成时，莫急莫躁进，静待良机至，万事皆顺遂。',
-        '柳暗花明处，转机在眼前，坚持初心志，终见彩虹现。',
+        '柳暗复明处，转机在眼前，坚持初心志，终见彩虹现。',
         '凤凰展翅飞，龙跃九重天，时来运转至，富贵自绵延。',
-        '梅花香自苦，宝剑锋从磨，历经风雨后，彩虹映山河。',
+        '梅香自苦寒，宝剑锋从磨，历经风雨后，彩虹映山河。',
         '明月照前程，清风送吉祥，心诚则灵验，万事得安康。',
-        '桃李满天下，春风化雨来，德行积善果，福禄自然开。',
+        '桃李满天下，德行积善果，广结良善缘，福禄自然开。',
         '江海纳百川，山高人为峰，胸怀天下志，功成名就中。'
     ]
 
