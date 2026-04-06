@@ -34,7 +34,7 @@
             <span class="progress-label">{{ bar.title }}</span>
             <span class="progress-desc">{{ bar.subtitle }}</span>
           </div>
-          <span class="progress-value" :class="{ 'value-alert': bar.alert }">{{ bar.display }}</span>
+          <span class="progress-value" :class="bar.valueClass">{{ bar.display }}</span>
         </div>
         <div class="progress-track">
           <div
@@ -108,6 +108,14 @@ function saveSettings() {
   localStorage.setItem('life_progress_retire_date', retireDate.value)
 }
 
+// 根据进度自动分配颜色：正常(蓝) → 即将到来(橙) → 已到达(绿)
+function getBarStyle(percent, done, alert) {
+  if (alert) return { colorClass: 'fill-alert-pulse', valueClass: 'value-alert' }
+  if (done) return { colorClass: 'fill-success', valueClass: 'value-success' }
+  if (percent >= 80) return { colorClass: 'fill-warning', valueClass: 'value-warning' }
+  return { colorClass: 'fill-cyber', valueClass: '' }
+}
+
 // --- 计算进度 ---
 const bars = computed(() => {
   const n = now.value
@@ -122,7 +130,7 @@ const bars = computed(() => {
     subtitle: '本月余额不足，请及时充值',
     percent: Math.min(monthPct, 100).toFixed(1),
     display: `已消耗 ${monthPct.toFixed(1)}%`,
-    colorClass: 'fill-cyber',
+    ...getBarStyle(monthPct, false, false),
   })
 
   // 2. 本年进度
@@ -135,7 +143,7 @@ const bars = computed(() => {
     subtitle: '今年的flag还记得吗？',
     percent: Math.min(yearPct, 100).toFixed(1),
     display: `${n.getFullYear()} 已过 ${yearPct.toFixed(1)}%`,
-    colorClass: 'fill-cyber',
+    ...getBarStyle(yearPct, false, false),
   })
 
   // 判断今天是否在假期中
@@ -191,7 +199,7 @@ const bars = computed(() => {
     subtitle: currentHoliday ? `${currentHoliday.name}快乐，班味已清除` : '打工人打工魂，摸鱼才是人上人',
     percent: Math.min(workPct, 100).toFixed(1),
     display: workDisplay,
-    colorClass: workOff ? 'fill-success' : 'fill-cyber',
+    ...getBarStyle(workPct, workOff, false),
   })
 
   // 4. 距离周末
@@ -223,7 +231,7 @@ const bars = computed(() => {
     subtitle: currentHoliday ? `${currentHoliday.name}期间，周末算什么` : '每周最大的盼头，没有之一',
     percent: weekendPct.toFixed(1),
     display: weekendDisplay,
-    colorClass: weekendDone ? 'fill-success' : 'fill-cyber',
+    ...getBarStyle(weekendPct, weekendDone, false),
   })
 
   // 4.5 距离下顿饭
@@ -295,7 +303,7 @@ const bars = computed(() => {
     subtitle: mealSubtitle,
     percent: mealPct.toFixed ? mealPct.toFixed(1) : mealPct,
     display: mealDisplay,
-    colorClass: mealDone ? 'fill-success' : 'fill-cyber',
+    ...getBarStyle(mealPct, mealDone, false),
   })
 
   // 5. 距离发薪
@@ -322,7 +330,7 @@ const bars = computed(() => {
     subtitle: '钱包空空如也，但梦想还在',
     percent: payPct.toFixed(1),
     display: payDisplay,
-    colorClass: !nextPayday ? 'fill-success' : 'fill-cyber',
+    ...getBarStyle(payPct, !nextPayday, false),
   })
 
   // 6. 距离下次放假
@@ -357,7 +365,7 @@ const bars = computed(() => {
     subtitle: '上班是不可能上班的，放假才是真理',
     percent: holidayPct.toFixed(1),
     display: holidayDisplay,
-    colorClass: inHoliday ? 'fill-success' : 'fill-cyber',
+    ...getBarStyle(holidayPct, inHoliday, false),
   })
 
   // 7. 距离下次喝水（固定时刻表：每2小时）
@@ -394,7 +402,7 @@ const bars = computed(() => {
     subtitle: '多喝热水，包治百病',
     percent: waterAlert ? 100 : waterPct.toFixed(1),
     display: waterDisplay,
-    colorClass: waterAlert ? 'fill-alert-pulse' : 'fill-cyber',
+    ...getBarStyle(waterPct, false, waterAlert),
     alert: waterAlert,
   })
 
@@ -435,7 +443,7 @@ const bars = computed(() => {
     subtitle: '人生大事，不可忽视',
     percent: poopAlert ? 100 : poopPct.toFixed(1),
     display: poopDisplay,
-    colorClass: poopAlert ? 'fill-alert-pulse' : 'fill-cyber',
+    ...getBarStyle(poopPct, false, poopAlert),
     alert: poopAlert,
   })
 
@@ -471,7 +479,7 @@ const bars = computed(() => {
     subtitle: `目标: ${retireY}年${retireM}月 · 退休倒计时`,
     percent: retirePct.toFixed(1),
     display: retireDisplay,
-    colorClass: msLeft <= 0 ? 'fill-success' : 'fill-cyber',
+    ...getBarStyle(retirePct, msLeft <= 0, false),
   })
 
   return list
@@ -697,6 +705,15 @@ onBeforeUnmount(() => {
   animation: blink 0.8s ease-in-out infinite;
 }
 
+.value-warning {
+  color: #f59e0b;
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+.value-success {
+  color: #10b981;
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
@@ -725,6 +742,34 @@ onBeforeUnmount(() => {
 .fill-success {
   background: linear-gradient(90deg, #10b981, #34d399);
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+.fill-success::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.fill-warning {
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  animation: warning-pulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes warning-pulse {
+  from { box-shadow: 0 0 6px rgba(245, 158, 11, 0.3); }
+  to { box-shadow: 0 0 16px rgba(245, 158, 11, 0.6); }
 }
 
 .fill-alert-pulse {
