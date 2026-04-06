@@ -59,10 +59,8 @@ const WORK_START = 9
 const WORK_END = 20.5  // 上海时间 20:30
 const PAYDAY = 5
 const RETIRE_AGE = 65
-const WATER_MIN = 120 * 60  // 喝水间隔 2 小时
-const WATER_MAX = 120 * 60
-const POOP_MIN = 600 * 60   // 拉屎间隔 10 小时
-const POOP_MAX = 600 * 60
+const WATER_HOURS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22] // 每2小时喝水
+const POOP_HOURS = [9, 13, 19] // 每日三次拉屎时刻
 
 // 中国法定节假日（数据来源：国务院办公厅）
 const HOLIDAYS = [
@@ -84,17 +82,14 @@ const HOLIDAYS = [
 // --- 响应式状态 ---
 const now = ref(new Date())
 const birthYear = ref(parseInt(localStorage.getItem('life_progress_birth_year')) || 2000)
-// 倒计时（秒）
-const waterCountdown = ref(randomInt(WATER_MIN, WATER_MAX))
-const poopCountdown = ref(randomInt(POOP_MIN, POOP_MAX))
 
 // 提醒弹窗
 const alertVisible = ref(false)
 const alertData = ref({ icon: '', title: '', desc: '', btn: '' })
 
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
-}
+// 记录已弹过的时刻，避免同一时刻重复弹窗
+const alertedWaterHour = ref(-1)
+const alertedPoopHour = ref(-1)
 
 // --- 计算进度 ---
 const bars = computed(() => {
@@ -354,28 +349,81 @@ const bars = computed(() => {
     colorClass: inHoliday ? 'fill-success' : 'fill-cyber',
   })
 
-  // 6. 距离下次喝水
-  const wSec = waterCountdown.value
-  const waterAlert = wSec <= 0
+  // 7. 距离下次喝水（固定时刻表：每2小时）
+  const waterNowMin = n.getHours() * 60 + n.getMinutes()
+  let nextWaterHour = WATER_HOURS.find(h => h * 60 > waterNowMin)
+  let prevWaterHour = null
+  if (!nextWaterHour && nextWaterHour !== 0) {
+    nextWaterHour = WATER_HOURS[0] // 明天0点
+    prevWaterHour = WATER_HOURS[WATER_HOURS.length - 1]
+  } else {
+    const idx = WATER_HOURS.indexOf(nextWaterHour)
+    prevWaterHour = idx > 0 ? WATER_HOURS[idx - 1] : WATER_HOURS[WATER_HOURS.length - 1]
+  }
+  const waterRemainMin = nextWaterHour * 60 > waterNowMin
+    ? nextWaterHour * 60 - waterNowMin
+    : (24 * 60 - waterNowMin + nextWaterHour * 60)
+  const waterIntervalMin = 120 // 2小时
+  const waterPct = Math.max((1 - waterRemainMin / waterIntervalMin) * 100, 0)
+  const waterAlert = waterRemainMin <= 5
+  let waterDisplay
+  if (waterRemainMin <= 5) {
+    const quips = ['该喝水了！再不喝要变木乃伊了', '喝水时间到！你的细胞在求救', '快去接水！你比沙漠还干']
+    waterDisplay = quips[n.getMinutes() % quips.length]
+  } else if (waterRemainMin <= 30) {
+    waterDisplay = `还有${waterRemainMin}分钟，嘴巴已经开始抗议了`
+  } else {
+    const wh = Math.floor(waterRemainMin / 60)
+    const wm = waterRemainMin % 60
+    waterDisplay = wh > 0 ? `还有${wh}小时${wm}分钟` : `还有${wm}分钟`
+  }
   list.push({
     id: 'water',
     title: '距离下次喝水',
     subtitle: '多喝热水，包治百病',
-    percent: waterAlert ? 100 : Math.max((1 - wSec / WATER_MAX) * 100, 0).toFixed(1),
-    display: waterAlert ? '该喝水了！快去!' : formatCountdown(wSec),
+    percent: waterAlert ? 100 : waterPct.toFixed(1),
+    display: waterDisplay,
     colorClass: waterAlert ? 'fill-alert-pulse' : 'fill-cyber',
     alert: waterAlert,
   })
 
-  // 7. 拉屎倒计时
-  const pSec = poopCountdown.value
-  const poopAlert = pSec <= 0
+  // 8. 距离下次拉屎（固定时刻表：9:00, 13:00, 19:00）
+  const poopNowMin = waterNowMin
+  let nextPoopHour = POOP_HOURS.find(h => h * 60 > poopNowMin)
+  let prevPoopHour = null
+  if (!nextPoopHour) {
+    nextPoopHour = POOP_HOURS[0] // 明天9点
+    prevPoopHour = POOP_HOURS[POOP_HOURS.length - 1]
+  } else {
+    const idx = POOP_HOURS.indexOf(nextPoopHour)
+    prevPoopHour = idx > 0 ? POOP_HOURS[idx - 1] : POOP_HOURS[POOP_HOURS.length - 1]
+  }
+  const poopRemainMin = nextPoopHour * 60 > poopNowMin
+    ? nextPoopHour * 60 - poopNowMin
+    : (24 * 60 - poopNowMin + nextPoopHour * 60)
+  // 计算当前间隔长度
+  const poopIntervalMin = nextPoopHour * 60 > poopNowMin
+    ? (nextPoopHour - (prevPoopHour || 0)) * 60
+    : (24 * 60 - (prevPoopHour || 0) * 60 + nextPoopHour * 60)
+  const poopPct = Math.max((1 - poopRemainMin / Math.max(poopIntervalMin, 1)) * 100, 0)
+  const poopAlert = poopRemainMin <= 10
+  let poopDisplay
+  if (poopRemainMin <= 10) {
+    const quips = ['肠道来电了，请接听！', '马桶已就绪，请就位！', '排毒时间到，冲鸭！']
+    poopDisplay = quips[n.getMinutes() % quips.length]
+  } else if (poopRemainMin <= 30) {
+    poopDisplay = `还有${poopRemainMin}分钟，肚子开始有想法了`
+  } else {
+    const ph = Math.floor(poopRemainMin / 60)
+    const pm = poopRemainMin % 60
+    poopDisplay = ph > 0 ? `还有${ph}小时${pm}分钟，先忍忍` : `还有${pm}分钟，做好准备`
+  }
   list.push({
     id: 'poop',
     title: '距离下次拉屎',
     subtitle: '人生大事，不可忽视',
-    percent: poopAlert ? 100 : Math.max((1 - pSec / POOP_MAX) * 100, 0).toFixed(1),
-    display: poopAlert ? '憋不住了！快冲!' : formatCountdown(pSec),
+    percent: poopAlert ? 100 : poopPct.toFixed(1),
+    display: poopDisplay,
     colorClass: poopAlert ? 'fill-alert-pulse' : 'fill-cyber',
     alert: poopAlert,
   })
@@ -435,10 +483,11 @@ function triggerAlert(type) {
 
 function dismissAlert() {
   alertVisible.value = false
+  // 记录已弹过的时刻，避免同一小时重复弹
   if (pendingAlertType === 'water') {
-    waterCountdown.value = randomInt(WATER_MIN, WATER_MAX)
+    alertedWaterHour.value = new Date().getHours()
   } else if (pendingAlertType === 'poop') {
-    poopCountdown.value = randomInt(POOP_MIN, POOP_MAX)
+    alertedPoopHour.value = new Date().getHours()
   }
   pendingAlertType = null
 }
@@ -448,13 +497,15 @@ let timer = null
 onMounted(() => {
   timer = setInterval(() => {
     now.value = new Date()
-    if (waterCountdown.value > 0) waterCountdown.value--
-    if (poopCountdown.value > 0) poopCountdown.value--
+    const curH = now.value.getHours()
+    const curM = now.value.getMinutes()
 
-    // 触发提醒
-    if (waterCountdown.value === 0 && !alertVisible.value) {
+    // 喝水提醒：整点时刻前后5分钟内触发
+    if (WATER_HOURS.includes(curH) && curM < 5 && alertedWaterHour.value !== curH && !alertVisible.value) {
       triggerAlert('water')
-    } else if (poopCountdown.value === 0 && !alertVisible.value) {
+    }
+    // 拉屎提醒：整点时刻前后10分钟内触发
+    if (POOP_HOURS.includes(curH) && curM < 10 && alertedPoopHour.value !== curH && !alertVisible.value) {
       triggerAlert('poop')
     }
   }, 1000)
