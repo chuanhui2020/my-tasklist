@@ -126,40 +126,78 @@ const bars = computed(() => {
     colorClass: 'fill-cyber',
   })
 
+  // 判断今天是否在假期中
+  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate())
+  let currentHoliday = null
+  for (const h of HOLIDAYS) {
+    const start = new Date(h.start + 'T00:00:00')
+    const end = new Date(h.end + 'T00:00:00')
+    if (today >= start && today <= end) {
+      currentHoliday = h
+      break
+    }
+  }
+
+  const holidayWorkQuips = [
+    '放假中，老板找不到你的~',
+    '今天不营业，请明天再来剥削',
+    '工位想你了，但你不想它',
+    '带薪躺平中，合法摸鱼!',
+    '今日已与工作断绝关系',
+  ]
+  const holidayWeekendQuips = [
+    '天天都是周末，爽歪歪!',
+    '周末？我现在每天都是周末!',
+    '假期面前，周末不值一提',
+    '什么周末不周末的，放假就完事了!',
+    '周一到周日都是我的，哈哈哈!',
+  ]
+
   // 3. 距离下班
   const curHour = n.getHours() + n.getMinutes() / 60 + n.getSeconds() / 3600
-  const offWork = curHour < WORK_START || curHour >= WORK_END
-  let workPct, workDisplay
-  if (offWork) {
+  let workPct, workDisplay, workOff
+  if (currentHoliday) {
     workPct = 100
-    workDisplay = '已下班，恭喜摸鱼成功!'
+    workOff = true
+    workDisplay = holidayWorkQuips[n.getDate() % holidayWorkQuips.length]
   } else {
-    workPct = ((curHour - WORK_START) / (WORK_END - WORK_START)) * 100
-    const remainSec = (WORK_END - curHour) * 3600
-    const rh = Math.floor(remainSec / 3600)
-    const rm = Math.floor((remainSec % 3600) / 60)
-    workDisplay = `还剩 ${rh}h ${rm}min`
+    workOff = curHour < WORK_START || curHour >= WORK_END
+    if (workOff) {
+      workPct = 100
+      workDisplay = '已下班，恭喜摸鱼成功!'
+    } else {
+      workPct = ((curHour - WORK_START) / (WORK_END - WORK_START)) * 100
+      const remainSec = (WORK_END - curHour) * 3600
+      const rh = Math.floor(remainSec / 3600)
+      const rm = Math.floor((remainSec % 3600) / 60)
+      workDisplay = `还剩 ${rh}h ${rm}min`
+    }
   }
   list.push({
     id: 'work',
     title: '距离下班',
-    subtitle: '打工人打工魂，摸鱼才是人上人',
+    subtitle: currentHoliday ? `${currentHoliday.name}快乐，班味已清除` : '打工人打工魂，摸鱼才是人上人',
     percent: Math.min(workPct, 100).toFixed(1),
     display: workDisplay,
-    colorClass: offWork ? 'fill-success' : 'fill-cyber',
+    colorClass: workOff ? 'fill-success' : 'fill-cyber',
   })
 
   // 4. 距离周末
   const dayOfWeek = n.getDay() // 0=周日, 6=周六
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-  let weekendDisplay, weekendPct
-  if (isWeekend) {
+  let weekendDisplay, weekendPct, weekendDone
+  if (currentHoliday) {
     weekendPct = 100
+    weekendDone = true
+    weekendDisplay = holidayWeekendQuips[n.getDate() % holidayWeekendQuips.length]
+  } else if (isWeekend) {
+    weekendPct = 100
+    weekendDone = true
     weekendDisplay = '周末快乐！但周一在逼近...'
   } else {
+    weekendDone = false
     // 周一=1 到 周五=5，距离周六还有 (6 - dayOfWeek) 天
     const daysLeft = 6 - dayOfWeek
-    const hoursLeft = daysLeft * 24 - curHour
     weekendPct = ((5 - daysLeft) / 5) * 100
     if (daysLeft === 1) {
       weekendDisplay = '明天就周末了，再撑撑!'
@@ -170,10 +208,10 @@ const bars = computed(() => {
   list.push({
     id: 'weekend',
     title: '距离周末',
-    subtitle: '每周最大的盼头，没有之一',
+    subtitle: currentHoliday ? `${currentHoliday.name}期间，周末算什么` : '每周最大的盼头，没有之一',
     percent: weekendPct.toFixed(1),
     display: weekendDisplay,
-    colorClass: isWeekend ? 'fill-success' : 'fill-cyber',
+    colorClass: weekendDone ? 'fill-success' : 'fill-cyber',
   })
 
   // 5. 距离发薪
@@ -203,21 +241,18 @@ const bars = computed(() => {
     colorClass: !nextPayday ? 'fill-success' : 'fill-cyber',
   })
 
-  // 5. 距离下次放假
-  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate())
+  // 6. 距离下次放假
   let nextHoliday = null
-  let inHoliday = false
-  for (const h of HOLIDAYS) {
-    const start = new Date(h.start + 'T00:00:00')
-    const end = new Date(h.end + 'T00:00:00')
-    if (today >= start && today <= end) {
-      inHoliday = true
-      nextHoliday = h
-      break
-    }
-    if (start > today) {
-      nextHoliday = h
-      break
+  let inHoliday = !!currentHoliday
+  if (inHoliday) {
+    nextHoliday = currentHoliday
+  } else {
+    for (const h of HOLIDAYS) {
+      const start = new Date(h.start + 'T00:00:00')
+      if (start > today) {
+        nextHoliday = h
+        break
+      }
     }
   }
   let holidayDisplay, holidayPct
