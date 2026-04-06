@@ -227,8 +227,9 @@ export default {
       comp: animList[idx].comp
     })
 
-    const initialScene = createScene(0)
-    const animIndex = ref(0)
+    const initialIndex = Math.floor(Math.random() * animList.length)
+    const initialScene = createScene(initialIndex)
+    const animIndex = ref(initialIndex)
     const animPaused = ref(false)
     const animSeconds = ref(0)
     const renderedScenes = ref([initialScene])
