@@ -214,6 +214,84 @@ const bars = computed(() => {
     colorClass: weekendDone ? 'fill-success' : 'fill-cyber',
   })
 
+  // 4.5 距离午饭 & 晚饭
+  const LUNCH_START = 12
+  const LUNCH_END = 14
+  const DINNER_START = 18
+  const DINNER_END = 19
+
+  // 午饭
+  let lunchDisplay, lunchPct, lunchDone
+  if (curHour >= LUNCH_START && curHour < LUNCH_END) {
+    lunchDone = true
+    lunchPct = 100
+    const eatingQuips = ['干饭中，勿扰!', '嘴巴正在加班中...', '热干面还是黄焖鸡？都要!', '碳水快乐，谁懂?', '饭搭子已就位，开冲!']
+    lunchDisplay = eatingQuips[n.getMinutes() % eatingQuips.length]
+  } else if (curHour >= LUNCH_END) {
+    lunchDone = true
+    lunchPct = 100
+    lunchDisplay = '午饭已过，等晚饭吧'
+  } else {
+    lunchDone = false
+    const remainMin = Math.floor((LUNCH_START - curHour) * 60)
+    lunchPct = Math.max((1 - remainMin / (LUNCH_START * 60)) * 100, 0)
+    if (remainMin <= 30) {
+      lunchDisplay = `还有${remainMin}分钟，肚子已经在叫了!`
+    } else if (remainMin <= 60) {
+      lunchDisplay = `还有${remainMin}分钟，再忍忍!`
+    } else {
+      const rh = Math.floor(remainMin / 60)
+      const rm = remainMin % 60
+      lunchDisplay = `还有${rh}小时${rm}分钟，早饭白吃了?`
+    }
+  }
+  list.push({
+    id: 'lunch',
+    title: '距离午饭',
+    subtitle: '干饭人干饭魂，干饭都是人上人',
+    percent: lunchPct.toFixed ? lunchPct.toFixed(1) : lunchPct,
+    display: lunchDisplay,
+    colorClass: lunchDone ? 'fill-success' : 'fill-cyber',
+  })
+
+  // 晚饭
+  let dinnerDisplay, dinnerPct, dinnerDone
+  if (curHour >= DINNER_START && curHour < DINNER_END) {
+    dinnerDone = true
+    dinnerPct = 100
+    const eatingQuips = ['晚饭进行中，今天也辛苦了', '吃饱了才有力气加班（不是）', '干饭！干饭！干饭！', '今晚吃点好的，犒劳自己', '外卖到了，冲冲冲!']
+    dinnerDisplay = eatingQuips[n.getMinutes() % eatingQuips.length]
+  } else if (curHour >= DINNER_END) {
+    dinnerDone = true
+    dinnerPct = 100
+    dinnerDisplay = '晚饭已过，别吃夜宵了...算了吃吧'
+  } else if (curHour < LUNCH_START) {
+    dinnerDone = false
+    dinnerPct = 0
+    dinnerDisplay = '午饭还没吃呢，别惦记晚饭了'
+  } else {
+    dinnerDone = false
+    const remainMin = Math.floor((DINNER_START - curHour) * 60)
+    dinnerPct = Math.max((1 - remainMin / ((DINNER_START - LUNCH_END) * 60)) * 100, 0)
+    if (remainMin <= 30) {
+      dinnerDisplay = `还有${remainMin}分钟，已经在想吃什么了`
+    } else if (remainMin <= 60) {
+      dinnerDisplay = `还有${remainMin}分钟，下午茶先顶一下?`
+    } else {
+      const rh = Math.floor(remainMin / 60)
+      const rm = remainMin % 60
+      dinnerDisplay = `还有${rh}小时${rm}分钟，漫长的等待`
+    }
+  }
+  list.push({
+    id: 'dinner',
+    title: '距离晚饭',
+    subtitle: '人是铁饭是钢，一顿不吃饿得慌',
+    percent: dinnerPct.toFixed ? dinnerPct.toFixed(1) : dinnerPct,
+    display: dinnerDisplay,
+    colorClass: dinnerDone ? 'fill-success' : 'fill-cyber',
+  })
+
   // 5. 距离发薪
   let nextPayday
   if (n.getDate() < PAYDAY) {
