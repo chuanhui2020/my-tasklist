@@ -20,8 +20,8 @@
           <input type="number" v-model.number="birthYear" min="1940" max="2020" class="setting-input" @change="saveSettings" />
         </div>
         <div class="setting-row">
-          <span class="setting-label">退休年龄</span>
-          <input type="number" v-model.number="retireAge" min="40" max="80" class="setting-input" @change="saveSettings" />
+          <span class="setting-label">退休日期</span>
+          <input type="month" v-model="retireDate" class="setting-input setting-input-date" @change="saveSettings" />
         </div>
       </div>
     </Transition>
@@ -97,7 +97,8 @@ const HOLIDAYS = [
 // --- 响应式状态 ---
 const now = ref(new Date())
 const birthYear = ref(parseInt(localStorage.getItem('life_progress_birth_year')) || 2000)
-const retireAge = ref(parseInt(localStorage.getItem('life_progress_retire_age')) || 65)
+const defaultRetireDate = `${2000 + 65}-01`
+const retireDate = ref(localStorage.getItem('life_progress_retire_date') || defaultRetireDate)
 const showSettings = ref(false)
 
 // 提醒弹窗
@@ -110,7 +111,7 @@ const alertedPoopHour = ref(-1)
 
 function saveSettings() {
   localStorage.setItem('life_progress_birth_year', birthYear.value)
-  localStorage.setItem('life_progress_retire_age', retireAge.value)
+  localStorage.setItem('life_progress_retire_date', retireDate.value)
 }
 
 // --- 计算进度 ---
@@ -451,25 +452,37 @@ const bars = computed(() => {
   })
 
   // 9. 距离退休
-  const age = n.getFullYear() - birthYear.value + n.getMonth() / 12
-  const yearsLeft = retireAge.value - age
+  const [retireY, retireM] = retireDate.value.split('-').map(Number)
+  const retireTarget = new Date(retireY, retireM - 1, 1)
+  const msLeft = retireTarget - n
   let retireDisplay, retirePct
-  if (yearsLeft <= 0) {
+  if (msLeft <= 0) {
     retirePct = 100
     retireDisplay = '已退休！恭喜解放!'
   } else {
-    retirePct = (age / retireAge.value) * 100
-    const yrs = Math.floor(yearsLeft)
-    const mos = Math.floor((yearsLeft - yrs) * 12)
-    retireDisplay = `还剩 ${yrs}年${mos}月，再忍忍`
+    const birthStart = new Date(birthYear.value, 0, 1)
+    const totalMs = retireTarget - birthStart
+    const elapsedMs = n - birthStart
+    retirePct = (elapsedMs / totalMs) * 100
+    const daysLeft = Math.ceil(msLeft / 86400000)
+    const yrs = Math.floor(daysLeft / 365)
+    const mos = Math.floor((daysLeft % 365) / 30)
+    const ds = daysLeft - yrs * 365 - mos * 30
+    if (yrs > 0) {
+      retireDisplay = `还剩 ${yrs}年${mos}月${ds}天，再忍忍`
+    } else if (mos > 0) {
+      retireDisplay = `还剩 ${mos}月${ds}天，曙光在前!`
+    } else {
+      retireDisplay = `还剩 ${ds}天，冲刺阶段!`
+    }
   }
   list.push({
     id: 'retire',
     title: '距离退休',
-    subtitle: '退休倒计时，每一天都是煎熬',
+    subtitle: `目标: ${retireY}年${retireM}月 · 退休倒计时`,
     percent: retirePct.toFixed(1),
     display: retireDisplay,
-    colorClass: yearsLeft <= 0 ? 'fill-success' : 'fill-cyber',
+    colorClass: msLeft <= 0 ? 'fill-success' : 'fill-cyber',
   })
 
   return list
@@ -595,6 +608,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   outline: none;
   transition: border-color 0.3s;
+}
+.setting-input-date {
+  width: 130px;
 }
 .setting-input:focus {
   border-color: var(--primary-color);
