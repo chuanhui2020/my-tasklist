@@ -100,9 +100,9 @@ const showSettings = ref(false)
 const alertVisible = ref(false)
 const alertData = ref({ icon: '', title: '', desc: '', btn: '' })
 
-// 记录已弹过的时刻，避免同一时刻重复弹窗
-const alertedWaterHour = ref(-1)
-const alertedPoopHour = ref(-1)
+// 记录已弹过的时刻，避免同一时刻重复弹窗（用sessionStorage防止组件重挂载时重置）
+const alertedWaterHour = ref(parseInt(sessionStorage.getItem('lp_alerted_water') || '-1'))
+const alertedPoopHour = ref(parseInt(sessionStorage.getItem('lp_alerted_poop') || '-1'))
 
 function saveSettings() {
   localStorage.setItem('life_progress_retire_date', retireDate.value)
@@ -518,8 +518,10 @@ function dismissAlert() {
   // 记录已弹过的时刻，避免同一小时重复弹
   if (pendingAlertType === 'water') {
     alertedWaterHour.value = new Date().getHours()
+    sessionStorage.setItem('lp_alerted_water', alertedWaterHour.value)
   } else if (pendingAlertType === 'poop') {
     alertedPoopHour.value = new Date().getHours()
+    sessionStorage.setItem('lp_alerted_poop', alertedPoopHour.value)
   }
   pendingAlertType = null
 }
