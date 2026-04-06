@@ -16,10 +16,6 @@
     <Transition name="settings-slide">
       <div v-if="showSettings" class="lp-settings">
         <div class="setting-row">
-          <span class="setting-label">出生年份</span>
-          <input type="number" v-model.number="birthYear" min="1940" max="2020" class="setting-input" @change="saveSettings" />
-        </div>
-        <div class="setting-row">
           <span class="setting-label">退休日期</span>
           <input type="month" v-model="retireDate" class="setting-input setting-input-date" @change="saveSettings" />
         </div>
@@ -96,8 +92,7 @@ const HOLIDAYS = [
 
 // --- 响应式状态 ---
 const now = ref(new Date())
-const birthYear = ref(parseInt(localStorage.getItem('life_progress_birth_year')) || 2000)
-const defaultRetireDate = `${2000 + 65}-01`
+const defaultRetireDate = '2065-01'
 const retireDate = ref(localStorage.getItem('life_progress_retire_date') || defaultRetireDate)
 const showSettings = ref(false)
 
@@ -110,7 +105,6 @@ const alertedWaterHour = ref(-1)
 const alertedPoopHour = ref(-1)
 
 function saveSettings() {
-  localStorage.setItem('life_progress_birth_year', birthYear.value)
   localStorage.setItem('life_progress_retire_date', retireDate.value)
 }
 
@@ -460,10 +454,11 @@ const bars = computed(() => {
     retirePct = 100
     retireDisplay = '已退休！恭喜解放!'
   } else {
-    const birthStart = new Date(birthYear.value, 0, 1)
-    const totalMs = retireTarget - birthStart
-    const elapsedMs = n - birthStart
-    retirePct = (elapsedMs / totalMs) * 100
+    // 以今年1月1日为起点，计算到退休日期的进度
+    const yearStart = new Date(n.getFullYear(), 0, 1)
+    const totalMs = retireTarget - yearStart
+    const elapsedMs = n - yearStart
+    retirePct = totalMs > 0 ? Math.min((elapsedMs / totalMs) * 100, 99.9) : 0
     const daysLeft = Math.ceil(msLeft / 86400000)
     const yrs = Math.floor(daysLeft / 365)
     const mos = Math.floor((daysLeft % 365) / 30)
