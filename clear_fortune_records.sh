@@ -1,6 +1,12 @@
 #!/bin/bash
 # 清除占卜历史记录脚本
 
+# 从 .env 文件读取配置
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    export $(grep -v '^#' "$SCRIPT_DIR/.env" | xargs)
+fi
+
 echo "=== 清除占卜历史记录 ==="
 
 # 先查看当前记录数
