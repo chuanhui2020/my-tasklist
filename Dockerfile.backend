@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     default-libmysqlclient-dev \
     pkg-config \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
@@ -19,11 +20,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制应用代码
 COPY backend/ .
 
+# 复制 entrypoint
+COPY backend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # 创建非 root 用户
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app
 
-USER appuser
+ENTRYPOINT ["/entrypoint.sh"]
 
 # 暴露端口
 EXPOSE 8000
