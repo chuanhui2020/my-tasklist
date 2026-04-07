@@ -255,10 +255,12 @@ function handleBarClick(bar) {
     menuDialogGroups.value = []
   } else {
     const source = bar.menuType === 'dinner' ? todayMenu.value.dinner : todayMenu.value.lunch
-    menuDialogGroups.value = ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥'].map(label => ({
-      label,
-      items: Array.isArray(source?.[label]) ? [...source[label]] : []
-    }))
+    menuDialogGroups.value = ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥']
+      .map(label => ({
+        label,
+        items: Array.isArray(source?.[label]) ? [...source[label]] : []
+      }))
+      .filter(group => group.items.length > 0)
     menuDialogFruitItems.value = []
   }
   menuDialogVisible.value = true
