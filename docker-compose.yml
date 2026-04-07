@@ -58,6 +58,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./logs/ai:/app/logs
     networks:
       - tasklist_network
     healthcheck:

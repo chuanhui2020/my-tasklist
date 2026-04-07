@@ -7,6 +7,7 @@ import re
 import time
 
 import requests as http_requests
+from ai_logger import log_ai_transaction
 
 from datetime import date, timedelta
 from database import get_db
@@ -114,7 +115,11 @@ def extract_advice(content, fallback):
         return normalize_advice(cleaned, fallback)
 
 
+from ai_logger import log_ai_transaction
+
+
 def generate_with_openai(prompt, max_tokens=MAX_TOKENS):
+    start_time = time.time()
     api_key = os.environ.get('OPENAI_API_KEY')
     if not api_key:
         return None
@@ -140,18 +145,21 @@ def generate_with_openai(prompt, max_tokens=MAX_TOKENS):
         timeout=30
     )
 
+    duration = time.time() - start_time
+    result = response.json() if response.status_code == 200 else {"error": response.text}
+    log_ai_transaction("OpenAI/BMI", "gpt-3.5-turbo", data, result, response.status_code, duration)
+
     if response.status_code != 200:
         return None
 
-    result = response.json()
     try:
         return result['choices'][0]['message']['content']
     except (KeyError, IndexError, TypeError):
-        print(f"⚠️ OpenAI API 返回结构异常: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
         return None
 
 
 def generate_with_gemini(prompt, max_tokens=MAX_TOKENS):
+    start_time = time.time()
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
         return None
@@ -169,10 +177,13 @@ def generate_with_gemini(prompt, max_tokens=MAX_TOKENS):
     }
 
     response = http_requests.post(url, json=data, timeout=30)
+    duration = time.time() - start_time
+    result = response.json() if response.status_code == 200 else {"error": response.text}
+    log_ai_transaction("Gemini/BMI", "gemini-pro", data, result, response.status_code, duration)
+
     if response.status_code != 200:
         return None
 
-    result = response.json()
     candidates = result.get('candidates', [])
     if not candidates:
         return None
@@ -181,6 +192,7 @@ def generate_with_gemini(prompt, max_tokens=MAX_TOKENS):
 
 
 def generate_with_compatible_api(prompt, max_tokens=MAX_TOKENS):
+    start_time = time.time()
     api_key = os.environ.get('AI_API_KEY')
     if not api_key:
         return None
@@ -211,14 +223,16 @@ def generate_with_compatible_api(prompt, max_tokens=MAX_TOKENS):
     }
 
     response = http_requests.post(url, headers=headers, json=payload, timeout=60)
+    duration = time.time() - start_time
+    response_data = response.json() if response.status_code == 200 else {"error": response.text}
+    log_ai_transaction("Compatible/BMI", model, payload, response_data, response.status_code, duration)
+
     if response.status_code != 200:
         return None
 
-    response_data = response.json()
     try:
         return response_data['choices'][0]['message']['content']
     except (KeyError, IndexError, TypeError):
-        print(f"⚠️ AI API 返回结构异常: {json.dumps(response_data, ensure_ascii=False, default=str)[:500]}")
         return None
 
 

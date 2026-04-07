@@ -13,6 +13,7 @@ from datetime import datetime, date
 import random
 
 import requests as http_requests
+from ai_logger import log_ai_transaction
 
 from database import get_db
 from auth_utils import get_current_user
@@ -158,6 +159,7 @@ def generate_fortune_with_ai(fortune_number, fortune_type):
 
 
 def generate_with_openai(prompt):
+    start_time = time.time()
     api_key = os.environ.get('OPENAI_API_KEY')
     headers = {
         'Authorization': f'Bearer {api_key}',
@@ -181,8 +183,11 @@ def generate_with_openai(prompt):
         timeout=30
     )
 
+    duration = time.time() - start_time
+    result = response.json() if response.status_code == 200 else {"error": response.text}
+    log_ai_transaction("OpenAI", "gpt-3.5-turbo", data, result, response.status_code, duration)
+
     if response.status_code == 200:
-        result = response.json()
         content = result.get('choices', [{}])[0].get('message', {}).get('content')
         if not content:
             print(f"⚠️ OpenAI API 返回结构异常: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
@@ -202,11 +207,8 @@ def generate_with_openai(prompt):
 
 
 def generate_with_gemini(prompt):
+    start_time = time.time()
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-
-    print(f"\n{'='*60}")
-    print(f"🤖 [Gemini AI] 开始调用 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"{'='*60}")
 
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}'
 
@@ -220,115 +222,41 @@ def generate_with_gemini(prompt):
         }
     }
 
-    print(f"📤 请求 URL: {url[:80]}...{GEMINI_API_KEY[-8:]}")
-    print(f"📝 提示词长度: {len(prompt)} 字符")
-    print(f"⚙️  配置: temperature=0.8, maxTokens=800")
-    print(f"\n发送请求中...")
-
     try:
         response = http_requests.post(url, json=data, timeout=30)
-
-        print(f"📥 响应状态码: {response.status_code}")
+        duration = time.time() - start_time
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        log_ai_transaction("Gemini/Fortune", "gemini-pro", data, result, response.status_code, duration)
 
         if response.status_code == 200:
-            result = response.json()
-
-            print(f"✅ 调用成功！")
-            print(f"\n原始响应结构:")
-            print(f"  - candidates 数量: {len(result.get('candidates', []))}")
-
             if 'candidates' in result and len(result['candidates']) > 0:
                 candidate = result['candidates'][0]
-                print(f"  - finishReason: {candidate.get('finishReason', 'N/A')}")
-
                 content = candidate['content']['parts'][0]['text']
-                print(f"  - 生成内容长度: {len(content)} 字符")
-                print(f"\n📜 AI 生成的原始内容:")
-                print(f"{'-'*60}")
-                print(content[:500] + ('...' if len(content) > 500 else ''))
-                print(f"{'-'*60}")
 
                 try:
                     if '```json' in content:
-                        print(f"\n🔧 检测到 JSON 代码块，正在提取...")
                         content = content.split('```json')[1].split('```')[0].strip()
                     elif '```' in content:
-                        print(f"\n🔧 检测到代码块，正在提取...")
                         content = content.split('```')[1].split('```')[0].strip()
 
-                    fortune_data = json.loads(content)
-
-                    print(f"\n✨ 签文解析成功！")
-                    print(f"  - 签型: {fortune_data.get('typeText', 'N/A')}")
-                    print(f"  - 签诗: {fortune_data.get('poem', 'N/A')[:50]}...")
-                    print(f"  - 解签长度: {len(fortune_data.get('interpretation', ''))} 字")
-                    print(f"  - 指引数量: {len(fortune_data.get('advice', []))} 条")
-                    print(f"{'='*60}\n")
-
-                    return fortune_data
-
-                except json.JSONDecodeError as e:
-                    print(f"\n❌ JSON 解析失败: {str(e)}")
-                    print(f"尝试解析的内容: {content[:200]}...")
-                    print(f"⚠️  降级到备用签文")
-                    print(f"{'='*60}\n")
+                    return json.loads(content)
+                except json.JSONDecodeError:
                     return generate_fallback_fortune(1)
             else:
-                print(f"\n❌ 响应中没有 candidates")
-                print(f"完整响应: {result}")
-                print(f"⚠️  降级到备用签文")
-                print(f"{'='*60}\n")
                 return generate_fallback_fortune(1)
-
         else:
-            error_body = response.text[:500]
-            print(f"\n❌ API 调用失败")
-            print(f"状态码: {response.status_code}")
-            print(f"错误信息: {error_body}")
-            print(f"⚠️  降级到备用签文")
-            print(f"{'='*60}\n")
             raise Exception(f"Gemini API error: {response.status_code}")
 
     except http_requests.exceptions.Timeout:
-        print(f"\n⏱️  请求超时（30秒）")
-        print(f"⚠️  降级到备用签文")
-        print(f"{'='*60}\n")
+        duration = time.time() - start_time
+        log_ai_transaction("Gemini/Fortune", "gemini-pro", data, {"error": "timeout"}, 0, duration)
         raise Exception("Gemini API timeout")
 
     except http_requests.exceptions.RequestException as e:
-        print(f"\n❌ 网络请求异常: {str(e)}")
-        print(f"⚠️  降级到备用签文")
-        print(f"{'='*60}\n")
+        duration = time.time() - start_time
+        log_ai_transaction("Gemini/Fortune", "gemini-pro", data, {"error": str(e)}, 0, duration)
         raise Exception(f"Gemini API request error: {str(e)}")
 
-
-def log_ai_transaction(service, model, request_data, response_data, status_code, duration):
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
-    log_file = os.path.join(log_dir, f"ai_requests_{datetime.now().strftime('%Y-%m-%d')}.log")
-
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    log_entry = {
-        "timestamp": timestamp,
-        "service": service,
-        "model": model,
-        "status_code": status_code,
-        "duration": f"{duration:.2f}s",
-        "request": request_data,
-        "response": response_data
-    }
-
-    try:
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(f"[{timestamp}] {service} ({model}) - Status: {status_code} - Time: {duration:.2f}s\n")
-            f.write("-" * 80 + "\n")
-            f.write(json.dumps(log_entry, ensure_ascii=False, indent=2))
-            f.write("\n" + "=" * 80 + "\n\n")
-    except Exception as e:
-        print(f"❌ 写入日志文件失败: {e}")
 
 
 def generate_with_compatible_api(prompt):
