@@ -151,6 +151,8 @@ const todayMenu = ref({
 })
 const menuDialogVisible = ref(false)
 const activeMenuType = ref('lunch')
+const menuDialogGroups = ref([])
+const menuDialogFruitItems = ref([])
 const uploadDialogVisible = ref(false)
 const selectedMenuFile = ref(null)
 const selectedFileName = ref('')
@@ -248,6 +250,17 @@ async function submitMenuUpload() {
 function handleBarClick(bar) {
   if (!bar.clickable || !bar.menuType) return
   activeMenuType.value = bar.menuType
+  if (bar.menuType === 'fruit') {
+    menuDialogFruitItems.value = Array.isArray(todayMenu.value.fruit) ? [...todayMenu.value.fruit] : []
+    menuDialogGroups.value = []
+  } else {
+    const source = bar.menuType === 'dinner' ? todayMenu.value.dinner : todayMenu.value.lunch
+    menuDialogGroups.value = ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥'].map(label => ({
+      label,
+      items: Array.isArray(source?.[label]) ? [...source[label]] : []
+    }))
+    menuDialogFruitItems.value = []
+  }
   menuDialogVisible.value = true
 }
 
@@ -257,18 +270,9 @@ const menuDialogTitle = computed(() => {
   return '今日午餐'
 })
 
-const activeMealGroups = computed(() => {
-  const source = activeMenuType.value === 'dinner' ? todayMenu.value.dinner : todayMenu.value.lunch
-  if (!source) return []
-  return ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥'].map(label => ({
-    label,
-    items: Array.isArray(source[label]) ? source[label] : []
-  }))
-})
+const activeMealGroups = computed(() => menuDialogGroups.value)
 
-const activeFruitItems = computed(() => {
-  return Array.isArray(todayMenu.value.fruit) ? todayMenu.value.fruit : []
-})
+const activeFruitItems = computed(() => menuDialogFruitItems.value)
 
 // --- 计算进度 ---
 const bars = computed(() => {
