@@ -16,6 +16,7 @@ bmi_router = APIRouter(prefix='/api/bmi')
 
 MAX_ITEM_CHARS = 20
 MAX_TOKENS = 120
+MAX_ANALYSIS_TOKENS = 800
 
 
 def build_bmi_prompt(age, height, weight, bmi):
@@ -117,6 +118,15 @@ def generate_bmi_advice_with_ai(prompt, max_tokens=MAX_TOKENS):
     return chat_completion(prompt, '你是一位简洁的健康管理助手，输出必须是纯 JSON。', temperature=0.5, max_tokens=max_tokens)
 
 
+def generate_weight_analysis_with_ai(prompt, max_tokens=MAX_ANALYSIS_TOKENS):
+    return chat_completion(
+        prompt,
+        '你是一位专业的健康管理顾问。输出必须是自然中文段落，不要 JSON，不要 Markdown，不要代码块。',
+        temperature=0.5,
+        max_tokens=max_tokens
+    )
+
+
 @bmi_router.post('/advice')
 def generate_bmi_advice(body: dict):
     start_time = time.time()
@@ -213,8 +223,78 @@ def build_weight_analysis_prompt(records, profile):
         "- 使用中文回答\n"
         "- 语气专业但亲切\n"
         "- 总字数控制在300字以内\n"
-        "- 使用简洁的段落格式"
+        "- 使用简洁的段落格式\n"
+        "- 输出 4 到 5 个自然段，每段单独换行\n"
+        "- 不要输出 JSON、Markdown 标题、项目符号或代码块"
     )
+
+
+def fallback_weight_analysis(records, profile):
+    height_m = profile.height / 100 if profile and profile.height else 1.70
+    latest_weight = records[-1].weight
+    earliest_weight = records[0].weight
+    change = round(latest_weight - earliest_weight, 1)
+    days = max((records[-1].date - records[0].date).days, 1)
+    bmi = round(latest_weight / (height_m * height_m), 1)
+
+    if abs(change) < 1:
+        trend = '近阶段体重整体较平稳，波动幅度不大。'
+    elif change > 0:
+        trend = f'近阶段体重累计上升 {change} kg，整体呈缓慢上升趋势。'
+    else:
+        trend = f'近阶段体重累计下降 {abs(change)} kg，整体呈下降趋势。'
+
+    weekly_change = round(change / days * 7, 1)
+    if abs(weekly_change) <= 1:
+        pace = f'按周估算变化约 {weekly_change:+.1f} kg，节奏基本在可接受范围内。'
+    else:
+        pace = f'按周估算变化约 {weekly_change:+.1f} kg，变化节奏偏快，建议避免过度增重或减重。'
+
+    if bmi < 18.5:
+        bmi_text = f'当前 BMI 为 {bmi}，处于偏瘦区间，建议优先关注营养摄入和力量训练。'
+    elif bmi <= 23.9:
+        bmi_text = f'当前 BMI 为 {bmi}，处于正常区间，重点是维持稳定习惯。'
+    elif bmi <= 27.9:
+        bmi_text = f'当前 BMI 为 {bmi}，已进入超重区间，建议控制总热量并提高活动量。'
+    else:
+        bmi_text = f'当前 BMI 为 {bmi}，处于肥胖区间，建议尽快建立持续的体重管理计划。'
+
+    advice = '饮食上尽量稳定三餐、减少高糖高油；运动上保持每周有氧加基础力量训练，并继续规律记录体重。'
+    risk = '如果后续连续数周快速波动，或伴随明显乏力、食欲异常等情况，建议进一步咨询专业医生。'
+
+    return '\n'.join([trend, pace, bmi_text, advice, risk])
+
+
+def normalize_weight_analysis_content(content, fallback):
+    if not content:
+        return fallback
+
+    cleaned = content.strip()
+    if '```json' in cleaned:
+        cleaned = cleaned.split('```json', 1)[1].split('```', 1)[0].strip()
+    elif '```' in cleaned:
+        cleaned = cleaned.split('```', 1)[1].split('```', 1)[0].strip()
+
+    try:
+        payload = json.loads(cleaned)
+        if isinstance(payload, dict):
+            paragraphs = []
+            for key in ['summary', 'trend', 'pace', 'bmi', 'advice', 'risk', 'analysis']:
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    paragraphs.append(value.strip())
+            if not paragraphs:
+                for value in payload.values():
+                    if isinstance(value, str) and value.strip():
+                        paragraphs.append(value.strip())
+            return '\n'.join(paragraphs) if paragraphs else fallback
+        if isinstance(payload, list):
+            paragraphs = [str(item).strip() for item in payload if str(item).strip()]
+            return '\n'.join(paragraphs) if paragraphs else fallback
+    except json.JSONDecodeError:
+        pass
+
+    return cleaned
 
 
 @bmi_router.post('/weight')
@@ -297,13 +377,13 @@ def analyze_weight(db: Session = Depends(get_db), user: User = Depends(get_curre
 
     profile = db.query(BmiProfile).filter_by(user_id=user.id).first()
     prompt = build_weight_analysis_prompt(records, profile)
+    fallback = fallback_weight_analysis(records, profile)
 
     start_time = time.time()
-    content = generate_bmi_advice_with_ai(prompt, max_tokens=800)
+    content = generate_weight_analysis_with_ai(prompt, max_tokens=MAX_ANALYSIS_TOKENS)
     duration = time.time() - start_time
     print(f"📌 体重分析生成完成，耗时 {duration:.2f}s")
 
-    if not content:
-        return JSONResponse({'error': 'AI 分析服务暂不可用，请稍后再试'}, status_code=503)
+    content = normalize_weight_analysis_content(content, fallback)
 
     return {'success': True, 'data': {'analysis': content}}

@@ -807,7 +807,36 @@ const analysisInsightTags = computed(() => {
 const analysisParagraphs = computed(() => {
   if (!weightAnalysis.value) return []
 
-  const cleaned = weightAnalysis.value
+  const raw = weightAnalysis.value.trim()
+
+  if (raw.startsWith('{') || raw.startsWith('[')) {
+    try {
+      const payload = JSON.parse(raw)
+      if (Array.isArray(payload)) {
+        const items = payload.map(item => String(item).trim()).filter(Boolean)
+        if (items.length) return items
+      }
+      if (payload && typeof payload === 'object') {
+        const keys = ['summary', 'trend', 'pace', 'bmi', 'advice', 'risk', 'analysis']
+        const items = keys
+          .map(key => payload[key])
+          .filter(item => typeof item === 'string' && item.trim())
+          .map(item => item.trim())
+
+        if (items.length) return items
+
+        const fallbackItems = Object.values(payload)
+          .filter(item => typeof item === 'string' && item.trim())
+          .map(item => item.trim())
+
+        if (fallbackItems.length) return fallbackItems
+      }
+    } catch {
+      // Ignore and continue with plain-text parsing.
+    }
+  }
+
+  const cleaned = raw
     .replace(/\r/g, '\n')
     .replace(/\n{2,}/g, '\n')
     .split('\n')
