@@ -13,8 +13,12 @@
                 </el-icon>
                 <span>体素花园</span>
               </div>
-              <div class="card-subtitle">{{ animList[animIndex].name }} · {{ animPaused ? '已暂停' : `${10 - animSeconds}s` }}</div>
+              <div class="card-subtitle">{{ animList[animIndex].name }} · {{ animPaused ? '已暂停' : `${60 - animSeconds}s` }}</div>
             </div>
+            <button class="sidebar-switch-btn" @click="sidebarMode = 'progress'">
+              <el-icon><Timer /></el-icon>
+              <span>人生进度</span>
+            </button>
           </div>
 
           <div ref="animationShell" class="animation-shell">
@@ -47,7 +51,7 @@
           </div>
         </el-card>
 
-        <LifeProgress v-else key="progress" />
+        <LifeProgress v-else key="progress" @switch-mode="sidebarMode = 'anim'" />
         </Transition>
       </aside>
 
@@ -116,7 +120,7 @@
 <script>
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch, markRaw, defineAsyncComponent, h } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, Odometer } from '@element-plus/icons-vue'
+import { Plus, MagicStick, Odometer, Timer } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
@@ -218,7 +222,6 @@ export default {
 
     // Sidebar toggle: anim <-> progress
     const sidebarMode = ref('anim')
-    let sidebarTimerId = null
 
     // Animation rotation
     const createScene = (idx, token = 0) => ({
@@ -418,7 +421,6 @@ export default {
 
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
-      if (sidebarTimerId) clearTimeout(sidebarTimerId)
       clearAnimReadyWatch()
     })
 
@@ -432,15 +434,6 @@ export default {
           animNext()
         }
       }, 1000)
-      function scheduleSidebar() {
-        // 花园动画显示1分钟，人生进度显示5分钟
-        const duration = sidebarMode.value === 'anim' ? 60000 : 300000
-        sidebarTimerId = setTimeout(() => {
-          sidebarMode.value = sidebarMode.value === 'anim' ? 'progress' : 'anim'
-          scheduleSidebar()
-        }, duration)
-      }
-      scheduleSidebar()
     })
 
     watch(animIndex, (idx) => {
@@ -630,6 +623,28 @@ export default {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
   border-color: var(--primary-color);
+}
+
+.sidebar-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.sidebar-switch-btn:hover {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.2);
 }
 
 .anim-dots {

@@ -183,7 +183,10 @@ def generate_with_openai(prompt):
 
     if response.status_code == 200:
         result = response.json()
-        content = result['choices'][0]['message']['content']
+        content = result.get('choices', [{}])[0].get('message', {}).get('content')
+        if not content:
+            print(f"⚠️ OpenAI API 返回结构异常: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
+            return generate_fallback_fortune(1)
 
         try:
             if '```json' in content:
@@ -393,7 +396,11 @@ def generate_with_compatible_api(prompt):
             print(f"错误信息: {response.text}")
             return None
 
-        content = response_data['choices'][0]['message']['content']
+        try:
+            content = response_data['choices'][0]['message']['content']
+        except (KeyError, IndexError, TypeError):
+            print(f"⚠️ AI API 返回结构异常: {json.dumps(response_data, ensure_ascii=False, default=str)[:500]}")
+            return None
 
         print(f"\n📜 AI 生成的原始内容:")
         print("-" * 60)

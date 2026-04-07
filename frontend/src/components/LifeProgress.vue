@@ -11,6 +11,10 @@
       <div class="lp-settings-btn" @click="showSettings = !showSettings" title="设置">
         <el-icon><Setting /></el-icon>
       </div>
+      <button class="sidebar-switch-btn" @click="emit('switch-mode')" title="切换到体素花园">
+        <el-icon><MagicStick /></el-icon>
+        <span>体素花园</span>
+      </button>
     </div>
 
     <Transition name="settings-slide">
@@ -64,7 +68,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { Odometer, Setting } from '@element-plus/icons-vue'
+import { Odometer, Setting, MagicStick } from '@element-plus/icons-vue'
+
+const emit = defineEmits(['switch-mode'])
 
 // --- 常量 ---
 const WORK_START = 9
@@ -561,6 +567,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 20px;
+  gap: 8px;
 }
 
 .lp-settings-btn {
@@ -572,6 +579,29 @@ onBeforeUnmount(() => {
 }
 .lp-settings-btn:hover {
   color: var(--primary-color);
+}
+
+.sidebar-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sidebar-switch-btn:hover {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.2);
 }
 
 .lp-settings {

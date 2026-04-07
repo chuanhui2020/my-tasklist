@@ -144,7 +144,11 @@ def generate_with_openai(prompt, max_tokens=MAX_TOKENS):
         return None
 
     result = response.json()
-    return result['choices'][0]['message']['content']
+    try:
+        return result['choices'][0]['message']['content']
+    except (KeyError, IndexError, TypeError):
+        print(f"⚠️ OpenAI API 返回结构异常: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
+        return None
 
 
 def generate_with_gemini(prompt, max_tokens=MAX_TOKENS):
@@ -211,7 +215,11 @@ def generate_with_compatible_api(prompt, max_tokens=MAX_TOKENS):
         return None
 
     response_data = response.json()
-    return response_data['choices'][0]['message']['content']
+    try:
+        return response_data['choices'][0]['message']['content']
+    except (KeyError, IndexError, TypeError):
+        print(f"⚠️ AI API 返回结构异常: {json.dumps(response_data, ensure_ascii=False, default=str)[:500]}")
+        return None
 
 
 def generate_bmi_advice_with_ai(prompt, max_tokens=MAX_TOKENS):
