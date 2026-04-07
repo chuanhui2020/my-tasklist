@@ -8,6 +8,10 @@
         </div>
         <div class="lp-subtitle">系统监测中...请勿关闭人生</div>
       </div>
+      <button v-if="isAdmin" class="menu-upload-btn" @click="openUploadDialog" title="上传本周菜单">
+        <el-icon><Upload /></el-icon>
+        <span>上传菜单</span>
+      </button>
       <div class="lp-settings-btn" @click="showSettings = !showSettings" title="设置">
         <el-icon><Setting /></el-icon>
       </div>
@@ -31,7 +35,8 @@
         v-for="bar in bars"
         :key="bar.id"
         class="progress-item"
-        :class="{ 'is-alert': bar.alert }"
+        :class="{ 'is-alert': bar.alert, 'is-clickable': bar.clickable }"
+        @click="handleBarClick(bar)"
       >
         <div class="progress-meta">
           <div class="progress-info">
@@ -49,6 +54,37 @@
         </div>
       </div>
     </div>
+
+    <el-dialog v-model="menuDialogVisible" :title="menuDialogTitle" width="560px">
+      <div v-if="activeMenuType === 'fruit'" class="menu-dialog-fruit">
+        <span v-for="item in activeFruitItems" :key="item" class="menu-chip">{{ item }}</span>
+        <div v-if="!activeFruitItems.length" class="menu-empty">今日暂无水果安排</div>
+      </div>
+      <div v-else class="menu-dialog-grid">
+        <div v-for="group in activeMealGroups" :key="group.label" class="menu-dialog-group">
+          <div class="menu-dialog-label">{{ group.label }}</div>
+          <div class="menu-dialog-items">
+            <span v-for="item in group.items" :key="item" class="menu-chip">{{ item }}</span>
+            <span v-if="!group.items.length" class="menu-chip menu-chip-empty">暂无</span>
+          </div>
+        </div>
+        <div v-if="!activeMealGroups.length" class="menu-empty">今日暂无菜单安排</div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="uploadDialogVisible" title="上传本周菜单" width="480px">
+      <div class="upload-panel">
+        <div class="upload-tip">仅管理员可上传，本次上传会直接覆盖本周菜单。</div>
+        <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" class="upload-input" @change="handleFileChange" />
+        <div class="upload-file-name">{{ selectedFileName || '请选择菜单图片（jpg/png/webp）' }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="closeUploadDialog">取消</el-button>
+        <el-button type="primary" :loading="uploadingMenu" :disabled="!selectedMenuFile" @click="submitMenuUpload">
+          上传并解析
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 喝水/拉屎提醒弹窗 -->
     <Teleport to="body">
@@ -68,9 +104,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { Odometer, Setting, MagicStick } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Odometer, Setting, MagicStick, Upload } from '@element-plus/icons-vue'
+import api from '@/api'
+import { useAuth } from '@/composables/useAuth'
 
 const emit = defineEmits(['switch-mode'])
+const { isAdmin } = useAuth()
 
 // --- 常量 ---
 const WORK_START = 9
@@ -101,6 +141,21 @@ const now = ref(new Date())
 const defaultRetireDate = '2065-01'
 const retireDate = ref(localStorage.getItem('life_progress_retire_date') || defaultRetireDate)
 const showSettings = ref(false)
+const todayMenu = ref({
+  week_start: '',
+  weekday: '',
+  lunch: null,
+  fruit: [],
+  dinner: null,
+  available: false
+})
+const menuDialogVisible = ref(false)
+const activeMenuType = ref('lunch')
+const uploadDialogVisible = ref(false)
+const selectedMenuFile = ref(null)
+const selectedFileName = ref('')
+const uploadingMenu = ref(false)
+const fileInputRef = ref(null)
 
 // 提醒弹窗
 const alertVisible = ref(false)
@@ -121,6 +176,99 @@ function getBarStyle(percent, done, alert) {
   if (percent >= 80) return { colorClass: 'fill-warning', valueClass: 'value-warning' }
   return { colorClass: 'fill-cyber', valueClass: '' }
 }
+
+function flattenMealItems(menu) {
+  if (!menu || typeof menu !== 'object') return []
+  const items = []
+  for (const key of ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥']) {
+    const bucket = Array.isArray(menu[key]) ? menu[key] : []
+    for (const item of bucket) {
+      const text = String(item || '').trim()
+      if (text) items.push(text)
+    }
+  }
+  return items
+}
+
+function buildMenuPreview(items, emptyText) {
+  if (!items.length) return emptyText
+  if (items.length <= 2) return items.join(' · ')
+  return `${items.slice(0, 2).join(' · ')} 等 ${items.length} 项`
+}
+
+async function loadTodayMenu() {
+  try {
+    const res = await api.getTodayMenu()
+    todayMenu.value = {
+      week_start: res?.data?.week_start || '',
+      weekday: res?.data?.weekday || '',
+      lunch: res?.data?.lunch || null,
+      fruit: Array.isArray(res?.data?.fruit) ? res.data.fruit : [],
+      dinner: res?.data?.dinner || null,
+      available: res?.data?.available === true
+    }
+  } catch (error) {
+    console.error('加载今日菜单失败:', error)
+  }
+}
+
+function openUploadDialog() {
+  uploadDialogVisible.value = true
+}
+
+function closeUploadDialog() {
+  uploadDialogVisible.value = false
+  selectedMenuFile.value = null
+  selectedFileName.value = ''
+  if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
+function handleFileChange(event) {
+  const file = event.target.files?.[0]
+  selectedMenuFile.value = file || null
+  selectedFileName.value = file?.name || ''
+}
+
+async function submitMenuUpload() {
+  if (!selectedMenuFile.value) return
+  uploadingMenu.value = true
+  try {
+    await api.uploadWeeklyMenu(selectedMenuFile.value)
+    ElMessage.success('本周菜单已更新')
+    closeUploadDialog()
+    await loadTodayMenu()
+  } catch (error) {
+    const message = error.response?.data?.error || '菜单上传失败'
+    ElMessage.error(message)
+  } finally {
+    uploadingMenu.value = false
+  }
+}
+
+function handleBarClick(bar) {
+  if (!bar.clickable || !bar.menuType) return
+  activeMenuType.value = bar.menuType
+  menuDialogVisible.value = true
+}
+
+const menuDialogTitle = computed(() => {
+  if (activeMenuType.value === 'fruit') return '今日水果'
+  if (activeMenuType.value === 'dinner') return '今日晚餐'
+  return '今日午餐'
+})
+
+const activeMealGroups = computed(() => {
+  const source = activeMenuType.value === 'dinner' ? todayMenu.value.dinner : todayMenu.value.lunch
+  if (!source) return []
+  return ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥'].map(label => ({
+    label,
+    items: Array.isArray(source[label]) ? source[label] : []
+  }))
+})
+
+const activeFruitItems = computed(() => {
+  return Array.isArray(todayMenu.value.fruit) ? todayMenu.value.fruit : []
+})
 
 // --- 计算进度 ---
 const bars = computed(() => {
@@ -240,77 +388,103 @@ const bars = computed(() => {
     ...getBarStyle(weekendPct, weekendDone, false),
   })
 
-  // 4.5 距离下顿饭
+  // 4.5 午饭 / 水果 / 晚饭
   const LUNCH_START = 12
   const LUNCH_END = 14
+  const FRUIT_START = 14.5
+  const FRUIT_END = 15
   const DINNER_START = 18
   const DINNER_END = 19
 
-  let mealTitle, mealSubtitle, mealDisplay, mealPct, mealDone
-  if (curHour >= DINNER_END) {
-    // 晚饭后 → 等明天午饭
-    mealDone = true
-    mealPct = 100
-    mealTitle = '距离下顿饭'
-    mealSubtitle = '今日干饭任务已完成'
-    mealDisplay = '今天吃够了，别吃夜宵了...算了吃吧'
-  } else if (curHour >= DINNER_START) {
-    // 晚饭中
-    mealDone = true
-    mealPct = 100
-    mealTitle = '晚饭时间'
-    mealSubtitle = '今天也辛苦了，多吃点'
-    const quips = ['晚饭进行中，今天也辛苦了', '吃饱了才有力气加班（不是）', '干饭！干饭！干饭！', '今晚吃点好的，犒劳自己', '外卖到了，冲冲冲!']
-    mealDisplay = quips[n.getMinutes() % quips.length]
-  } else if (curHour >= LUNCH_END) {
-    // 午饭后 → 等晚饭
-    mealDone = false
-    mealTitle = '距离晚饭'
-    mealSubtitle = '人是铁饭是钢，一顿不吃饿得慌'
-    const remainMin = Math.floor((DINNER_START - curHour) * 60)
-    mealPct = Math.max((1 - remainMin / ((DINNER_START - LUNCH_END) * 60)) * 100, 0)
-    if (remainMin <= 30) {
-      mealDisplay = `还有${remainMin}分钟，已经在想吃什么了`
-    } else if (remainMin <= 60) {
-      mealDisplay = `还有${remainMin}分钟，下午茶先顶一下?`
+  const lunchItems = flattenMealItems(todayMenu.value.lunch)
+  const fruitItems = Array.isArray(todayMenu.value.fruit) ? todayMenu.value.fruit : []
+  const dinnerItems = flattenMealItems(todayMenu.value.dinner)
+
+  const buildTimedBar = ({ id, titleBefore, titleDuring, titleAfter, subtitle, preview, menuType, start, end, previousAnchor = 0, quips = [] }) => {
+    let title = titleBefore
+    let display = ''
+    let percent = 0
+    let done = false
+    const hasMenu = preview !== '今日暂无菜单'
+
+    if (curHour >= end) {
+      title = titleAfter
+      percent = 100
+      done = true
+      display = quips.length ? quips[n.getMinutes() % quips.length] : '今日安排已完成'
+    } else if (curHour >= start) {
+      title = titleDuring
+      percent = 100
+      done = true
+      display = quips.length ? quips[n.getMinutes() % quips.length] : '现在就是最佳时间'
     } else {
-      const rh = Math.floor(remainMin / 60)
-      const rm = remainMin % 60
-      mealDisplay = `还有${rh}小时${rm}分钟，漫长的等待`
+      const remainMin = Math.max(Math.floor((start - curHour) * 60), 0)
+      const totalWindow = Math.max((start - previousAnchor) * 60, 1)
+      percent = Math.max((1 - remainMin / totalWindow) * 100, 0)
+      if (remainMin <= 30) {
+        display = `还有${remainMin}分钟，快到了`
+      } else if (remainMin <= 60) {
+        display = `还有${remainMin}分钟，再等等`
+      } else {
+        const rh = Math.floor(remainMin / 60)
+        const rm = remainMin % 60
+        display = `还有${rh}小时${rm}分钟`
+      }
     }
-  } else if (curHour >= LUNCH_START) {
-    // 午饭中
-    mealDone = true
-    mealPct = 100
-    mealTitle = '午饭时间'
-    mealSubtitle = '干饭人干饭魂，干饭都是人上人'
-    const quips = ['干饭中，勿扰!', '嘴巴正在加班中...', '热干面还是黄焖鸡？都要!', '碳水快乐，谁懂?', '饭搭子已就位，开冲!']
-    mealDisplay = quips[n.getMinutes() % quips.length]
-  } else {
-    // 午饭前 → 等午饭
-    mealDone = false
-    mealTitle = '距离午饭'
-    mealSubtitle = '干饭人干饭魂，干饭都是人上人'
-    const remainMin = Math.floor((LUNCH_START - curHour) * 60)
-    mealPct = Math.max((1 - remainMin / (LUNCH_START * 60)) * 100, 0)
-    if (remainMin <= 30) {
-      mealDisplay = `还有${remainMin}分钟，肚子已经在叫了!`
-    } else if (remainMin <= 60) {
-      mealDisplay = `还有${remainMin}分钟，再忍忍!`
-    } else {
-      const rh = Math.floor(remainMin / 60)
-      const rm = remainMin % 60
-      mealDisplay = `还有${rh}小时${rm}分钟，早饭白吃了?`
+
+    return {
+      id,
+      title,
+      subtitle: hasMenu ? `${subtitle} · ${preview}` : preview,
+      percent: percent.toFixed(1),
+      display,
+      clickable: hasMenu,
+      menuType,
+      ...getBarStyle(percent, done, false),
     }
   }
-  list.push({
-    id: 'meal',
-    title: mealTitle,
-    subtitle: mealSubtitle,
-    percent: mealPct.toFixed ? mealPct.toFixed(1) : mealPct,
-    display: mealDisplay,
-    ...getBarStyle(mealPct, mealDone, false),
-  })
+
+  list.push(buildTimedBar({
+    id: 'lunch-menu',
+    titleBefore: '距离午饭',
+    titleDuring: '午饭时间',
+    titleAfter: '今日午餐',
+    subtitle: '点击查看午餐详情',
+    preview: buildMenuPreview(lunchItems, '今日暂无菜单'),
+    menuType: 'lunch',
+    start: LUNCH_START,
+    end: LUNCH_END,
+    previousAnchor: 8,
+    quips: ['干饭中，勿扰!', '饭搭子已就位，开冲!', '碳水快乐，谁懂?', '今天中午吃点好的']
+  }))
+
+  list.push(buildTimedBar({
+    id: 'fruit-menu',
+    titleBefore: '距离水果',
+    titleDuring: '水果时间',
+    titleAfter: '今日水果',
+    subtitle: '点击查看水果安排',
+    preview: buildMenuPreview(fruitItems, '今日暂无菜单'),
+    menuType: 'fruit',
+    start: FRUIT_START,
+    end: FRUIT_END,
+    previousAnchor: LUNCH_END,
+    quips: ['水果时间到，补充维生素!', '来点水果，下午更精神', '今天的水果已经就位']
+  }))
+
+  list.push(buildTimedBar({
+    id: 'dinner-menu',
+    titleBefore: '距离晚饭',
+    titleDuring: '晚饭时间',
+    titleAfter: '今日晚餐',
+    subtitle: '点击查看晚餐详情',
+    preview: buildMenuPreview(dinnerItems, '今日暂无菜单'),
+    menuType: 'dinner',
+    start: DINNER_START,
+    end: DINNER_END,
+    previousAnchor: FRUIT_END,
+    quips: ['晚饭进行中，今天也辛苦了', '干饭！干饭！干饭！', '今晚吃点好的，犒劳自己', '外卖到了，冲冲冲!']
+  }))
 
   // 5. 距离发薪
   let nextPayday
@@ -510,6 +684,7 @@ const poopAlerts = [
 ]
 
 let pendingAlertType = null
+let lastMenuDateKey = now.value.toDateString()
 
 function triggerAlert(type) {
   const pool = type === 'water' ? waterAlerts : poopAlerts
@@ -535,10 +710,17 @@ function dismissAlert() {
 // --- 定时器 ---
 let timer = null
 onMounted(() => {
+  loadTodayMenu()
   timer = setInterval(() => {
     now.value = new Date()
     const curH = now.value.getHours()
     const curM = now.value.getMinutes()
+    const currentDateKey = now.value.toDateString()
+
+    if (currentDateKey !== lastMenuDateKey) {
+      lastMenuDateKey = currentDateKey
+      loadTodayMenu()
+    }
 
     // 喝水提醒：整点时刻前后5分钟内触发
     if (WATER_HOURS.includes(curH) && curM < 5 && alertedWaterHour.value !== curH && !alertVisible.value) {
@@ -568,6 +750,29 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   margin-bottom: 20px;
   gap: 8px;
+}
+
+.lp-header-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(6, 182, 212, 0.28);
+  border-radius: 10px;
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.menu-upload-btn:hover {
+  border-color: rgba(6, 182, 212, 0.5);
+  background: rgba(6, 182, 212, 0.16);
 }
 
 .lp-settings-btn {
@@ -688,6 +893,14 @@ onBeforeUnmount(() => {
   transition: all 0.3s ease;
 }
 
+.progress-item.is-clickable {
+  cursor: pointer;
+}
+
+.progress-item.is-clickable:hover {
+  transform: translateY(-1px);
+}
+
 .progress-item.is-alert {
   animation: item-glow 1s ease-in-out infinite alternate;
 }
@@ -722,6 +935,7 @@ onBeforeUnmount(() => {
 .progress-desc {
   font-size: 12px;
   color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .progress-value {
@@ -808,6 +1022,69 @@ onBeforeUnmount(() => {
   background: linear-gradient(90deg, #ef4444, #f97316);
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
   animation: bar-pulse 1s ease-in-out infinite alternate;
+}
+
+.menu-dialog-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.menu-dialog-group {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.menu-dialog-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.menu-dialog-items,
+.menu-dialog-fruit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.menu-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.24);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.menu-chip-empty {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: var(--text-muted);
+}
+
+.menu-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.upload-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.upload-tip,
+.upload-file-name {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.upload-input {
+  width: 100%;
+  color: var(--text-primary);
 }
 
 @keyframes bar-pulse {

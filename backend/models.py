@@ -150,3 +150,28 @@ class WeightRecord(Base):
             'date': self.date.strftime('%Y-%m-%d'),
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
         }
+
+
+class WeeklyMenu(Base):
+    __tablename__ = 'weekly_menus'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    week_start = mapped_column(Date, unique=True, nullable=False)
+    menu_json = mapped_column(Text, nullable=False)
+    uploaded_by: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        try:
+            menu_data = json.loads(self.menu_json)
+        except (json.JSONDecodeError, TypeError):
+            menu_data = {}
+        return {
+            'id': self.id,
+            'week_start': self.week_start.strftime('%Y-%m-%d'),
+            'menu': menu_data,
+            'uploaded_by': self.uploaded_by,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None,
+        }

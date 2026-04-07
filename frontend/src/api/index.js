@@ -146,6 +146,23 @@ export default {
     return api.post('/bmi/weight/analysis')
   },
 
+  getTodayMenu() {
+    return api.get('/menu/today')
+  },
+
+  uploadWeeklyMenu(file, weekStart = '') {
+    const formData = new FormData()
+    formData.append('image', file)
+    if (weekStart) {
+      formData.append('week_start', weekStart)
+    }
+    return api.post('/menu/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  },
+
   getSecureNotes() {
     return api.get('/secure-notes')
   },

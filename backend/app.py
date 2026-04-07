@@ -12,7 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import inspect, text
 from config import settings
 from database import engine, SessionLocal, Base
-from models import User, Task, FortuneRecord, BmiProfile, SecureNote, WeightRecord
+from models import User, Task, FortuneRecord, BmiProfile, SecureNote, WeightRecord, WeeklyMenu
 
 
 @asynccontextmanager
@@ -111,10 +111,12 @@ from routes.auth_routes import auth_router
 from routes.task_routes import task_router
 from routes.fortune_routes import fortune_router
 from routes.bmi_routes import bmi_router
+from routes.menu_routes import menu_router
 from routes.secure_note_routes import secure_note_router
 
 app.include_router(auth_router)
 app.include_router(task_router)
 app.include_router(fortune_router)
 app.include_router(bmi_router)
+app.include_router(menu_router)
 app.include_router(secure_note_router)
