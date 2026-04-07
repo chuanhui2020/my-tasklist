@@ -2,12 +2,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import json
-import os
 import re
 import time
 
-import requests as http_requests
-from ai_logger import log_ai_transaction
+from ai_client import chat_completion
 
 from datetime import date, timedelta
 from database import get_db
@@ -115,151 +113,8 @@ def extract_advice(content, fallback):
         return normalize_advice(cleaned, fallback)
 
 
-from ai_logger import log_ai_transaction
-
-
-def generate_with_openai(prompt, max_tokens=MAX_TOKENS):
-    start_time = time.time()
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        return None
-
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json'
-    }
-    data = {
-        'model': 'gpt-3.5-turbo',
-        'messages': [
-            {'role': 'system', 'content': '你是一位简洁的健康管理助手。'},
-            {'role': 'user', 'content': prompt}
-        ],
-        'temperature': 0.5,
-        'max_tokens': max_tokens
-    }
-
-    response = http_requests.post(
-        'https://api.openai.com/v1/chat/completions',
-        headers=headers,
-        json=data,
-        timeout=30
-    )
-
-    duration = time.time() - start_time
-    result = response.json() if response.status_code == 200 else {"error": response.text}
-    log_ai_transaction("OpenAI/BMI", "gpt-3.5-turbo", data, result, response.status_code, duration)
-
-    if response.status_code != 200:
-        return None
-
-    try:
-        return result['choices'][0]['message']['content']
-    except (KeyError, IndexError, TypeError):
-        return None
-
-
-def generate_with_gemini(prompt, max_tokens=MAX_TOKENS):
-    start_time = time.time()
-    api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key:
-        return None
-
-    url = (
-        'https://generativelanguage.googleapis.com/v1beta/models/'
-        f'gemini-pro:generateContent?key={api_key}'
-    )
-    data = {
-        'contents': [{'parts': [{'text': prompt}]}],
-        'generationConfig': {
-            'temperature': 0.5,
-            'maxOutputTokens': max_tokens
-        }
-    }
-
-    response = http_requests.post(url, json=data, timeout=30)
-    duration = time.time() - start_time
-    result = response.json() if response.status_code == 200 else {"error": response.text}
-    log_ai_transaction("Gemini/BMI", "gemini-pro", data, result, response.status_code, duration)
-
-    if response.status_code != 200:
-        return None
-
-    candidates = result.get('candidates', [])
-    if not candidates:
-        return None
-
-    return candidates[0]['content']['parts'][0]['text']
-
-
-def generate_with_compatible_api(prompt, max_tokens=MAX_TOKENS):
-    start_time = time.time()
-    api_key = os.environ.get('AI_API_KEY')
-    if not api_key:
-        return None
-
-    base_url = os.environ.get('AI_BASE_URL', 'https://api.deepseek.com')
-    model = os.environ.get('AI_MODEL', 'deepseek-chat')
-
-    url = base_url.rstrip('/')
-    if not url.endswith('/v1/chat/completions') and '/v1' not in url:
-        url += '/v1/chat/completions'
-    elif not url.endswith('/chat/completions'):
-        url += '/chat/completions'
-
-    payload = {
-        'model': model,
-        'messages': [
-            {'role': 'system', 'content': '你是一位简洁的健康管理助手，输出必须是纯 JSON。'},
-            {'role': 'user', 'content': prompt}
-        ],
-        'temperature': 0.5,
-        'max_tokens': max_tokens,
-        'stream': False
-    }
-
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {api_key}'
-    }
-
-    response = http_requests.post(url, headers=headers, json=payload, timeout=60)
-    duration = time.time() - start_time
-    response_data = response.json() if response.status_code == 200 else {"error": response.text}
-    log_ai_transaction("Compatible/BMI", model, payload, response_data, response.status_code, duration)
-
-    if response.status_code != 200:
-        return None
-
-    try:
-        return response_data['choices'][0]['message']['content']
-    except (KeyError, IndexError, TypeError):
-        return None
-
-
 def generate_bmi_advice_with_ai(prompt, max_tokens=MAX_TOKENS):
-    ai_service = os.environ.get('AI_SERVICE', 'openai').lower()
-    openai_key = os.environ.get('OPENAI_API_KEY')
-    gemini_key = os.environ.get('GEMINI_API_KEY')
-    compatible_key = os.environ.get('AI_API_KEY')
-
-    content = None
-    if ai_service in ['compatible', 'deepseek', 'siliconflow']:
-        content = generate_with_compatible_api(prompt, max_tokens)
-    elif ai_service == 'gemini' and gemini_key:
-        content = generate_with_gemini(prompt, max_tokens)
-    elif ai_service == 'openai' and openai_key:
-        content = generate_with_openai(prompt, max_tokens)
-    elif ai_service == 'local':
-        content = None
-    else:
-        if compatible_key:
-            content = generate_with_compatible_api(prompt, max_tokens)
-        elif openai_key:
-            content = generate_with_openai(prompt, max_tokens)
-        elif gemini_key:
-            content = generate_with_gemini(prompt, max_tokens)
-
-    return content
+    return chat_completion(prompt, '你是一位简洁的健康管理助手，输出必须是纯 JSON。', temperature=0.5, max_tokens=max_tokens)
 
 
 @bmi_router.post('/advice')

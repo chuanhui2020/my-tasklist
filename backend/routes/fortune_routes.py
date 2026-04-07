@@ -1,10 +1,7 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-import os
 import json
-import re
 import sys
 import time
 import traceback
@@ -12,8 +9,7 @@ from datetime import datetime, date
 
 import random
 
-import requests as http_requests
-from ai_logger import log_ai_transaction
+from ai_client import chat_completion
 
 from database import get_db
 from auth_utils import get_current_user
@@ -106,46 +102,21 @@ def build_fortune_prompt(fortune_number, fortune_type):
 
 
 def generate_fortune_with_ai(fortune_number, fortune_type):
-    ai_service = os.environ.get('AI_SERVICE', 'openai').lower()
-
     print(f"\n🎋 开始生成第 {fortune_number} 签 (预定签型: {fortune_type})")
-    print(f"📋 当前配置:")
-    print(f"   AI_SERVICE = {ai_service}")
-
-    openai_key = os.environ.get('OPENAI_API_KEY')
-    gemini_key = os.environ.get('GEMINI_API_KEY')
-    compatible_key = os.environ.get('AI_API_KEY')
-
-    print(f"   OPENAI_API_KEY = {'已配置' if openai_key else '未配置'}")
-    print(f"   GEMINI_API_KEY = {'已配置 (' + gemini_key[:8] + '...)' if gemini_key else '未配置'}")
-    print(f"   AI_API_KEY     = {'已配置 (' + compatible_key[:8] + '...)' if compatible_key else '未配置'}")
 
     prompt = build_fortune_prompt(fortune_number, fortune_type)
-    fortune_data = None
+    content = chat_completion(prompt, SYSTEM_PROMPT, temperature=0.95, max_tokens=800)
 
-    if ai_service in ['compatible', 'deepseek', 'siliconflow']:
-        print(f"🎯 决策：使用兼容模式 (DeepSeek/SiliconFlow/Zhipu)")
-        fortune_data = generate_with_compatible_api(prompt)
-    elif ai_service == 'gemini' and gemini_key:
-        print(f"🎯 决策：使用 Gemini API")
-        fortune_data = generate_with_gemini(prompt)
-    elif ai_service == 'openai' and openai_key:
-        print(f"🎯 决策：使用 OpenAI API")
-        fortune_data = generate_with_openai(prompt)
-    elif ai_service == 'local':
-        print(f"🎯 决策：强制使用本地模式")
-    else:
-        if compatible_key:
-            print(f"🎯 决策：默认使用兼容模式")
-            fortune_data = generate_with_compatible_api(prompt)
-        elif openai_key:
-            print(f"🎯 决策：默认使用 OpenAI API")
-            fortune_data = generate_with_openai(prompt)
-        elif gemini_key:
-            print(f"🎯 决策：默认使用 Gemini API")
-            fortune_data = generate_with_gemini(prompt)
-        else:
-            print(f"⚠️  未配置任何 API Key")
+    fortune_data = None
+    if content:
+        try:
+            if '```json' in content:
+                content = content.split('```json')[1].split('```')[0].strip()
+            elif '```' in content:
+                content = content.split('```')[1].split('```')[0].strip()
+            fortune_data = json.loads(content)
+        except Exception:
+            fortune_data = None
 
     if not fortune_data:
         print(f"\n🔄 自动降级到备用签文")
@@ -156,203 +127,6 @@ def generate_fortune_with_ai(fortune_number, fortune_type):
     fortune_data['typeText'] = get_fortune_type_text(fortune_type)
 
     return fortune_data
-
-
-def generate_with_openai(prompt):
-    start_time = time.time()
-    api_key = os.environ.get('OPENAI_API_KEY')
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json'
-    }
-
-    data = {
-        'model': 'gpt-3.5-turbo',
-        'messages': [
-            {'role': 'system', 'content': SYSTEM_PROMPT},
-            {'role': 'user', 'content': prompt}
-        ],
-        'temperature': 0.95,
-        'max_tokens': 800
-    }
-
-    response = http_requests.post(
-        'https://api.openai.com/v1/chat/completions',
-        headers=headers,
-        json=data,
-        timeout=30
-    )
-
-    duration = time.time() - start_time
-    result = response.json() if response.status_code == 200 else {"error": response.text}
-    log_ai_transaction("OpenAI", "gpt-3.5-turbo", data, result, response.status_code, duration)
-
-    if response.status_code == 200:
-        content = result.get('choices', [{}])[0].get('message', {}).get('content')
-        if not content:
-            print(f"⚠️ OpenAI API 返回结构异常: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
-            return generate_fallback_fortune(1)
-
-        try:
-            if '```json' in content:
-                content = content.split('```json')[1].split('```')[0].strip()
-            elif '```' in content:
-                content = content.split('```')[1].split('```')[0].strip()
-
-            return json.loads(content)
-        except Exception:
-            return generate_fallback_fortune(1)
-    else:
-        raise Exception(f"OpenAI API error: {response.status_code}")
-
-
-def generate_with_gemini(prompt):
-    start_time = time.time()
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}'
-
-    data = {
-        'contents': [{
-            'parts': [{'text': prompt}]
-        }],
-        'generationConfig': {
-            'temperature': 0.8,
-            'maxOutputTokens': 800
-        }
-    }
-
-    try:
-        response = http_requests.post(url, json=data, timeout=30)
-        duration = time.time() - start_time
-        result = response.json() if response.status_code == 200 else {"error": response.text}
-        log_ai_transaction("Gemini/Fortune", "gemini-pro", data, result, response.status_code, duration)
-
-        if response.status_code == 200:
-            if 'candidates' in result and len(result['candidates']) > 0:
-                candidate = result['candidates'][0]
-                content = candidate['content']['parts'][0]['text']
-
-                try:
-                    if '```json' in content:
-                        content = content.split('```json')[1].split('```')[0].strip()
-                    elif '```' in content:
-                        content = content.split('```')[1].split('```')[0].strip()
-
-                    return json.loads(content)
-                except json.JSONDecodeError:
-                    return generate_fallback_fortune(1)
-            else:
-                return generate_fallback_fortune(1)
-        else:
-            raise Exception(f"Gemini API error: {response.status_code}")
-
-    except http_requests.exceptions.Timeout:
-        duration = time.time() - start_time
-        log_ai_transaction("Gemini/Fortune", "gemini-pro", data, {"error": "timeout"}, 0, duration)
-        raise Exception("Gemini API timeout")
-
-    except http_requests.exceptions.RequestException as e:
-        duration = time.time() - start_time
-        log_ai_transaction("Gemini/Fortune", "gemini-pro", data, {"error": str(e)}, 0, duration)
-        raise Exception(f"Gemini API request error: {str(e)}")
-
-
-
-def generate_with_compatible_api(prompt):
-    start_time = time.time()
-
-    api_key = os.environ.get('AI_API_KEY')
-    base_url = os.environ.get('AI_BASE_URL', 'https://api.deepseek.com')
-    model = os.environ.get('AI_MODEL', 'deepseek-chat')
-
-    if not api_key:
-        print("❌ 未配置 AI_API_KEY")
-        return None
-
-    print(f"\n============================================================")
-    print(f"🤖 [Compatible AI] 开始调用 - {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"============================================================")
-    print(f"🔗 Base URL: {base_url}")
-    print(f"🧠 Model: {model}")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.95,
-        "max_tokens": 800,
-        "stream": False
-    }
-
-    response_data = None
-    status_code = 0
-
-    try:
-        print("\n发送请求中...")
-        url = base_url.rstrip('/')
-        if not url.endswith('/v1/chat/completions') and '/v1' not in url:
-            url += '/v1/chat/completions'
-        elif not url.endswith('/chat/completions'):
-            url += '/chat/completions'
-
-        print(f"📤 请求 URL: {url}")
-
-        response = http_requests.post(url, headers=headers, json=payload, timeout=60)
-
-        status_code = response.status_code
-        print(f"📥 响应状态码: {status_code}")
-
-        try:
-            response_data = response.json()
-        except Exception:
-            response_data = response.text
-
-        duration = time.time() - start_time
-        log_ai_transaction("Compatible API", model, payload, response_data, status_code, duration)
-
-        if status_code != 200:
-            print(f"\n❌ API 调用失败")
-            print(f"状态码: {status_code}")
-            print(f"错误信息: {response.text}")
-            return None
-
-        try:
-            content = response_data['choices'][0]['message']['content']
-        except (KeyError, IndexError, TypeError):
-            print(f"⚠️ AI API 返回结构异常: {json.dumps(response_data, ensure_ascii=False, default=str)[:500]}")
-            return None
-
-        print(f"\n📜 AI 生成的原始内容:")
-        print("-" * 60)
-        print(content)
-        print("-" * 60)
-
-        if '```json' in content:
-            content = content.split('```json')[1].split('```')[0]
-        elif '```' in content:
-            content = content.split('```')[1].split('```')[0]
-
-        fortune_data = json.loads(content.strip())
-
-        print("\n✨ 签文解析成功！")
-        return fortune_data
-
-    except Exception as e:
-        duration = time.time() - start_time
-        print(f"\n❌ AI 生成异常: {str(e)}")
-
-        log_ai_transaction("Compatible API", model, payload, {"error": str(e)}, status_code, duration)
-
-        traceback.print_exc()
-        return None
 
 
 def generate_fallback_fortune(fortune_number, fortune_type=None):
