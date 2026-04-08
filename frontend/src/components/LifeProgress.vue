@@ -55,22 +55,40 @@
       </div>
     </div>
 
-    <el-dialog v-model="menuDialogVisible" :title="menuDialogTitle" width="560px">
-      <div v-if="activeMenuType === 'fruit'" class="menu-dialog-fruit">
-        <span v-for="item in activeFruitItems" :key="item" class="menu-chip">{{ item }}</span>
-        <div v-if="!activeFruitItems.length" class="menu-empty">今日暂无水果安排</div>
-      </div>
-      <div v-else class="menu-dialog-grid">
-        <div v-for="group in activeMealGroups" :key="group.label" class="menu-dialog-group">
-          <div class="menu-dialog-label">{{ group.label }}</div>
-          <div class="menu-dialog-items">
-            <span v-for="item in group.items" :key="item" class="menu-chip">{{ item }}</span>
-            <span v-if="!group.items.length" class="menu-chip menu-chip-empty">暂无</span>
+    <Teleport to="body">
+      <Transition name="menu-pop">
+        <div v-if="menuDialogVisible" class="menu-overlay" @click="menuDialogVisible = false">
+          <div class="menu-popup" @click.stop>
+            <div class="menu-popup-header">
+              <div class="menu-popup-icon">{{ menuDialogIcon }}</div>
+              <div class="menu-popup-titles">
+                <div class="menu-popup-title">{{ menuDialogTitle }}</div>
+                <div class="menu-popup-quip">{{ menuDialogQuip }}</div>
+              </div>
+              <button class="menu-popup-close" @click="menuDialogVisible = false">&times;</button>
+            </div>
+            <div class="menu-popup-body">
+              <div v-for="meal in menuDialogMeals" :key="meal.title" class="menu-meal-section">
+                <div class="menu-meal-title">{{ meal.title }}</div>
+                <div v-if="meal.fruits" class="menu-popup-fruit">
+                  <span v-for="item in meal.fruits" :key="item" class="menu-chip-v2">{{ item }}</span>
+                </div>
+                <div v-else class="menu-popup-grid">
+                  <div v-for="group in meal.groups" :key="group.label" class="menu-group-v2">
+                    <span class="menu-group-icon">{{ categoryIcon(group.label) }}</span>
+                    <span class="menu-group-label">{{ group.label }}</span>
+                    <div class="menu-group-items">
+                      <span v-for="item in group.items" :key="item" class="menu-chip-v2">{{ item }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="!menuDialogMeals.length" class="menu-empty-v2">今日暂无菜单安排</div>
+            </div>
           </div>
         </div>
-        <div v-if="!activeMealGroups.length" class="menu-empty">今日暂无菜单安排</div>
-      </div>
-    </el-dialog>
+      </Transition>
+    </Teleport>
 
     <el-dialog v-model="uploadDialogVisible" title="上传本周菜单" width="480px">
       <div class="upload-panel">
@@ -151,8 +169,7 @@ const todayMenu = ref({
 })
 const menuDialogVisible = ref(false)
 const activeMenuType = ref('lunch')
-const menuDialogGroups = ref([])
-const menuDialogFruitItems = ref([])
+const menuDialogMeals = ref([])
 const uploadDialogVisible = ref(false)
 const selectedMenuFile = ref(null)
 const selectedFileName = ref('')
@@ -249,32 +266,41 @@ async function submitMenuUpload() {
 
 function handleBarClick(bar) {
   if (!bar.clickable || !bar.menuType) return
-  activeMenuType.value = bar.menuType
-  if (bar.menuType === 'fruit') {
-    menuDialogFruitItems.value = Array.isArray(todayMenu.value.fruit) ? [...todayMenu.value.fruit] : []
-    menuDialogGroups.value = []
-  } else {
-    const source = bar.menuType === 'dinner' ? todayMenu.value.dinner : todayMenu.value.lunch
-    menuDialogGroups.value = ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥']
-      .map(label => ({
-        label,
-        items: Array.isArray(source?.[label]) ? [...source[label]] : []
-      }))
-      .filter(group => group.items.length > 0)
-    menuDialogFruitItems.value = []
-  }
+  activeMenuType.value = 'all-meals'
+  // 构建所有三餐数据
+  const meals = []
+  const lunchSource = todayMenu.value.lunch
+  const lunchGroups = ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥']
+    .map(label => ({ label, items: Array.isArray(lunchSource?.[label]) ? [...lunchSource[label]] : [] }))
+    .filter(g => g.items.length > 0)
+  if (lunchGroups.length) meals.push({ title: '☀️ 午餐', groups: lunchGroups })
+
+  const fruits = Array.isArray(todayMenu.value.fruit) ? [...todayMenu.value.fruit] : []
+  if (fruits.length) meals.push({ title: '🍎 水果', fruits })
+
+  const dinnerSource = todayMenu.value.dinner
+  const dinnerGroups = ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥']
+    .map(label => ({ label, items: Array.isArray(dinnerSource?.[label]) ? [...dinnerSource[label]] : [] }))
+    .filter(g => g.items.length > 0)
+  if (dinnerGroups.length) meals.push({ title: '🌙 晚餐', groups: dinnerGroups })
+
+  menuDialogMeals.value = meals
   menuDialogVisible.value = true
 }
 
-const menuDialogTitle = computed(() => {
-  if (activeMenuType.value === 'fruit') return '今日水果'
-  if (activeMenuType.value === 'dinner') return '今日晚餐'
-  return '今日午餐'
+const menuDialogTitle = computed(() => '今日餐饮')
+
+const menuDialogIcon = computed(() => '🍽️')
+
+const menuDialogQuip = computed(() => {
+  const quips = ['干饭人，干饭魂！', '吃饱了才有力气减肥', '人是铁饭是钢', '民以食为天，我以吃为先']
+  return quips[Math.floor(Math.random() * quips.length)]
 })
 
-const activeMealGroups = computed(() => menuDialogGroups.value)
-
-const activeFruitItems = computed(() => menuDialogFruitItems.value)
+function categoryIcon(label) {
+  const icons = { '主荤': '🥩', '半荤': '🍗', '素菜': '🥬', '杂粮': '🌾', '主食': '🍚', '汤粥': '🍲' }
+  return icons[label] || '🍽️'
+}
 
 // --- 计算进度 ---
 const bars = computed(() => {
@@ -394,103 +420,72 @@ const bars = computed(() => {
     ...getBarStyle(weekendPct, weekendDone, false),
   })
 
-  // 4.5 午饭 / 水果 / 晚饭
-  const LUNCH_START = 12
-  const LUNCH_END = 14
-  const FRUIT_START = 14.5
-  const FRUIT_END = 15
-  const DINNER_START = 18
-  const DINNER_END = 19
+  // 4.5 今日餐饮（合并午饭/水果/晚饭，按时间顺序展示当前最近的一个）
+  const MEAL_SCHEDULE = [
+    { id: 'lunch-menu', label: '午饭', icon: '☀️', menuType: 'lunch', start: 12, end: 14, anchor: 8,
+      quips: ['干饭中，勿扰!', '饭搭子已就位，开冲!', '碳水快乐，谁懂?', '今天中午吃点好的'] },
+    { id: 'fruit-menu', label: '水果', icon: '🍎', menuType: 'fruit', start: 14.5, end: 15, anchor: 14,
+      quips: ['水果时间到，补充维生素!', '来点水果，下午更精神', '今天的水果已经就位'] },
+    { id: 'dinner-menu', label: '晚饭', icon: '🌙', menuType: 'dinner', start: 18, end: 19, anchor: 15,
+      quips: ['晚饭进行中，今天也辛苦了', '干饭！干饭！干饭！', '今晚吃点好的，犒劳自己'] },
+  ]
 
-  const lunchItems = flattenMealItems(todayMenu.value.lunch)
-  const fruitItems = Array.isArray(todayMenu.value.fruit) ? todayMenu.value.fruit : []
-  const dinnerItems = flattenMealItems(todayMenu.value.dinner)
-
-  const buildTimedBar = ({ id, titleBefore, titleDuring, titleAfter, subtitle, preview, menuType, start, end, previousAnchor = 0, quips = [] }) => {
-    let title = titleBefore
-    let display = ''
-    let percent = 0
-    let done = false
-    const hasMenu = preview !== '今日暂无菜单'
-
-    if (curHour >= end) {
-      title = titleAfter
-      percent = 100
-      done = true
-      display = quips.length ? quips[n.getMinutes() % quips.length] : '今日安排已完成'
-    } else if (curHour >= start) {
-      title = titleDuring
-      percent = 100
-      done = true
-      display = quips.length ? quips[n.getMinutes() % quips.length] : '现在就是最佳时间'
-    } else {
-      const remainMin = Math.max(Math.floor((start - curHour) * 60), 0)
-      const totalWindow = Math.max((start - previousAnchor) * 60, 1)
-      percent = Math.max((1 - remainMin / totalWindow) * 100, 0)
-      if (remainMin <= 30) {
-        display = `还有${remainMin}分钟，快到了`
-      } else if (remainMin <= 60) {
-        display = `还有${remainMin}分钟，再等等`
-      } else {
-        const rh = Math.floor(remainMin / 60)
-        const rm = remainMin % 60
-        display = `还有${rh}小时${rm}分钟`
-      }
-    }
-
-    return {
-      id,
-      title,
-      subtitle: hasMenu ? `${subtitle} · ${preview}` : preview,
-      percent: percent.toFixed(1),
-      display,
-      clickable: hasMenu,
-      menuType,
-      ...getBarStyle(percent, done, false),
-    }
+  const mealItemsMap = {
+    lunch: flattenMealItems(todayMenu.value.lunch),
+    fruit: Array.isArray(todayMenu.value.fruit) ? todayMenu.value.fruit : [],
+    dinner: flattenMealItems(todayMenu.value.dinner),
   }
 
-  list.push(buildTimedBar({
-    id: 'lunch-menu',
-    titleBefore: '距离午饭',
-    titleDuring: '午饭时间',
-    titleAfter: '今日午餐',
-    subtitle: '点击查看午餐详情',
-    preview: buildMenuPreview(lunchItems, '今日暂无菜单'),
-    menuType: 'lunch',
-    start: LUNCH_START,
-    end: LUNCH_END,
-    previousAnchor: 8,
-    quips: ['干饭中，勿扰!', '饭搭子已就位，开冲!', '碳水快乐，谁懂?', '今天中午吃点好的']
-  }))
+  // 找到当前最相关的一餐：正在进行 > 下一个未开始 > 最后一个已结束
+  let activeMeal = null
+  for (const meal of MEAL_SCHEDULE) {
+    if (curHour >= meal.start && curHour < meal.end) { activeMeal = meal; break }
+  }
+  if (!activeMeal) {
+    activeMeal = MEAL_SCHEDULE.find(m => curHour < m.start) || MEAL_SCHEDULE[MEAL_SCHEDULE.length - 1]
+  }
 
-  list.push(buildTimedBar({
-    id: 'fruit-menu',
-    titleBefore: '距离水果',
-    titleDuring: '水果时间',
-    titleAfter: '今日水果',
-    subtitle: '点击查看水果安排',
-    preview: buildMenuPreview(fruitItems, '今日暂无菜单'),
-    menuType: 'fruit',
-    start: FRUIT_START,
-    end: FRUIT_END,
-    previousAnchor: LUNCH_END,
-    quips: ['水果时间到，补充维生素!', '来点水果，下午更精神', '今天的水果已经就位']
-  }))
+  const mealItems = mealItemsMap[activeMeal.menuType]
+  const mealPreview = buildMenuPreview(mealItems, '今日暂无菜单')
+  const hasMealMenu = mealPreview !== '今日暂无菜单'
 
-  list.push(buildTimedBar({
-    id: 'dinner-menu',
-    titleBefore: '距离晚饭',
-    titleDuring: '晚饭时间',
-    titleAfter: '今日晚餐',
-    subtitle: '点击查看晚餐详情',
-    preview: buildMenuPreview(dinnerItems, '今日暂无菜单'),
-    menuType: 'dinner',
-    start: DINNER_START,
-    end: DINNER_END,
-    previousAnchor: FRUIT_END,
-    quips: ['晚饭进行中，今天也辛苦了', '干饭！干饭！干饭！', '今晚吃点好的，犒劳自己', '外卖到了，冲冲冲!']
-  }))
+  let mealTitle, mealDisplay, mealPct, mealDone
+  if (curHour >= activeMeal.end) {
+    mealTitle = `今日${activeMeal.label}`
+    mealPct = 100; mealDone = true
+    mealDisplay = activeMeal.quips[n.getMinutes() % activeMeal.quips.length]
+  } else if (curHour >= activeMeal.start) {
+    mealTitle = `${activeMeal.label}时间`
+    mealPct = 100; mealDone = true
+    mealDisplay = activeMeal.quips[n.getMinutes() % activeMeal.quips.length]
+  } else {
+    mealTitle = `距离${activeMeal.label}`
+    mealDone = false
+    const remainMin = Math.max(Math.floor((activeMeal.start - curHour) * 60), 0)
+    const totalWindow = Math.max((activeMeal.start - activeMeal.anchor) * 60, 1)
+    mealPct = Math.max((1 - remainMin / totalWindow) * 100, 0)
+    if (remainMin <= 30) mealDisplay = `还有${remainMin}分钟，快到了`
+    else if (remainMin <= 60) mealDisplay = `还有${remainMin}分钟，再等等`
+    else { const rh = Math.floor(remainMin / 60); const rm = remainMin % 60; mealDisplay = `还有${rh}小时${rm}分钟` }
+  }
+
+  // 构建副标题：显示三餐时间线状态
+  const mealTimeline = MEAL_SCHEDULE.map(m => {
+    const items = mealItemsMap[m.menuType]
+    const status = curHour >= m.end ? '✅' : curHour >= m.start ? '🔥' : '⏳'
+    return `${status}${m.label}`
+  }).join(' → ')
+
+  list.push({
+    id: activeMeal.id,
+    title: mealTitle,
+    subtitle: hasMealMenu ? `${mealTimeline} · ${mealPreview}` : mealTimeline,
+    percent: mealPct.toFixed(1),
+    display: mealDisplay,
+    clickable: hasMealMenu,
+    menuType: activeMeal.menuType,
+    ...getBarStyle(mealPct, mealDone, false),
+  })
 
   // 5. 距离发薪
   let nextPayday
@@ -1030,50 +1025,183 @@ onBeforeUnmount(() => {
   animation: bar-pulse 1s ease-in-out infinite alternate;
 }
 
-.menu-dialog-grid {
-  display: grid;
-  gap: 14px;
+/* 菜单弹窗 v2 */
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
 }
 
-.menu-dialog-group {
-  padding: 14px;
-  border-radius: 16px;
+.menu-popup {
+  width: 340px;
+  max-width: 92vw;
+  max-height: 80vh;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 18px;
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.12), 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.menu-dialog-label {
+.menu-popup-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.menu-popup-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.menu-popup-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-popup-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.menu-popup-quip {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.menu-popup-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.menu-popup-close:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.menu-popup-body {
+  padding: 14px 18px 18px;
+  overflow-y: auto;
+}
+
+.menu-meal-section {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.menu-meal-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.menu-meal-title {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
-.menu-dialog-items,
-.menu-dialog-fruit {
+.menu-popup-fruit {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.menu-chip {
-  padding: 6px 10px;
+.menu-popup-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.menu-group-v2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.menu-group-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.menu-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.menu-group-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.menu-chip-v2 {
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(6, 182, 212, 0.12);
-  border: 1px solid rgba(6, 182, 212, 0.24);
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.2);
   font-size: 12px;
   color: var(--text-primary);
+  transition: all 0.2s;
 }
 
-.menu-chip-empty {
-  background: rgba(148, 163, 184, 0.12);
-  border-color: rgba(148, 163, 184, 0.2);
-  color: var(--text-muted);
+.menu-chip-v2:hover {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.4);
 }
 
-.menu-empty {
+.menu-empty-v2 {
   font-size: 13px;
   color: var(--text-muted);
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* 菜单弹窗动画 */
+.menu-pop-enter-active { transition: opacity 0.25s ease; }
+.menu-pop-leave-active { transition: opacity 0.15s ease; }
+.menu-pop-enter-from,
+.menu-pop-leave-to { opacity: 0; }
+.menu-pop-enter-active .menu-popup {
+  animation: menu-scale-in 0.25s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+@keyframes menu-scale-in {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 .upload-panel {
@@ -1186,7 +1314,7 @@ onBeforeUnmount(() => {
 .alert-fade-enter-from,
 .alert-fade-leave-to { opacity: 0; }
 
-/* el-dialog 暗色主题覆盖 */
+/* el-dialog 暗色主题覆盖（上传弹窗） */
 .el-overlay {
   background: rgba(0, 0, 0, 0.6) !important;
   backdrop-filter: blur(4px);
@@ -1207,15 +1335,6 @@ onBeforeUnmount(() => {
 .el-dialog__title {
   color: var(--text-primary) !important;
   font-weight: 700;
-  font-size: 16px;
-}
-
-.el-dialog__headerbtn {
-  top: 16px !important;
-  right: 16px !important;
-  width: 32px;
-  height: 32px;
-  font-size: 18px;
 }
 
 .el-dialog__headerbtn .el-dialog__close {
