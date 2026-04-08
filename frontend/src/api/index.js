@@ -5,7 +5,7 @@ const TOKEN_KEY = 'tasklist_token'
 const USER_KEY = 'tasklist_user'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 60000  // 增加到 60 秒，因为 AI 生成需要时间
 })
 

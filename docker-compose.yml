@@ -12,7 +12,6 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql-exporter/init-exporter-user.sql:/docker-entrypoint-initdb.d/init-exporter-user.sql:ro
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     networks:
@@ -45,6 +44,7 @@ services:
       DATABASE_URL: mysql+pymysql://${MYSQL_USER:-taskuser}:${MYSQL_PASSWORD:-taskpassword}@db:3306/${MYSQL_DATABASE:-tasklist_db}?charset=utf8mb4
       # 应用配置
       SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://tasklist.ch-tools.org,http://localhost:3000}
       # AI 服务配置
       AI_API_KEY: ${AI_API_KEY:-}
       AI_BASE_URL: ${AI_BASE_URL:-https://api.deepseek.com}
@@ -89,7 +89,6 @@ services:
       - ./certs:/etc/nginx/certs:ro
     depends_on:
       - backend
-      - grafana
     networks:
       - tasklist_network
     healthcheck:
@@ -107,82 +106,9 @@ services:
           cpus: '0.1'      # 保留 10% CPU
           memory: 64M      # 保留 64MB 内存
 
-  # Prometheus 监控
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: tasklist-prometheus
-    restart: always
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.retention.time=15d'
-      - '--storage.tsdb.path=/prometheus'
-    networks:
-      - tasklist_network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
-          memory: 128M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
-
-  # Grafana 可视化
-  grafana:
-    image: grafana/grafana:latest
-    container_name: tasklist-grafana
-    restart: always
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-    depends_on:
-      - prometheus
-    networks:
-      - tasklist_network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
-          memory: 128M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
-
-  # MySQL Exporter
-  mysql-exporter:
-    image: prom/mysqld-exporter:latest
-    container_name: tasklist-mysql-exporter
-    restart: always
-    volumes:
-      - ./mysql-exporter/.my.cnf:/etc/.my.cnf:ro
-    command:
-      - '--config.my-cnf=/etc/.my.cnf'
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - tasklist_network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.05'
-          memory: 32M
-        reservations:
-          cpus: '0.02'
-          memory: 16M
-
 volumes:
   mysql_data:
     name: tasklist_mysql_data
-  prometheus_data:
-    name: tasklist_prometheus_data
-  grafana_data:
-    name: tasklist_grafana_data
 
 networks:
   tasklist_network:

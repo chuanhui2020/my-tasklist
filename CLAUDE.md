@@ -59,30 +59,17 @@ docker compose exec db mysqldump -u root -p tasklist_db > backup.sql
 - `db` service: MySQL 8.4 database
 - `backend` service: FastAPI + Uvicorn (Python 3.10)
 - `frontend` service: Nginx + Vue 3 static files
-- `prometheus` service: Prometheus monitoring (15-day data retention)
-- `grafana` service: Grafana dashboard (via `grafana.ch-tools.org`)
-- `mysql-exporter` service: MySQL metrics exporter for Prometheus
 
 **Environment Variables (.env):**
 - `MYSQL_ROOT_PASSWORD`: Database root password
 - `MYSQL_PASSWORD`: Application database password
 - `SECRET_KEY`: Application secret key (must be random in production!)
 - `FRONTEND_PORT`: Frontend access port (default: 3000)
-- `GRAFANA_PASSWORD`: Grafana admin password (default: admin123)
 
 **Data Persistence:**
 - Database data: `mysql_data` Docker volume
-- Prometheus data: `prometheus_data` Docker volume
-- Grafana data: `grafana_data` Docker volume
 - Survives container restarts and rebuilds
 - Backup regularly for production use
-
-**Monitoring (Prometheus + Grafana):**
-- Prometheus scrapes FastAPI metrics (`backend:8000/metrics`) and MySQL metrics (`mysql-exporter:9104`) every 15s
-- Grafana auto-provisions Prometheus as default datasource via `grafana/provisioning/datasources/datasources.yml`
-- Grafana accessible at `https://grafana.ch-tools.org` (Nginx reverse proxy + Cloudflare HTTPS)
-- MySQL Exporter uses dedicated DB user, config in `mysql-exporter/.my.cnf`, init SQL in `mysql-exporter/init-exporter-user.sql`
-- Data retention: 15 days (`--storage.tsdb.retention.time=15d`)
 
 ## Architecture
 
