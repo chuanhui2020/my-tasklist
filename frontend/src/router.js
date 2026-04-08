@@ -25,6 +25,12 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
+    path: '/admin/menu',
+    name: 'MenuManager',
+    component: () => import('./views/MenuManager.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/fortune',
     name: 'Fortune',
     component: () => import('./views/Fortune.vue'),

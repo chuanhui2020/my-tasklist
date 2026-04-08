@@ -150,6 +150,10 @@ export default {
     return api.get('/menu/today')
   },
 
+  getMenuList() {
+    return api.get('/menu/list')
+  },
+
   uploadWeeklyMenu(file, weekStart = '') {
     const formData = new FormData()
     formData.append('image', file)

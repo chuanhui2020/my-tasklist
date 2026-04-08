@@ -153,6 +153,14 @@ def get_today_menu_entry(menu_data, target: date | None = None):
     }
 
 
+@menu_router.get('/list')
+def list_menus(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    menus = db.query(WeeklyMenu).order_by(WeeklyMenu.week_start.desc()).limit(20).all()
+    return {
+        'items': [m.to_dict() for m in menus],
+    }
+
+
 @menu_router.get('/today')
 def get_today_menu(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     week_start = get_week_start()

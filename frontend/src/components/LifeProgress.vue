@@ -8,10 +8,6 @@
         </div>
         <div class="lp-subtitle">系统监测中...请勿关闭人生</div>
       </div>
-      <button v-if="isAdmin" class="menu-upload-btn" @click="openUploadDialog" title="上传本周菜单">
-        <el-icon><Upload /></el-icon>
-        <span>上传菜单</span>
-      </button>
       <div class="lp-settings-btn" @click="showSettings = !showSettings" title="设置">
         <el-icon><Setting /></el-icon>
       </div>
@@ -90,20 +86,6 @@
       </Transition>
     </Teleport>
 
-    <el-dialog v-model="uploadDialogVisible" title="上传本周菜单" width="480px">
-      <div class="upload-panel">
-        <div class="upload-tip">仅管理员可上传，本次上传会直接覆盖本周菜单。</div>
-        <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" class="upload-input" @change="handleFileChange" />
-        <div class="upload-file-name">{{ selectedFileName || '请选择菜单图片（jpg/png/webp）' }}</div>
-      </div>
-      <template #footer>
-        <el-button @click="closeUploadDialog">取消</el-button>
-        <el-button type="primary" :loading="uploadingMenu" :disabled="!selectedMenuFile" @click="submitMenuUpload">
-          上传并解析
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- 喝水/拉屎提醒弹窗 -->
     <Teleport to="body">
       <Transition name="alert-fade">
@@ -122,13 +104,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Odometer, Setting, MagicStick, Upload } from '@element-plus/icons-vue'
+import { Odometer, Setting, MagicStick } from '@element-plus/icons-vue'
 import api from '@/api'
-import { useAuth } from '@/composables/useAuth'
 
 const emit = defineEmits(['switch-mode'])
-const { isAdmin } = useAuth()
 
 // --- 常量 ---
 const WORK_START = 9
@@ -170,11 +149,6 @@ const todayMenu = ref({
 const menuDialogVisible = ref(false)
 const activeMenuType = ref('lunch')
 const menuDialogMeals = ref([])
-const uploadDialogVisible = ref(false)
-const selectedMenuFile = ref(null)
-const selectedFileName = ref('')
-const uploadingMenu = ref(false)
-const fileInputRef = ref(null)
 
 // 提醒弹窗
 const alertVisible = ref(false)
@@ -228,39 +202,6 @@ async function loadTodayMenu() {
     }
   } catch (error) {
     console.error('加载今日菜单失败:', error)
-  }
-}
-
-function openUploadDialog() {
-  uploadDialogVisible.value = true
-}
-
-function closeUploadDialog() {
-  uploadDialogVisible.value = false
-  selectedMenuFile.value = null
-  selectedFileName.value = ''
-  if (fileInputRef.value) fileInputRef.value.value = ''
-}
-
-function handleFileChange(event) {
-  const file = event.target.files?.[0]
-  selectedMenuFile.value = file || null
-  selectedFileName.value = file?.name || ''
-}
-
-async function submitMenuUpload() {
-  if (!selectedMenuFile.value) return
-  uploadingMenu.value = true
-  try {
-    await api.uploadWeeklyMenu(selectedMenuFile.value)
-    ElMessage.success('本周菜单已更新')
-    closeUploadDialog()
-    await loadTodayMenu()
-  } catch (error) {
-    const message = error.response?.data?.error || '菜单上传失败'
-    ElMessage.error(message)
-  } finally {
-    uploadingMenu.value = false
   }
 }
 
@@ -758,24 +699,6 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.menu-upload-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid rgba(6, 182, 212, 0.28);
-  border-radius: 10px;
-  background: rgba(6, 182, 212, 0.1);
-  color: var(--text-primary);
-  padding: 6px 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.menu-upload-btn:hover {
-  border-color: rgba(6, 182, 212, 0.5);
-  background: rgba(6, 182, 212, 0.16);
-}
-
 .lp-settings-btn {
   cursor: pointer;
   color: var(--text-muted);
@@ -1204,23 +1127,6 @@ onBeforeUnmount(() => {
   to { transform: scale(1); opacity: 1; }
 }
 
-.upload-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.upload-tip,
-.upload-file-name {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.upload-input {
-  width: 100%;
-  color: var(--text-primary);
-}
-
 @keyframes bar-pulse {
   from { box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
   to { box-shadow: 0 0 20px rgba(239, 68, 68, 0.7); }
@@ -1313,45 +1219,4 @@ onBeforeUnmount(() => {
 .alert-fade-leave-active { transition: opacity 0.2s ease; }
 .alert-fade-enter-from,
 .alert-fade-leave-to { opacity: 0; }
-
-/* el-dialog 暗色主题覆盖（上传弹窗） */
-.el-overlay {
-  background: rgba(0, 0, 0, 0.6) !important;
-  backdrop-filter: blur(4px);
-}
-
-.el-dialog {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.97), rgba(30, 41, 59, 0.97)) !important;
-  border: 1px solid var(--glass-border) !important;
-  border-radius: 20px !important;
-  box-shadow: 0 0 40px rgba(6, 182, 212, 0.15), 0 8px 32px rgba(0, 0, 0, 0.4) !important;
-}
-
-.el-dialog__header {
-  padding: 20px 24px 12px !important;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.el-dialog__title {
-  color: var(--text-primary) !important;
-  font-weight: 700;
-}
-
-.el-dialog__headerbtn .el-dialog__close {
-  color: var(--text-secondary) !important;
-}
-
-.el-dialog__headerbtn:hover .el-dialog__close {
-  color: var(--primary-color) !important;
-}
-
-.el-dialog__body {
-  padding: 20px 24px !important;
-  color: var(--text-primary) !important;
-}
-
-.el-dialog__footer {
-  padding: 12px 24px 20px !important;
-  border-top: 1px solid var(--glass-border);
-}
 </style>

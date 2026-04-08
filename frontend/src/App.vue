@@ -12,6 +12,7 @@
               <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
               <router-link to="/change-password" class="nav-link" active-class="active">修改密码</router-link>
               <router-link v-if="isAdmin" to="/admin/users" class="nav-link" active-class="active">用户管理</router-link>
+              <router-link v-if="isAdmin" to="/admin/menu" class="nav-link" active-class="active">菜单管理</router-link>
               <router-link to="/fortune" class="nav-link" active-class="active">灵签占卜</router-link>
               <router-link to="/bmi" class="nav-link" active-class="active">BMI管理</router-link>
               <router-link to="/secure-notes" class="nav-link" active-class="active">密钥盒子</router-link>
