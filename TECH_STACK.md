@@ -139,6 +139,42 @@
 | 数据库 | MySQL 8.4 | Docker 容器，内存限制 512MB |
 | SSL | Cloudflare Proxy | 前端和 API 均通过 Cloudflare 代理 |
 
+### 请求链路
+
+**前端页面加载：**
+
+```
+浏览器 → DNS(tasklist.ch-tools.org)
+  → Cloudflare Workers 边缘节点（全球 CDN 就近响应）
+  → 返回 index.html + JS/CSS
+  → 浏览器渲染 Vue SPA
+```
+
+**API 请求：**
+
+```
+Vue 应用发起请求（如 POST /api/auth/login）
+  → DNS(api-tasklist.ch-tools.org) → Cloudflare Proxy（自动 HTTPS）
+  → Caddy（匹配域名，reverse_proxy 127.0.0.1:9000）
+  → Docker 端口映射（9000 → 容器内 8000）
+  → FastAPI 处理业务逻辑
+  → SQLAlchemy → MySQL（容器内 3306）
+  → JSON 响应原路返回
+```
+
+**跨域处理：**
+
+```
+前端域: tasklist.ch-tools.org
+后端域: api-tasklist.ch-tools.org
+  → 浏览器检测跨域，先发 OPTIONS preflight
+  → FastAPI CORSMiddleware 校验 Origin 是否在 CORS_ORIGINS 白名单
+  → 返回 Access-Control-Allow-Origin
+  → 正式请求携带 Authorization: Bearer <token>
+```
+
+两条链路完全独立：前端挂了不影响 API，后端挂了前端页面仍可加载。
+
 ### 本地开发
 
 | 服务 | 镜像 | CPU 限制 | 内存限制 | 健康检查 |
