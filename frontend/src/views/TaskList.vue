@@ -350,8 +350,18 @@ export default {
 
     const sortByLabel = computed(() => (sortBy.value === 'created_at' ? '创建时间' : '截止日期'))
 
+    // Task list cache for stale-while-revalidate
+    const taskCache = {}
+    const getCacheKey = () => `${statusFilter.value || 'all'}_${sortBy.value}`
+
     const loadTasks = async ({ showSpinner = true } = {}) => {
-      if (showSpinner) {
+      const cacheKey = getCacheKey()
+      const cached = taskCache[cacheKey]
+      if (cached && showSpinner) {
+        tasks.value = cached
+        loading.value = false
+      }
+      if (showSpinner && !cached) {
         loading.value = true
       }
       try {
@@ -361,9 +371,12 @@ export default {
         }
         const response = await api.getTasks(params)
         tasks.value = response.data
+        taskCache[cacheKey] = response.data
       } catch (error) {
-        console.error('加载任务失败:', error)
-        ElMessage.error('加载任务失败，请稍后重试')
+        if (!cached) {
+          console.error('加载任务失败:', error)
+          ElMessage.error('加载任务失败，请稍后重试')
+        }
       } finally {
         if (showSpinner) {
           loading.value = false

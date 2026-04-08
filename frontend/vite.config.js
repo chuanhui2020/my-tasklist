@@ -28,6 +28,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'three': ['three'],
+          'echarts': ['echarts'],
           'vendor': ['vue', 'vue-router', 'axios'],
         }
       }
