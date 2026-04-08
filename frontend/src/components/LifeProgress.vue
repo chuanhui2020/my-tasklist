@@ -410,17 +410,27 @@ const bars = computed(() => {
     else { const rh = Math.floor(remainMin / 60); const rm = remainMin % 60; mealDisplay = `还有${rh}小时${rm}分钟` }
   }
 
-  // 构建副标题：显示三餐时间线状态
+  // 构建副标题：显示三餐时间线状态 + 下一餐随机菜品轮播
   const mealTimeline = MEAL_SCHEDULE.map(m => {
-    const items = mealItemsMap[m.menuType]
     const status = curHour >= m.end ? '✅' : curHour >= m.start ? '🔥' : '⏳'
     return `${status}${m.label}`
   }).join(' → ')
 
+  // 找下一餐的菜品做轮播（每3秒切换）
+  let rotatingItem = ''
+  if (hasMealMenu && mealItems.length > 0) {
+    if (mealItems.length === 1) {
+      rotatingItem = mealItems[0]
+    } else {
+      const idx = Math.floor(n.getTime() / 3000) % mealItems.length
+      rotatingItem = mealItems[idx]
+    }
+  }
+
   list.push({
     id: activeMeal.id,
     title: mealTitle,
-    subtitle: hasMealMenu ? `${mealTimeline} · ${mealPreview}` : mealTimeline,
+    subtitle: rotatingItem ? `${mealTimeline} · ${rotatingItem}` : mealTimeline,
     percent: mealPct.toFixed(1),
     display: mealDisplay,
     clickable: hasMealMenu,
