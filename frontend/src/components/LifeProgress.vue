@@ -1185,4 +1185,54 @@ onBeforeUnmount(() => {
 .alert-fade-leave-active { transition: opacity 0.2s ease; }
 .alert-fade-enter-from,
 .alert-fade-leave-to { opacity: 0; }
+
+/* el-dialog 暗色主题覆盖 */
+.el-overlay {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(4px);
+}
+
+.el-dialog {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.97), rgba(30, 41, 59, 0.97)) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 0 40px rgba(6, 182, 212, 0.15), 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+
+.el-dialog__header {
+  padding: 20px 24px 12px !important;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.el-dialog__title {
+  color: var(--text-primary) !important;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.el-dialog__headerbtn {
+  top: 16px !important;
+  right: 16px !important;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+}
+
+.el-dialog__headerbtn .el-dialog__close {
+  color: var(--text-secondary) !important;
+}
+
+.el-dialog__headerbtn:hover .el-dialog__close {
+  color: var(--primary-color) !important;
+}
+
+.el-dialog__body {
+  padding: 20px 24px !important;
+  color: var(--text-primary) !important;
+}
+
+.el-dialog__footer {
+  padding: 12px 24px 20px !important;
+  border-top: 1px solid var(--glass-border);
+}
 </style>
