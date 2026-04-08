@@ -6,7 +6,7 @@
 
 支持任务增删改查、用户管理、AI 功能等
 
-🐳 **一键 Docker 部署** | 🔐 **用户认证** | 📱 **响应式设计**
+🐳 **一键 Docker 部署** | 🔐 **用户认证** | 📱 **响应式设计** | ☁️ **Cloudflare CDN**
 
 </div>
 
@@ -35,22 +35,28 @@
 
 ### 技术亮点
 
-- 🐳 **Docker 容器化部署** - 一键启动，环境隔离
-- 🔒 **安全配置** - 无硬编码密码，环境变量管理
+- ☁️ **前后端分离部署** - 前端 Cloudflare Workers 全球 CDN，后端 Docker 容器化
+- 🔒 **安全配置** - 无硬编码密码，环境变量管理，CORS 白名单
 - 🎨 **现代化界面** - Element Plus UI 组件库
 - 📊 **RESTful API** - 标准化接口设计
 - 💾 **数据持久化** - MySQL 数据库 + Docker Volume
 
 ---
 
-## 🚀 快速开始（Docker Compose 部署）
+## 🚀 部署架构
 
-### 前置要求
+```
+用户浏览器
+  ├── tasklist.ch-tools.org → Cloudflare Workers（Vue 3 SPA）
+  └── api-tasklist.ch-tools.org → Cloudflare Proxy → Caddy → FastAPI → MySQL
+```
 
-- Docker 20.10+
-- Docker Compose V2
+- 前端：Cloudflare Workers 托管，git push 自动构建部署
+- 后端：Docker 容器（`docker-compose.prod.yml`），Caddy 反代
+- 数据库：MySQL 8.4 Docker 容器
+- SSL：Cloudflare 自动 HTTPS
 
-### 一键部署（推荐）
+### 本地开发
 
 ```bash
 # 1. 克隆项目
@@ -59,21 +65,26 @@ cd my-tasklist
 
 # 2. 创建配置文件
 cp .env.example .env
-
-# 3. 编辑 .env 文件，修改密码和密钥（重要！）
 nano .env
-# Windows 用户: notepad .env
 
-# 4. 一键启动
-./docker-start.sh
-
-# 或手动启动
+# 3. 启动（前端+后端+数据库 全部本地运行）
 docker compose up -d --build
 ```
 
+### 生产部署
+
+```bash
+# 后端（服务器上）
+cp .env.example .env && nano .env
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+前端通过 Cloudflare Workers 自动部署，详见 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)。
+
 ### 访问系统
 
-- 🌐 **前端地址**: http://localhost:3000
+- 🌐 **本地开发**: http://localhost:3000
+- 🌐 **生产环境**: https://tasklist.ch-tools.org
 - 👤 **默认账号**: `admin` / `123456`
 
 ### 查看日志
@@ -145,9 +156,10 @@ python -c "import secrets; print(secrets.token_hex(32))"
 - **MySQL 8.4** - 关系型数据库
 
 ### 部署
-- **Docker** - 容器化
-- **Docker Compose** - 服务编排
-- **Nginx** - 反向代理
+- **Docker** - 容器化（后端 + 数据库）
+- **Cloudflare Workers** - 前端静态托管 + CDN
+- **Caddy** - 反向代理（生产环境）
+- **Nginx** - 反向代理（本地开发）
 
 ---
 
@@ -176,13 +188,15 @@ my-tasklist/
 │   │   ├── views/              # 页面
 │   │   ├── App.vue             # 根组件
 │   │   └── router.js           # 路由配置
+│   ├── wrangler.jsonc           # Cloudflare Workers 部署配置
 │   ├── package.json            # 前端依赖
 │   └── vite.config.js          # Vite 配置
 │
 ├── Dockerfile.backend          # 后端镜像
 ├── Dockerfile.frontend         # 前端镜像
-├── docker-compose.yml          # Docker 编排
-├── nginx.conf                  # Nginx 配置
+├── docker-compose.yml          # Docker 编排（本地开发，含前端）
+├── docker-compose.prod.yml     # Docker 编排（生产，仅后端+数据库）
+├── nginx.conf                  # Nginx 配置（本地开发用）
 ├── .env.example                # 环境变量模板
 ├── docker-start.sh             # 启动脚本
 └── README.md                   # 项目文档
@@ -192,7 +206,17 @@ my-tasklist/
 
 ## 🔧 常用操作
 
-### 服务管理
+### 后端更新（生产环境）
+
+```bash
+ssh root@服务器
+cd ~/my-tasklist
+git pull && docker compose -f docker-compose.prod.yml up -d --build
+```
+
+前端更新无需手动操作，git push 后自动部署。
+
+### 服务管理（本地开发）
 
 ```bash
 # 查看服务状态
@@ -357,7 +381,7 @@ docker compose logs db
 
 ### 登录系统
 
-1. 访问 http://localhost:3000
+1. 访问 https://tasklist.ch-tools.org（生产）或 http://localhost:3000（本地）
 2. 使用默认账号登录：`admin` / `123456`
 3. 首次使用建议修改密码
 
@@ -382,7 +406,7 @@ docker compose logs db
 
 1. ✅ **修改默认密码** - 修改 `.env` 中的所有密码
 2. ✅ **使用强密钥** - `SECRET_KEY` 至少 32 位随机字符
-3. ✅ **启用 HTTPS** - 使用 Let's Encrypt 申请 SSL 证书
+3. ✅ **启用 HTTPS** - Cloudflare 自动管理 SSL 证书
 4. ✅ **定期备份** - 设置自动化数据库备份
 5. ✅ **限制访问** - 配置防火墙，只开放必要端口
 6. ✅ **更新依赖** - 定期更新 Docker 镜像和依赖包
@@ -396,7 +420,7 @@ BACKUP_DIR="./backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 
-docker compose exec -T db mysqldump \
+docker compose -f docker-compose.prod.yml exec -T db mysqldump \
   -u root -p$MYSQL_ROOT_PASSWORD \
   tasklist_db > $BACKUP_DIR/backup_$DATE.sql
 
@@ -407,7 +431,8 @@ echo "Backup completed: $BACKUP_DIR/backup_$DATE.sql"
 
 ## 🚀 性能优化
 
-- **资源限制**: 在 `docker-compose.yml` 中配置 CPU 和内存限制（已针对 1C2G 服务器优化）
+- **资源限制**: 在 `docker-compose.prod.yml` 中配置 CPU 和内存限制
+- **前端 CDN**: Cloudflare Workers 全球边缘节点加速
 - **数据库优化**: 根据负载调整 MySQL 配置
 - **前端缓存**: Nginx 已配置静态资源缓存
 - **日志管理**: 配置日志轮转，防止日志文件过大
@@ -415,6 +440,13 @@ echo "Backup completed: $BACKUP_DIR/backup_$DATE.sql"
 ---
 
 ## 📝 更新日志
+
+### v2.0.0 (2026-04-08)
+- ✅ 前端迁移至 Cloudflare Workers（全球 CDN）
+- ✅ 后端合并至共享服务器
+- ✅ 移除 Prometheus/Grafana/MySQL Exporter 监控组件
+- ✅ CORS 和 API 地址改为环境变量驱动
+- ✅ 新增 docker-compose.prod.yml 生产部署配置
 
 ### v1.1.0 (2026-01-19)
 - ✅ 完全 Docker 化部署

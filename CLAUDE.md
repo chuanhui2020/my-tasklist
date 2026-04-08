@@ -14,62 +14,56 @@ Personal Task Management System - A full-stack web application built with FastAP
 
 ## Deployment
 
-### Docker Compose
+### Production Architecture
 
-**Quick Start:**
+```
+Cloudflare Workers (free)
+└── Vue 3 SPA static files (tasklist.ch-tools.org)
+    Built & deployed via wrangler on git push
 
-```bash
-# 1. Copy environment variables
-cp .env.example .env
-
-# 2. Edit .env file (IMPORTANT: change passwords and secret key!)
-nano .env
-
-# 3. Start all services
-docker compose up -d --build
-
-# Or use the startup script
-./docker-start.sh
+Server (1C2G Singapore, shared with other services)
+├── caddy (reverse proxy, already running)
+├── tasklist-backend (FastAPI, 127.0.0.1:9000 → container :8000)
+└── tasklist-db (MySQL 8.4, 127.0.0.1:3307 → container :3306)
+    API domain: api-tasklist.ch-tools.org
 ```
 
-**Access:** http://localhost:3000
+Frontend and backend are cross-origin. Backend uses `CORS_ORIGINS` env var to allow the frontend domain.
 
-**Common Commands:**
+**Production deploy (backend):**
+```bash
+cd ~/my-tasklist
+git pull && docker compose -f docker-compose.prod.yml up -d --build
+```
+
+**Frontend auto-deploys** on every `git push` via Cloudflare Workers build pipeline.
+
+### Local Development (Docker Compose)
 
 ```bash
-# View logs
+cp .env.example .env && nano .env
+docker compose up -d --build
+# Access: http://localhost:3000
+```
+
+Uses `docker-compose.yml` which includes frontend Nginx container + backend + db (all-in-one).
+
+**Common Commands:**
+```bash
 docker compose logs -f
-
-# Restart services
 docker compose restart
-
-# Stop services
 docker compose down
-
-# Update code
-git pull && docker compose up -d --build
-
-# Backup database
 docker compose exec db mysqldump -u root -p tasklist_db > backup.sql
 ```
 
-**See [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md) for detailed documentation.**
-
-**Docker Architecture:**
-- `db` service: MySQL 8.4 database
-- `backend` service: FastAPI + Uvicorn (Python 3.10)
-- `frontend` service: Nginx + Vue 3 static files
-
 **Environment Variables (.env):**
-- `MYSQL_ROOT_PASSWORD`: Database root password
-- `MYSQL_PASSWORD`: Application database password
-- `SECRET_KEY`: Application secret key (must be random in production!)
-- `FRONTEND_PORT`: Frontend access port (default: 3000)
+- `MYSQL_ROOT_PASSWORD` / `MYSQL_PASSWORD`: Database passwords
+- `SECRET_KEY`: Token signing key (itsdangerous)
+- `CORS_ORIGINS`: Allowed frontend origins (comma-separated)
+- `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL`: AI service config
+- `VITE_API_BASE_URL`: Frontend API base URL (build-time, for Cloudflare Workers)
 
-**Data Persistence:**
-- Database data: `mysql_data` Docker volume
-- Survives container restarts and rebuilds
-- Backup regularly for production use
+**Data Persistence:** `mysql_data` Docker volume
 
 ## Architecture
 
@@ -159,7 +153,7 @@ frontend/src/
 **Key Patterns:**
 
 1. **API Client (`api/index.js`):**
-   - Axios instance with `/api` base URL
+   - Axios instance with base URL from `VITE_API_BASE_URL` env var (default `/api`)
    - 60s timeout (for AI-powered features)
    - Request interceptor: adds `Authorization: Bearer <token>` header
    - Response interceptor: handles 401 (redirect to login), shows error messages
@@ -221,14 +215,18 @@ The app performs **inline schema migrations** in `app.py` lifespan on startup:
 - Falls back to localhost defaults for development
 
 **Frontend (`frontend/vite.config.js`):**
-- Backend API URL read from `VITE_BACKEND_URL` environment variable
-- Default: `http://localhost:8000`
-- In Docker: Nginx handles API proxy, so this is only for development
+- `VITE_API_BASE_URL`: API base URL, set at build time (Cloudflare Workers uses `https://api-tasklist.ch-tools.org/api`)
+- Default: `/api` (for local dev with Nginx proxy)
+- `VITE_BACKEND_URL`: Dev server proxy target (default `http://localhost:8000`)
+
+**Frontend Deployment (`frontend/wrangler.jsonc`):**
+- Cloudflare Workers static asset deployment
+- SPA routing via `not_found_handling: "single-page-application"`
+- Auto-build & deploy on `git push` to master
 
 **Docker Environment:**
-- All configuration via `.env` file
-- Docker Compose automatically sets `DATABASE_URL` for backend
-- Frontend uses Nginx reverse proxy (no need for CORS or proxy config)
+- Local dev: `docker-compose.yml` (frontend + backend + db, all-in-one)
+- Production: `docker-compose.prod.yml` (backend + db only, frontend on Cloudflare Workers)
 
 ## Common Patterns
 

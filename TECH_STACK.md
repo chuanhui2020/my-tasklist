@@ -31,7 +31,7 @@
 
 ### 中间件
 
-- CORS：允许所有来源、凭证、方法、请求头
+- CORS：通过 `CORS_ORIGINS` 环境变量配置允许的前端域名
 - 自定义异常处理器：统一 `{"error": "..."}` 格式
 - 请求验证错误返回 400 + `{"error": "参数格式错误"}`
 
@@ -113,20 +113,33 @@
 ## 部署架构
 
 ```
-┌─────────────────────────────────────────────┐
-│                Docker Compose               │
-│                                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  │  Nginx   │  │ FastAPI  │  │  MySQL   │  │
-│  │ (前端)   │──│ (后端)   │──│ (数据库) │  │
-│  │ :80/443  │  │ :8000    │  │ :3306    │  │
-│  └──────────┘  └──────────┘  └──────────┘  │
-│       │                                     │
-│  tasklist_network (bridge)                  │
-└─────────────────────────────────────────────┘
+┌──────────────────────────┐     ┌─────────────────────────────────────┐
+│   Cloudflare Workers     │     │   1C2G 新加坡服务器                  │
+│                          │     │                                     │
+│  Vue 3 SPA 静态文件       │────│  Caddy (反向代理)                    │
+│  tasklist.ch-tools.org   │ API │  ├── api-tasklist.ch-tools.org      │
+│                          │────│  │   → 127.0.0.1:9000               │
+│  自动构建 & 部署          │     │  │                                   │
+│  (git push 触发)         │     │  ┌──────────┐  ┌──────────┐        │
+└──────────────────────────┘     │  │ FastAPI  │──│  MySQL   │        │
+                                 │  │ (后端)   │  │ (数据库) │        │
+                                 │  │ :8000    │  │ :3306    │        │
+                                 │  └──────────┘  └──────────┘        │
+                                 │  tasklist_network (bridge)          │
+                                 └─────────────────────────────────────┘
 ```
 
-### Docker 服务配置
+### 生产环境
+
+| 组件 | 技术 | 说明 |
+|------|------|------|
+| 前端托管 | Cloudflare Workers | 静态资源全球 CDN，git push 自动部署 |
+| 反向代理 | Caddy | 自动 HTTPS，反代后端 API |
+| 后端 | FastAPI + Uvicorn | Docker 容器，内存限制 384MB |
+| 数据库 | MySQL 8.4 | Docker 容器，内存限制 512MB |
+| SSL | Cloudflare Proxy | 前端和 API 均通过 Cloudflare 代理 |
+
+### 本地开发
 
 | 服务 | 镜像 | CPU 限制 | 内存限制 | 健康检查 |
 |------|------|---------|---------|---------|
@@ -134,29 +147,19 @@
 | backend | python:3.10-slim | 0.3 | 384MB | HTTP GET /docs / 30s |
 | frontend | nginx:alpine | 0.2 | 128MB | wget /health / 30s |
 
-总资源预留：0.5 CPU / 512MB，适配 1C2G 服务器。
-
-### Nginx 配置
-
-- HTTP → HTTPS 自动重定向
-- TLS：TLSv1.2 / TLSv1.3
-- Gzip 压缩：最小 1000 字节
-- 静态资源缓存：1 年（immutable）
-- `index.html`：no-cache（确保部署后加载最新版本）
-- API 反向代理：`/api/` → `http://backend:8000/api/`
-- 代理超时：120 秒（connect / send / read）
-- 安全头：X-Frame-Options、X-Content-Type-Options、X-XSS-Protection
-
 ### 环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|-------|
 | MYSQL_ROOT_PASSWORD | 数据库 root 密码 | - |
 | MYSQL_PASSWORD | 应用数据库密码 | - |
-| SECRET_KEY | 应用密钥 | dev-secret-key-change-in-production |
+| SECRET_KEY | Token 签名密钥 | dev-secret-key-change-in-production |
+| CORS_ORIGINS | 允许的前端域名（逗号分隔） | https://tasklist.ch-tools.org,http://localhost:3000 |
 | DATABASE_URL | 数据库连接串 | Docker Compose 自动设置 |
-| FRONTEND_PORT | 前端访问端口 | 3000 |
-| VITE_BACKEND_URL | 开发模式后端地址 | http://localhost:8000 |
+| AI_API_KEY | AI 服务密钥 | - |
+| AI_BASE_URL | AI 服务地址 | https://api.deepseek.com |
+| AI_MODEL | AI 模型名称 | deepseek-chat |
+| VITE_API_BASE_URL | 前端 API 地址（构建时） | /api |
 
 ---
 

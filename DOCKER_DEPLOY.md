@@ -1,524 +1,147 @@
-# Docker Compose 部署指南
+# 部署指南
 
-## 部署架构
+## 生产架构
 
 ```
-用户浏览器 --HTTPS(443)--> Cloudflare CDN/WAF --HTTPS(443)--> Nginx(前端容器:443)
-                                                                  ├── 静态文件(Vue 3)
-                                                                  └── /api/ --HTTP--> Uvicorn(后端容器:8000) --MySQL--> MySQL 8.4(数据库容器:3306)
+用户浏览器
+  ├── https://tasklist.ch-tools.org → Cloudflare Workers（Vue 3 SPA 静态文件）
+  └── https://api-tasklist.ch-tools.org/api/* → Cloudflare Proxy → Caddy → FastAPI(:9000) → MySQL(:3307)
 ```
 
-**容器组成（Docker Compose）：**
-
-| 容器 | 服务 | 端口 | 说明 |
-|------|------|------|------|
-| `tasklist-frontend` | Nginx | 80, 443 | 托管 Vue 静态文件，反代 API |
-| `tasklist-backend` | Uvicorn (单 worker) | 8000 | 运行 FastAPI 应用 |
-| `tasklist-db` | MySQL 8.4 | 3306 | 数据持久化到 `mysql_data` volume |
-
-三个容器通过内部网络 `tasklist_network` 通信。
-
-**HTTPS 全链路加密：**
-
-- 域名 `tasklist.ch-tools.org` 通过 Cloudflare 代理（Proxied），附带 CDN 和 DDoS 防护
-- SSL 模式：Full (Strict)，Cloudflare 到源站之间使用 Cloudflare Origin Certificate 加密
-- Nginx 监听 443 端口，证书文件挂载自 `./certs/` 目录
-- HTTP(80) 自动 301 重定向到 HTTPS
-
-## 快速开始
-
-### 前置要求
-
-- Docker 20.10+
-- Docker Compose V2
-
-### 一键部署
-
-```bash
-# 1. 克隆项目（或解压项目）
-git clone <your-repo-url>
-cd my-tasklist
-
-# 2. 运行启动脚本
-chmod +x docker-start.sh
-./docker-start.sh
-
-# 3. 访问系统
-# 浏览器打开 http://localhost:3000
-```
-
-默认管理员账号：
-- 用户名: `admin`
-- 密码: `123456`
+| 组件 | 技术 | 位置 |
+|------|------|------|
+| 前端 | Cloudflare Workers | 全球 CDN，git push 自动构建部署 |
+| 反向代理 | Caddy | 服务器已有，添加 API 反代规则 |
+| 后端 | FastAPI + Uvicorn | Docker 容器（docker-compose.prod.yml） |
+| 数据库 | MySQL 8.4 | Docker 容器，数据持久化到 volume |
+| SSL | Cloudflare Proxy | 前端和 API 均通过 Cloudflare 自动 HTTPS |
 
 ---
 
-## 详细部署步骤
+## 生产环境部署
 
-### 第一步：配置环境变量
+### 1. 后端 + 数据库（服务器）
 
 ```bash
-# 1. 复制环境变量模板（不要直接使用模板！）
+# 克隆项目
+git clone <repo-url> && cd my-tasklist
+
+# 配置环境变量
 cp .env.example .env
+nano .env  # 填入 MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD, SECRET_KEY, AI_API_KEY
 
-# 2. 编辑 .env 文件修改密码和密钥（重要！）
-nano .env
+# 启动
+docker compose -f docker-compose.prod.yml up -d --build
+
+# 验证
+curl http://127.0.0.1:9000/docs
 ```
 
-**必须修改的配置：**
+### 2. Caddy 反向代理
 
-```env
-# 数据库密码（生产环境必须修改！）
-MYSQL_ROOT_PASSWORD=your_secure_root_password_here
-MYSQL_PASSWORD=your_secure_user_password_here
+在已有的 Caddyfile 中添加：
 
-# 应用密钥（生产环境必须修改！）
-SECRET_KEY=your-random-secret-key-at-least-32-characters-long
-
-# 前端访问端口（可选，默认 3000）
-FRONTEND_PORT=3000
+```caddyfile
+api-tasklist.ch-tools.org {
+    reverse_proxy 127.0.0.1:9000 {
+        transport http {
+            read_timeout 120s
+            write_timeout 120s
+        }
+    }
+}
 ```
 
-**生成强随机密钥：**
+重载：`systemctl reload caddy`
 
-```bash
-# Linux/Mac
-openssl rand -hex 32
+### 3. 前端（Cloudflare Workers）
 
-# Python
-python -c "import secrets; print(secrets.token_hex(32))"
-```
+已通过 `frontend/wrangler.jsonc` 配置，git push 自动触发构建部署。
 
-### 第二步：启动服务
+Cloudflare 构建配置：
+- Root directory: `frontend`
+- Build command: `npm run build`
+- Deploy command: `npx wrangler deploy`
+- 环境变量: `VITE_API_BASE_URL=https://api-tasklist.ch-tools.org/api`, `NODE_VERSION=22`
 
-```bash
-# 构建并启动所有服务（后台运行）
-docker compose up -d --build
+### 4. DNS 配置（Cloudflare）
 
-# 查看启动日志
-docker compose logs -f
-```
-
-### 第三步：验证部署
-
-```bash
-# 查看容器状态
-docker compose ps
-
-# 应该看到 3 个容器都在运行：
-# - tasklist-db (MySQL)
-# - tasklist-backend (FastAPI)
-# - tasklist-frontend (Nginx)
-
-# 检查健康状态
-docker compose ps --format json | jq '.[].Health'
-```
-
-访问 http://localhost:3000，如果能看到登录页面，说明部署成功！
+| 类型 | 名称 | 内容 | 代理 |
+|------|------|------|------|
+| CNAME | tasklist | Workers 自动管理 | - |
+| A | api-tasklist | 服务器 IP | 开启 |
 
 ---
 
-## 服务管理
+## 本地开发部署
 
-### 查看日志
-
-```bash
-# 查看所有服务日志
-docker compose logs -f
-
-# 查看特定服务日志
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f db
-
-# 查看最近 100 行日志
-docker compose logs --tail=100 backend
-```
-
-### 重启服务
+使用 `docker-compose.yml`（包含前端 Nginx + 后端 + 数据库，全部本地运行）：
 
 ```bash
-# 重启所有服务
-docker compose restart
-
-# 重启特定服务
-docker compose restart backend
-
-# 重新构建并重启
+cp .env.example .env && nano .env
 docker compose up -d --build
-```
-
-### 停止服务
-
-```bash
-# 停止所有服务（保留数据）
-docker compose down
-
-# 停止并删除所有数据（危险！）
-docker compose down -v
-```
-
-### 更新代码
-
-```bash
-# 1. 拉取最新代码
-git pull origin master
-
-# 2. 重新构建并启动
-docker compose up -d --build
-
-# 3. 查看日志确认
-docker compose logs -f backend
+# 访问 http://localhost:3000
 ```
 
 ---
 
-## 数据管理
-
-### 数据库备份
+## 后端更新
 
 ```bash
-# 备份到本地文件
-docker compose exec db mysqldump \
-  -u root -p$MYSQL_ROOT_PASSWORD \
-  tasklist_db > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# 或者使用环境变量（需要先 source .env）
-docker compose exec db mysqldump \
-  -u root -p${MYSQL_ROOT_PASSWORD} \
-  tasklist_db > backup.sql
+ssh root@服务器
+cd ~/my-tasklist
+git pull && docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-### 数据库恢复
+前端更新无需手动操作，git push 后 Cloudflare Workers 自动重新构建部署。
+
+---
+
+## 数据库管理
 
 ```bash
-# 从备份文件恢复
-docker compose exec -T db mysql \
-  -u root -p$MYSQL_ROOT_PASSWORD \
-  tasklist_db < backup.sql
+# 备份（生产环境用 docker-compose.prod.yml）
+docker compose -f docker-compose.prod.yml exec db mysqldump \
+  -u root -p$MYSQL_ROOT_PASSWORD tasklist_db > backup_$(date +%Y%m%d).sql
+
+# 恢复
+docker compose -f docker-compose.prod.yml exec -T db mysql \
+  -u root -p$MYSQL_ROOT_PASSWORD tasklist_db < backup.sql
+
+# 进入数据库
+docker compose -f docker-compose.prod.yml exec db mysql \
+  -u root -p --default-character-set=utf8mb4 tasklist_db
 ```
 
-### 进入数据库
+---
 
-```bash
-# 进入 MySQL 命令行（指定 utf8mb4 避免中文乱码）
-docker compose exec db mysql -u taskuser -p --default-character-set=utf8mb4 tasklist_db
+## 环境变量
 
-# 使用 root 用户
-docker compose exec db mysql -u root -p --default-character-set=utf8mb4 tasklist_db
-
-# 常用 SQL
-# mysql> SHOW TABLES;
-# mysql> SELECT * FROM users;
-# mysql> SELECT * FROM tasks;
-```
-
-### 数据持久化
-
-数据库数据存储在 Docker 命名卷中：
-
-```bash
-# 查看数据卷
-docker volume ls | grep tasklist
-
-# 查看数据卷详情
-docker volume inspect tasklist_mysql_data
-
-# 备份数据卷
-docker run --rm \
-  -v tasklist_mysql_data:/data \
-  -v $(pwd):/backup \
-  alpine tar czf /backup/mysql_data_backup.tar.gz /data
-```
+| 变量 | 说明 | 必填 |
+|------|------|------|
+| `MYSQL_ROOT_PASSWORD` | 数据库 root 密码 | 是 |
+| `MYSQL_PASSWORD` | 应用数据库密码 | 是 |
+| `SECRET_KEY` | Token 签名密钥 | 是 |
+| `CORS_ORIGINS` | 允许的前端域名（逗号分隔） | 否（有默认值） |
+| `AI_API_KEY` | AI 服务密钥 | 是（AI 功能需要） |
+| `AI_BASE_URL` | AI 服务地址 | 否（默认 deepseek） |
+| `AI_MODEL` | AI 模型名称 | 否（默认 deepseek-chat） |
 
 ---
 
 ## 故障排查
 
-### 服务无法启动
-
 ```bash
-# 1. 查看容器状态
-docker compose ps
+# 查看容器状态
+docker compose -f docker-compose.prod.yml ps
 
-# 2. 查看详细日志
-docker compose logs backend
-docker compose logs frontend
-docker compose logs db
+# 查看日志
+docker compose -f docker-compose.prod.yml logs -f backend
+docker compose -f docker-compose.prod.yml logs -f db
 
-# 3. 检查端口占用
-# Windows
-netstat -ano | findstr :3000
-netstat -ano | findstr :3306
+# 检查后端健康
+curl http://127.0.0.1:9000/docs
 
-# Linux/Mac
-lsof -i :3000
-lsof -i :3306
-
-# 4. 重新启动
-docker compose down
-docker compose up -d
+# 检查数据库连接
+docker compose -f docker-compose.prod.yml exec db mysqladmin ping -u root -p
 ```
-
-### 后端连接数据库失败
-
-```bash
-# 1. 检查数据库是否启动
-docker compose ps db
-
-# 2. 检查数据库健康状态
-docker inspect tasklist-db --format='{{.State.Health.Status}}'
-
-# 3. 查看数据库日志
-docker compose logs db
-
-# 4. 验证数据库连接
-docker compose exec db mysql -u taskuser -p$MYSQL_PASSWORD -e "SELECT 1;"
-
-# 5. 检查环境变量
-docker compose exec backend env | grep DATABASE_URL
-```
-
-### 前端无法访问后端
-
-```bash
-# 1. 检查后端健康状态
-curl http://localhost:3000/api/tasks
-
-# 2. 进入前端容器测试
-docker compose exec frontend sh
-# 在容器内执行：
-wget -O- http://backend:8000/api/tasks
-
-# 3. 检查 nginx 配置
-docker compose exec frontend cat /etc/nginx/conf.d/default.conf
-
-# 4. 查看 nginx 日志
-docker compose exec frontend tail -f /var/log/nginx/error.log
-```
-
-### 数据库初始化失败
-
-```bash
-# 1. 删除现有数据并重新初始化
-docker compose down -v  # 警告：会删除所有数据！
-docker compose up -d
-```
-
----
-
-## 性能优化
-
-### 调整资源限制
-
-编辑 `docker-compose.yml`，添加资源限制：
-
-```yaml
-services:
-  backend:
-    # ... 其他配置
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-```
-
-### MySQL 性能调优
-
-创建 `mysql.cnf`：
-
-```ini
-[mysqld]
-max_connections = 50
-innodb_buffer_pool_size = 256M
-innodb_log_file_size = 64M
-```
-
-在 `docker-compose.yml` 中挂载：
-
-```yaml
-services:
-  db:
-    volumes:
-      - ./mysql.cnf:/etc/mysql/conf.d/custom.cnf:ro
-```
-
----
-
-## 生产环境部署建议
-
-### 1. HTTPS 配置（Cloudflare Origin Certificate）
-
-项目已通过 Cloudflare Origin Certificate 实现全链路 HTTPS：
-
-```bash
-# 1. 在 Cloudflare 控制台生成 Origin Certificate
-#    SSL/TLS → Origin Server → Create Certificate
-
-# 2. 保存证书到项目 certs 目录
-mkdir -p certs
-# 将 Certificate 保存为 certs/origin.pem
-# 将 Private Key 保存为 certs/origin-key.pem
-chmod 600 certs/origin-key.pem
-
-# 3. 重建前端容器
-docker compose up -d --build frontend
-
-# 4. Cloudflare SSL/TLS 模式设为 Full (Strict)
-```
-
-### 2. 域名配置
-
-域名 `tasklist.ch-tools.org` 通过 Cloudflare 管理：
-
-- DNS 记录指向服务器 IP，代理状态为橙色云朵（Proxied）
-- Cloudflare 提供 CDN 加速和 DDoS 防护
-- SSL/TLS 模式：Full (Strict)
-
-### 3. 环境变量安全
-
-- ✅ 永远不要将 `.env` 文件提交到 Git
-- ✅ 使用强随机密码
-- ✅ 定期更换密钥
-- ✅ 在 `.gitignore` 中添加 `.env`
-
-### 4. 定期备份
-
-创建备份脚本 `backup.sh`：
-
-```bash
-#!/bin/bash
-BACKUP_DIR="/backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-
-mkdir -p $BACKUP_DIR
-
-# 备份数据库
-docker compose exec -T db mysqldump \
-  -u root -p$MYSQL_ROOT_PASSWORD \
-  tasklist_db > $BACKUP_DIR/db_$DATE.sql
-
-# 保留最近 7 天的备份
-find $BACKUP_DIR -name "db_*.sql" -mtime +7 -delete
-
-echo "Backup completed: $BACKUP_DIR/db_$DATE.sql"
-```
-
-添加到 crontab（每天凌晨 2 点备份）：
-
-```bash
-0 2 * * * /path/to/backup.sh
-```
-
-### 5. 日志管理
-
-**Docker 日志驱动：**
-
-使用 Docker 日志驱动：
-
-```yaml
-services:
-  backend:
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-```
-
----
-
-## 常见问题 (FAQ)
-
-**Q: 如何修改前端访问端口？**
-
-A: 修改 `.env` 文件中的 `FRONTEND_PORT`，然后重启：
-
-```bash
-# .env
-FRONTEND_PORT=8080
-
-# 重启
-docker compose up -d
-```
-
-**Q: 如何重置管理员密码？**
-
-A: 进入数据库手动修改：
-
-```sql
--- 进入数据库
-docker compose exec db mysql -u root -p tasklist_db
-
--- 重置密码为 123456
-UPDATE users SET password_hash = 'scrypt:32768:8:1$...' WHERE username = 'admin';
-```
-
-或者删除数据库重新初始化（会丢失所有数据）。
-
-**Q: 能否在同一服务器部署多个实例？**
-
-A: 可以，修改项目目录和端口即可：
-
-```bash
-# 实例 1
-cd ~/tasklist-instance1
-FRONTEND_PORT=3000 docker compose up -d
-
-# 实例 2
-cd ~/tasklist-instance2
-FRONTEND_PORT=3001 docker compose up -d
-```
-
-**Q: 如何升级 Docker 镜像版本？**
-
-A: 修改 Dockerfile 中的基础镜像版本，然后重新构建：
-
-```bash
-docker compose build --no-cache
-docker compose up -d
-```
-
----
-
-## 卸载
-
-```bash
-# 停止并删除所有容器
-docker compose down
-
-# 删除数据卷（会删除数据库数据！）
-docker compose down -v
-
-# 删除镜像
-docker rmi tasklist-backend tasklist-frontend
-
-# 删除项目文件
-cd ..
-rm -rf my-tasklist
-```
-
----
-
-## 技术支持
-
-如有问题，请查看：
-
-1. 日志输出：`docker compose logs -f`
-2. 健康检查：`docker compose ps`
-3. GitHub Issues: [项目地址]
-
----
-
-## 更新日志
-
-### v1.0.0 (2026-01-19)
-- ✅ 初始 Docker Compose 配置
-- ✅ 移除所有硬编码配置
-- ✅ 支持环境变量配置
-- ✅ 添加健康检查
-- ✅ 添加自动化部署脚本
