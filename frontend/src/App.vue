@@ -11,11 +11,14 @@
             <nav class="custom-nav">
               <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
               <router-link to="/change-password" class="nav-link" active-class="active">修改密码</router-link>
-              <router-link v-if="isAdmin" to="/admin/users" class="nav-link" active-class="active">用户管理</router-link>
-              <router-link v-if="isAdmin" to="/admin/menu" class="nav-link" active-class="active">菜单管理</router-link>
               <router-link to="/fortune" class="nav-link" active-class="active">灵签占卜</router-link>
               <router-link to="/bmi" class="nav-link" active-class="active">BMI管理</router-link>
               <router-link to="/secure-notes" class="nav-link" active-class="active">密钥盒子</router-link>
+              <template v-if="isAdmin">
+                <span class="nav-divider"></span>
+                <router-link to="/admin/users" class="nav-link admin-link" active-class="active"><span class="admin-icon">🛡️</span>用户管理</router-link>
+                <router-link to="/admin/menu" class="nav-link admin-link" active-class="active"><span class="admin-icon">🛡️</span>菜单管理</router-link>
+              </template>
             </nav>
             <div class="user-box">
               <span class="user-name">{{ authState.user?.username }}</span>
@@ -160,6 +163,24 @@ const handleLogout = () => {
   color: #fff;
   background: var(--primary-color);
   box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+}
+
+.nav-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--glass-border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.admin-link {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.admin-icon {
+  font-size: 12px;
 }
 
 .user-box {
