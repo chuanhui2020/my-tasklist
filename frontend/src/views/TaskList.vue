@@ -378,13 +378,16 @@ export default {
 
     const handleToggleStatus = async (task) => {
       const newStatus = task.status === 'pending' ? 'done' : 'pending'
+      const oldStatus = task.status
+      task.status = newStatus
       try {
         await api.updateTaskStatus(task.id, newStatus)
         ElMessage.success('任务状态已更新')
-        await loadTasks({ showSpinner: false })
       } catch (error) {
+        task.status = oldStatus
         console.error('更新任务状态失败:', error)
         ElMessage.error('更新任务状态失败，请稍后重试')
+        await loadTasks({ showSpinner: false })
       }
     }
 
@@ -398,14 +401,18 @@ export default {
         await ElMessageBox.confirm('确定要删除这个任务吗？', '确认删除', {
           type: 'warning'
         })
-        await api.deleteTask(task.id)
-        await loadTasks({ showSpinner: false })
-        ElMessage.success('任务已删除')
-      } catch (error) {
-        if (error !== 'cancel') {
+        const oldTasks = [...tasks.value]
+        tasks.value = tasks.value.filter(t => t.id !== task.id)
+        try {
+          await api.deleteTask(task.id)
+          ElMessage.success('任务已删除')
+        } catch (error) {
+          tasks.value = oldTasks
           console.error('删除任务失败:', error)
           ElMessage.error('删除任务失败，请稍后重试')
         }
+      } catch (error) {
+        // user cancelled
       }
     }
 
