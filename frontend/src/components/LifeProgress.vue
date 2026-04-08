@@ -721,12 +721,35 @@ const poopAlerts = [
   { icon: '🚽', title: '厕所在召唤你！', desc: '忍住不是本事，拉出来才是能力！', btn: '搞定了' },
   { icon: '🧻', title: '排毒时间到！', desc: '该去和马桶进行一次深入的交流了！', btn: '交流完毕' },
 ]
+const offWorkAlerts = [
+  { icon: '🎉', title: '下班啦！', desc: '恭喜你又存活了一天，快跑！别让老板看到你还在！', btn: '已跑路' },
+  { icon: '🏃', title: '自由时刻！', desc: '打工人的灵魂已经飞出了工位，肉体也该跟上了！', btn: '冲了冲了' },
+  { icon: '🌅', title: '收工！', desc: '今天的班上完了，明天的班明天再说！', btn: '明天再说' },
+  { icon: '🍻', title: '解放了！', desc: '从现在起到明天早上9点，你是自由的！', btn: '自由万岁' },
+]
+const paydayAlerts = [
+  { icon: '💰', title: '发薪日快乐！', desc: '你的钱包即将从ICU转入普通病房！', btn: '查看余额（不敢）' },
+  { icon: '🤑', title: '工资到账！', desc: '短暂的富有，从现在开始倒计时！', btn: '已到账，已花完' },
+  { icon: '💸', title: '月薪到手！', desc: '花呗、信用卡、房租已经在门口排队了！', btn: '让它们进来吧' },
+]
+const holidayAlerts = [
+  { icon: '🏖️', title: '放假啦！', desc: '从此刻起，你和工位正式断绝关系！', btn: '假期开始！' },
+  { icon: '🎊', title: '假期快乐！', desc: '闹钟已关，工作群已屏蔽，快乐已就绪！', btn: '开始躺平' },
+  { icon: '🌴', title: '自由的味道！', desc: '不用上班的日子，连呼吸都是甜的！', btn: '深呼吸一下' },
+]
 
 let pendingAlertType = null
 let lastMenuDateKey = now.value.toDateString()
 
+// 每日一次的提醒用 sessionStorage 记录日期，防止重复
+const alertedOffWork = ref(sessionStorage.getItem('lp_alerted_offwork') || '')
+const alertedPayday = ref(sessionStorage.getItem('lp_alerted_payday') || '')
+const alertedHoliday = ref(sessionStorage.getItem('lp_alerted_holiday') || '')
+
 function triggerAlert(type) {
-  const pool = type === 'water' ? waterAlerts : poopAlerts
+  const pools = { water: waterAlerts, poop: poopAlerts, offwork: offWorkAlerts, payday: paydayAlerts, holiday: holidayAlerts }
+  const pool = pools[type]
+  if (!pool) return
   const data = pool[Math.floor(Math.random() * pool.length)]
   alertData.value = data
   pendingAlertType = type
@@ -735,13 +758,22 @@ function triggerAlert(type) {
 
 function dismissAlert() {
   alertVisible.value = false
-  // 记录已弹过的时刻，避免同一小时重复弹
+  const todayKey = new Date().toDateString()
   if (pendingAlertType === 'water') {
     alertedWaterHour.value = new Date().getHours()
     sessionStorage.setItem('lp_alerted_water', alertedWaterHour.value)
   } else if (pendingAlertType === 'poop') {
     alertedPoopHour.value = new Date().getHours()
     sessionStorage.setItem('lp_alerted_poop', alertedPoopHour.value)
+  } else if (pendingAlertType === 'offwork') {
+    alertedOffWork.value = todayKey
+    sessionStorage.setItem('lp_alerted_offwork', todayKey)
+  } else if (pendingAlertType === 'payday') {
+    alertedPayday.value = todayKey
+    sessionStorage.setItem('lp_alerted_payday', todayKey)
+  } else if (pendingAlertType === 'holiday') {
+    alertedHoliday.value = todayKey
+    sessionStorage.setItem('lp_alerted_holiday', todayKey)
   }
   pendingAlertType = null
 }
@@ -768,6 +800,38 @@ onMounted(() => {
     // 拉屎提醒：整点时刻前后10分钟内触发
     if (poopHours.value.includes(curH) && curM < 10 && alertedPoopHour.value !== curH && !alertVisible.value) {
       triggerAlert('poop')
+    }
+    // 下班提醒：20:30 后5分钟内触发，每天一次
+    const curHourDec = curH + curM / 60
+    if (curHourDec >= WORK_END && curHourDec < WORK_END + 0.1 && alertedOffWork.value !== currentDateKey && !alertVisible.value) {
+      // 排除假期和周末（假期/周末不需要下班提醒）
+      const todayDate = new Date(now.value.getFullYear(), now.value.getMonth(), now.value.getDate())
+      const dayOfWeek = now.value.getDay()
+      const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6
+      let isHolidayDay = false
+      for (const h of HOLIDAYS) {
+        const hs = new Date(h.start + 'T00:00:00')
+        const he = new Date(h.end + 'T00:00:00')
+        if (todayDate >= hs && todayDate <= he) { isHolidayDay = true; break }
+      }
+      if (!isWeekendDay && !isHolidayDay) {
+        triggerAlert('offwork')
+      }
+    }
+    // 发薪日提醒：每月5号，9点后触发，每天一次
+    if (now.value.getDate() === PAYDAY && curH >= 9 && alertedPayday.value !== currentDateKey && !alertVisible.value) {
+      triggerAlert('payday')
+    }
+    // 放假提醒：假期第一天，9点后触发，每天一次
+    if (curH >= 9 && alertedHoliday.value !== currentDateKey && !alertVisible.value) {
+      const todayDate = new Date(now.value.getFullYear(), now.value.getMonth(), now.value.getDate())
+      for (const h of HOLIDAYS) {
+        const hs = new Date(h.start + 'T00:00:00')
+        if (todayDate.getTime() === hs.getTime()) {
+          triggerAlert('holiday')
+          break
+        }
+      }
     }
   }, 1000)
 })
