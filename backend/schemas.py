@@ -60,3 +60,17 @@ class SecureNoteUpdate(BaseModel):
     content: str = ''
     password: str = ''
     new_password: Optional[str] = None
+
+
+class CountdownCreate(BaseModel):
+    title: str = ''
+    target_time: str = ''
+    remind_before: int = 5
+    remind_level: str = 'urgent'
+
+
+class CountdownUpdate(BaseModel):
+    title: str = ''
+    target_time: str = ''
+    remind_before: int = 5
+    remind_level: str = 'urgent'

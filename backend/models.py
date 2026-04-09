@@ -152,6 +152,31 @@ class WeightRecord(Base):
         }
 
 
+class Countdown(Base):
+    __tablename__ = 'countdowns'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    remind_before: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    remind_level: Mapped[str] = mapped_column(Enum('normal', 'urgent', 'crazy'), default='urgent', nullable=False)
+    status: Mapped[str] = mapped_column(Enum('active', 'expired', 'dismissed'), default='active', nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'target_time': self.target_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'remind_before': self.remind_before,
+            'remind_level': self.remind_level,
+            'status': self.status,
+            'user_id': self.user_id,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        }
+
+
 class WeeklyMenu(Base):
     __tablename__ = 'weekly_menus'
 

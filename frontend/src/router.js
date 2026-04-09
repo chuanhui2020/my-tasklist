@@ -19,6 +19,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/countdown',
+    name: 'CrazyCountdown',
+    component: () => import('./views/CrazyCountdown.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('./views/AdminUsers.vue'),

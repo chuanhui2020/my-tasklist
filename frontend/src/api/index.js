@@ -185,5 +185,29 @@ export default {
 
   deleteSecureNote(id) {
     return api.delete(`/secure-notes/${id}`)
+  },
+
+  getCountdowns() {
+    return api.get('/countdowns')
+  },
+
+  createCountdown(data) {
+    return api.post('/countdowns', data)
+  },
+
+  updateCountdown(id, data) {
+    return api.put(`/countdowns/${id}`, data)
+  },
+
+  deleteCountdown(id) {
+    return api.delete(`/countdowns/${id}`)
+  },
+
+  getUpcomingCountdowns() {
+    return api.get('/countdowns/upcoming')
+  },
+
+  dismissCountdown(id) {
+    return api.patch(`/countdowns/${id}/dismiss`)
   }
 }
