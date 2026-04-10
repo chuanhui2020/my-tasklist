@@ -36,7 +36,7 @@ api.interceptors.response.use(
       }
     } else if (status === 429) {
       // Let the caller handle rate limiting (e.g. fortune daily limit)
-    } else {
+    } else if (!error.config?._silent) {
       ElMessage.error(message || '请求失败')
     }
     return Promise.reject(error)
@@ -204,7 +204,7 @@ export default {
   },
 
   getUpcomingCountdowns() {
-    return api.get('/countdowns/upcoming')
+    return api.get('/countdowns/upcoming', { _silent: true })
   },
 
   dismissCountdown(id) {
