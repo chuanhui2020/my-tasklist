@@ -4,22 +4,22 @@
   "compatibility_date": "2026-04-08",
   "observability": {
     "enabled": true,
-    "logs": { "enabled": true }
+    "logs": { "enabled": true },
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "tasklist_db",
-      "database_id": "79d5a4b0-8acc-4f83-be77-f0d6ebdf2496"
-    }
+      "database_id": "79d5a4b0-8acc-4f83-be77-f0d6ebdf2496",
+    },
   ],
   "routes": [
-    { "pattern": "api-tasklist.ch-tools.org/*", "zone_name": "ch-tools.org" }
+    { "pattern": "api-tasklist.ch-tools.org/*", "zone_name": "ch-tools.org" },
   ],
   "vars": {
     "CORS_ORIGINS": "https://tasklist.ch-tools.org",
-    "AI_BASE_URL": "https://api.deepseek.com",
-    "AI_MODEL": "deepseek-chat"
-  }
+    "AI_BASE_URL": "https://api.ch-tools.org",
+    "AI_MODEL": "gpt-5.4",
+  },
   // SECRET_KEY, AI_API_KEY 通过 wrangler secret put 设置
 }
