@@ -1,20 +1,12 @@
 # Dependencies
 node_modules/
-venv/
-env/
-__pycache__/
-*.pyc
 
 # Environment variables
 .env
-
-# Monitoring data
-prometheus_data/
-grafana_data/
+.dev.vars
 
 # Build outputs
 dist/
-build/
 
 # IDEs
 .vscode/
@@ -24,5 +16,9 @@ build/
 .DS_Store
 Thumbs.db
 
-# AI logs
+# Logs
 logs/
+*.log
+
+# Wrangler
+.wrangler/

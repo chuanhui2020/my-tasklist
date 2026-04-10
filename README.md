@@ -2,497 +2,165 @@
 
 <div align="center">
 
-一个基于 **FastAPI + Vue 3 + MySQL** 的现代化任务管理 Web 应用
+一个基于 **Cloudflare Workers + Vue 3 + D1** 的全栈边缘部署任务管理应用
 
-支持任务增删改查、用户管理、AI 功能等
-
-🐳 **一键 Docker 部署** | 🔐 **用户认证** | 📱 **响应式设计** | ☁️ **Cloudflare CDN**
+🌍 **全球边缘部署** | 🔐 **用户认证** | 📱 **响应式设计** | 💰 **零服务器成本**
 
 </div>
 
 ---
 
-## ✨ 功能特性
+## 功能特性
 
-### 核心功能
-
-- ✅ **任务管理**
-  - 创建、编辑、删除任务
-  - 任务状态切换（待完成/已完成）
-  - 截止日期设置和过期提醒
-  - 按状态、日期筛选和排序
-
-- ✅ **用户系统**
-  - 用户注册和登录
-  - 基于 Token 的身份认证
-  - 角色权限管理（管理员/普通用户）
-  - 密码修改功能
-
-- ✅ **附加功能**
-  - AI 算命功能
-  - BMI 健康管理
-  - 响应式设计，支持移动端
-
-### 技术亮点
-
-- ☁️ **前后端分离部署** - 前端 Cloudflare Workers 全球 CDN，后端 Docker 容器化
-- 🔒 **安全配置** - 无硬编码密码，环境变量管理，CORS 白名单
-- 🎨 **现代化界面** - Element Plus UI 组件库
-- 📊 **RESTful API** - 标准化接口设计
-- 💾 **数据持久化** - MySQL 数据库 + Docker Volume
+- **任务管理** — 创建、编辑、删除、状态切换、截止日期、分页排序
+- **用户系统** — JWT 认证、角色权限（管理员/普通用户）、密码修改
+- **AI 运势签文** — 每日一签，AI 生成签诗与解读
+- **BMI 健康管理** — 体重记录、趋势分析、AI 健康建议
+- **加密笔记** — AES-GCM 加密，密码保护
+- **倒计时提醒** — 自定义提醒时间和级别
+- **菜单识别** — AI Vision 识别菜单图片
+- **3D 动画** — 10 个 Three.js 放松动画场景
 
 ---
 
-## 🚀 部署架构
+## 架构
 
 ```
-用户浏览器
-  ├── tasklist.ch-tools.org → Cloudflare Workers（Vue 3 SPA）
-  └── api-tasklist.ch-tools.org → Cloudflare Proxy → Caddy → FastAPI → MySQL
+用户 → Cloudflare Edge (最近节点)
+       ├── Workers Static Assets (Vue 3 SPA)  ← tasklist.ch-tools.org
+       └── Workers (Hono API)                 ← api-tasklist.ch-tools.org
+           └── D1 (SQLite 数据库)
 ```
 
-- 前端：Cloudflare Workers 托管，git push 自动构建部署
-- 后端：Docker 容器（`docker-compose.prod.yml`），Caddy 反代
-- 数据库：MySQL 8.4 Docker 容器
-- SSL：Cloudflare 自动 HTTPS
+全栈运行在 Cloudflare 边缘，零服务器，免费额度内。
+
+## 技术栈
+
+| 层 | 技术 |
+|---|---|
+| 后端框架 | Hono (TypeScript) |
+| 数据库 | Cloudflare D1 (SQLite) |
+| ORM | Drizzle ORM |
+| 认证 | JWT (jose, Web Crypto API) |
+| 前端框架 | Vue 3 + Vue Router 4 |
+| UI 组件 | Element Plus |
+| 构建工具 | Vite 6 |
+| 3D 动画 | Three.js |
+| 部署 | Cloudflare Workers |
+
+---
+
+## 项目结构
+
+```
+my-tasklist/
+├── workers-backend/            # 后端 (Cloudflare Workers)
+│   ├── wrangler.jsonc          # Workers + D1 配置
+│   ├── src/
+│   │   ├── index.ts            # Hono 入口，路由注册，CORS
+│   │   ├── types.ts            # 类型定义
+│   │   ├── db/schema.ts        # Drizzle 表定义
+│   │   ├── middleware/auth.ts  # JWT 认证中间件
+│   │   ├── routes/             # API 路由 (auth/tasks/fortune/bmi/...)
+│   │   └── lib/                # 工具库 (crypto/token/ai)
+│   └── drizzle/                # D1 SQL 迁移
+│
+├── frontend/                   # 前端 (Vue 3 SPA)
+│   ├── wrangler.jsonc          # Workers 静态部署配置
+│   ├── src/
+│   │   ├── api/index.js        # Axios API 客户端
+│   │   ├── views/              # 页面组件
+│   │   ├── components/         # 通用组件 + Three.js 动画
+│   │   └── router.js           # 路由配置
+│   └── vite.config.js
+│
+├── CLAUDE.md                   # 开发者指南
+└── README.md
+```
+
+---
+
+## 部署
+
+### 后端部署
+
+```bash
+cd workers-backend
+npm install
+npx wrangler deploy
+```
+
+Secrets 配置：
+```bash
+echo "your-secret" | npx wrangler secret put SECRET_KEY
+echo "your-api-key" | npx wrangler secret put AI_API_KEY
+```
+
+### 前端部署
+
+每次 `git push` 到 master 自动触发 Cloudflare Workers 构建部署。
 
 ### 本地开发
 
 ```bash
-# 1. 克隆项目
-git clone <your-repo-url>
-cd my-tasklist
+# 后端
+cd workers-backend && npm install && npx wrangler dev
 
-# 2. 创建配置文件
-cp .env.example .env
-nano .env
-
-# 3. 启动（前端+后端+数据库 全部本地运行）
-docker compose up -d --build
+# 前端
+cd frontend && npm install && npm run dev
 ```
 
-### 生产部署
+### D1 数据库
 
 ```bash
-# 后端（服务器上）
-cp .env.example .env && nano .env
-docker compose -f docker-compose.prod.yml up -d --build
-```
+# 初始化 schema
+npx wrangler d1 execute tasklist_db --remote --file=drizzle/0000_initial.sql
 
-前端通过 Cloudflare Workers 自动部署，详见 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)。
-
-### 访问系统
-
-- 🌐 **本地开发**: http://localhost:3000
-- 🌐 **生产环境**: https://tasklist.ch-tools.org
-- 👤 **默认账号**: `admin` / `123456`
-
-### 查看日志
-
-```bash
-# 查看所有服务日志
-docker compose logs -f
-
-# 查看特定服务
-docker compose logs -f backend
-docker compose logs -f frontend
-```
-
-### 停止服务
-
-```bash
-docker compose down
+# 查询数据
+npx wrangler d1 execute tasklist_db --remote --command="SELECT * FROM users"
 ```
 
 ---
 
-## ⚙️ 配置说明
+## API 接口
 
-### 环境变量配置（.env 文件）
-
-**必须修改的配置（生产环境）：**
-
-```env
-# 数据库密码
-MYSQL_ROOT_PASSWORD=your_secure_root_password_here
-MYSQL_PASSWORD=your_secure_user_password_here
-
-# 应用密钥（至少 32 位）
-SECRET_KEY=your-random-secret-key-here
-
-# 前端端口（可选，默认 3000）
-FRONTEND_PORT=3000
-```
-
-**生成随机密钥：**
-
-```bash
-# 方式1：使用 openssl
-openssl rand -hex 32
-
-# 方式2：使用 Python
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
----
-
-## 📚 技术栈
-
-### 后端
-- **Python 3.10** - 编程语言
-- **FastAPI** - Web 框架
-- **SQLAlchemy 2.0** - ORM
-- **PyMySQL** - MySQL 驱动
-- **Uvicorn** - ASGI 服务器
-
-### 前端
-- **Vue 3.5** - 前端框架
-- **Vue Router 4.5** - 路由管理
-- **Axios** - HTTP 客户端
-- **Element Plus** - UI 组件库
-- **Vite 6** - 构建工具
-
-### 数据库
-- **MySQL 8.4** - 关系型数据库
-
-### 部署
-- **Docker** - 容器化（后端 + 数据库）
-- **Cloudflare Workers** - 前端静态托管 + CDN
-- **Caddy** - 反向代理（生产环境）
-- **Nginx** - 反向代理（本地开发）
+| 模块 | 方法 | 路径 | 说明 |
+|------|------|------|------|
+| Auth | POST | /api/auth/login | 登录 |
+| Auth | GET | /api/auth/me | 当前用户 |
+| Auth | GET | /api/auth/users | 用户列表 (admin) |
+| Auth | POST | /api/auth/users | 创建用户 (admin) |
+| Auth | POST | /api/auth/change-password | 修改密码 |
+| Tasks | GET | /api/tasks | 任务列表 (分页) |
+| Tasks | POST | /api/tasks | 创建任务 |
+| Tasks | PUT | /api/tasks/:id | 更新任务 |
+| Tasks | PATCH | /api/tasks/:id/status | 切换状态 |
+| Tasks | DELETE | /api/tasks/:id | 删除任务 |
+| Fortune | POST | /api/fortune/generate | 生成运势 |
+| Fortune | GET | /api/fortune/today | 今日运势 |
+| Fortune | GET | /api/fortune/history | 历史记录 |
+| BMI | POST | /api/bmi/advice | AI 健康建议 |
+| BMI | GET/PUT | /api/bmi/profile | 档案管理 |
+| BMI | POST | /api/bmi/weight | 记录体重 |
+| BMI | POST | /api/bmi/weight/analysis | AI 体重分析 |
+| Notes | GET/POST | /api/secure-notes | 笔记列表/创建 |
+| Notes | POST | /api/secure-notes/:id/unlock | 解锁笔记 |
+| Countdown | GET/POST | /api/countdowns | 倒计时列表/创建 |
+| Menu | GET | /api/menu/today | 今日菜单 |
+| Menu | POST | /api/menu/upload | 上传菜单图片 (admin) |
 
 ---
 
-## 📁 项目结构
+## 默认账号
 
-```
-my-tasklist/
-├── backend/                    # 后端 FastAPI 应用
-│   ├── app.py                  # 应用入口
-│   ├── config.py               # 配置文件（环境变量）
-│   ├── models.py               # 数据库模型
-│   ├── auth_utils.py           # 认证工具
-│   ├── database.py             # 数据库连接
-│   ├── schemas.py              # Pydantic 请求模型
-│   ├── requirements.txt        # Python 依赖
-│   └── routes/                 # API 路由
-│       ├── auth_routes.py      # 认证接口
-│       ├── task_routes.py      # 任务接口
-│       ├── fortune_routes.py   # 算命功能
-│       └── bmi_routes.py       # BMI 功能
-│
-├── frontend/                   # 前端 Vue 应用
-│   ├── src/
-│   │   ├── api/                # API 调用
-│   │   ├── components/         # 组件
-│   │   ├── views/              # 页面
-│   │   ├── App.vue             # 根组件
-│   │   └── router.js           # 路由配置
-│   ├── wrangler.jsonc           # Cloudflare Workers 部署配置
-│   ├── package.json            # 前端依赖
-│   └── vite.config.js          # Vite 配置
-│
-├── Dockerfile.backend          # 后端镜像
-├── Dockerfile.frontend         # 前端镜像
-├── docker-compose.yml          # Docker 编排（本地开发，含前端）
-├── docker-compose.prod.yml     # Docker 编排（生产，仅后端+数据库）
-├── nginx.conf                  # Nginx 配置（本地开发用）
-├── .env.example                # 环境变量模板
-├── docker-start.sh             # 启动脚本
-└── README.md                   # 项目文档
-```
+- 用户名: `admin`
+- 密码: `123456`
+- 首次使用请修改密码
 
 ---
 
-## 🔧 常用操作
-
-### 后端更新（生产环境）
-
-```bash
-ssh root@服务器
-cd ~/my-tasklist
-git pull && docker compose -f docker-compose.prod.yml up -d --build
-```
-
-前端更新无需手动操作，git push 后自动部署。
-
-### 服务管理（本地开发）
-
-```bash
-# 查看服务状态
-docker compose ps
-
-# 重启服务
-docker compose restart
-
-# 重启特定服务
-docker compose restart backend
-
-# 更新代码后重新部署
-git pull
-docker compose up -d --build
-```
-
-### 数据库管理
-
-```bash
-# 备份数据库
-docker compose exec db mysqldump \
-  -u root -p$MYSQL_ROOT_PASSWORD \
-  tasklist_db > backup_$(date +%Y%m%d).sql
-
-# 恢复数据库
-docker compose exec -T db mysql \
-  -u root -p$MYSQL_ROOT_PASSWORD \
-  tasklist_db < backup.sql
-
-# 进入数据库
-docker compose exec db mysql -u root -p
-```
-
-### 容器调试
-
-```bash
-# 进入后端容器
-docker compose exec backend bash
-
-# 进入前端容器
-docker compose exec frontend sh
-
-# 查看容器资源占用
-docker stats
-```
-
----
-
-## 📊 API 接口
-
-### 认证相关
-- `POST /api/auth/login` - 用户登录
-- `GET /api/auth/me` - 获取当前用户信息
-- `POST /api/auth/users` - 创建用户（管理员）
-- `POST /api/auth/change-password` - 修改密码
-
-### 任务管理
-- `GET /api/tasks` - 获取任务列表
-- `GET /api/tasks/:id` - 获取单个任务
-- `POST /api/tasks` - 创建任务
-- `PUT /api/tasks/:id` - 更新任务
-- `PATCH /api/tasks/:id/status` - 更新任务状态
-- `DELETE /api/tasks/:id` - 删除任务
-
-### 其他功能
-- `POST /api/fortune/generate` - AI 算命
-- `POST /api/bmi/advice` - BMI 健康建议
-
----
-
-## 💾 数据库设计
-
-### users 表
-```sql
-id            INT PRIMARY KEY AUTO_INCREMENT
-username      VARCHAR(64) UNIQUE NOT NULL
-password_hash VARCHAR(512) NOT NULL
-role          ENUM('admin', 'user') DEFAULT 'user'
-created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-```
-
-### tasks 表
-```sql
-id          INT PRIMARY KEY AUTO_INCREMENT
-title       VARCHAR(255) NOT NULL
-description TEXT
-status      ENUM('pending', 'done') DEFAULT 'pending'
-due_date    DATE
-user_id     INT NOT NULL (外键关联 users)
-created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-```
-
----
-
-## 🛠️ 开发指南
-
-### Docker 开发环境（推荐）
-
-```bash
-# 启动开发环境
-docker compose up -d
-
-# 查看实时日志
-docker compose logs -f backend
-docker compose logs -f frontend
-
-# 修改代码后重启
-docker compose restart backend
-```
-
----
-
-## 📖 文档
-
-- **[DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)** - 详细部署文档
-- **[CLAUDE.md](./CLAUDE.md)** - 开发者指南
-
----
-
-## 🔍 故障排查
-
-### 端口被占用
-
-```bash
-# 修改 .env 文件中的端口
-FRONTEND_PORT=8080
-
-# 重启服务
-docker compose up -d
-```
-
-### 服务无法启动
-
-```bash
-# 查看详细日志
-docker compose logs backend
-docker compose logs frontend
-docker compose logs db
-
-# 重新构建
-docker compose down
-docker compose up -d --build
-```
-
-### 数据库连接失败
-
-```bash
-# 检查数据库状态
-docker compose ps db
-
-# 查看数据库日志
-docker compose logs db
-
-# 等待数据库完全启动（约 10-30 秒）
-```
-
-更多问题请查看 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md) 的故障排查章节。
-
----
-
-## 🎯 使用说明
-
-### 登录系统
-
-1. 访问 https://tasklist.ch-tools.org（生产）或 http://localhost:3000（本地）
-2. 使用默认账号登录：`admin` / `123456`
-3. 首次使用建议修改密码
-
-### 任务管理
-
-- **新建任务**: 点击"新建任务"按钮，填写标题、描述和截止日期
-- **编辑任务**: 点击任务卡片的"编辑"按钮
-- **完成任务**: 点击"标记完成"按钮
-- **删除任务**: 点击"删除"按钮并确认
-
-### 用户管理（管理员）
-
-- 进入"用户管理"页面
-- 创建新用户，设置角色（管理员/普通用户）
-- 管理所有用户账号
-
----
-
-## 🔒 安全建议
-
-### 生产环境部署
-
-1. ✅ **修改默认密码** - 修改 `.env` 中的所有密码
-2. ✅ **使用强密钥** - `SECRET_KEY` 至少 32 位随机字符
-3. ✅ **启用 HTTPS** - Cloudflare 自动管理 SSL 证书
-4. ✅ **定期备份** - 设置自动化数据库备份
-5. ✅ **限制访问** - 配置防火墙，只开放必要端口
-6. ✅ **更新依赖** - 定期更新 Docker 镜像和依赖包
-
-### 备份建议
-
-```bash
-# 创建备份脚本
-#!/bin/bash
-BACKUP_DIR="./backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-mkdir -p $BACKUP_DIR
-
-docker compose -f docker-compose.prod.yml exec -T db mysqldump \
-  -u root -p$MYSQL_ROOT_PASSWORD \
-  tasklist_db > $BACKUP_DIR/backup_$DATE.sql
-
-echo "Backup completed: $BACKUP_DIR/backup_$DATE.sql"
-```
-
----
-
-## 🚀 性能优化
-
-- **资源限制**: 在 `docker-compose.prod.yml` 中配置 CPU 和内存限制
-- **前端 CDN**: Cloudflare Workers 全球边缘节点加速
-- **数据库优化**: 根据负载调整 MySQL 配置
-- **前端缓存**: Nginx 已配置静态资源缓存
-- **日志管理**: 配置日志轮转，防止日志文件过大
-
----
-
-## 📝 更新日志
-
-### v2.0.0 (2026-04-08)
-- ✅ 前端迁移至 Cloudflare Workers（全球 CDN）
-- ✅ 后端合并至共享服务器
-- ✅ 移除 Prometheus/Grafana/MySQL Exporter 监控组件
-- ✅ CORS 和 API 地址改为环境变量驱动
-- ✅ 新增 docker-compose.prod.yml 生产部署配置
-
-### v1.1.0 (2026-01-19)
-- ✅ 完全 Docker 化部署
-- ✅ 移除所有硬编码配置
-- ✅ 环境变量化配置管理
-- ✅ 一键启动脚本
-- ✅ 完善的文档体系
-
-### v1.0.0 (2024-09-16)
-- ✅ 基础任务管理功能
-- ✅ 用户认证系统
-- ✅ AI 功能集成
-
----
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
----
-
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
----
-
-## 💬 联系方式
-
-如有问题或建议，欢迎：
-- 提交 [Issue](../../issues)
-- 发送 Pull Request
-- 联系项目维护者
-
----
-
-<div align="center">
-
-**⭐ 如果这个项目对你有帮助，请给个 Star！⭐**
-
-Made with ❤️ using FastAPI + Vue 3 + Docker
-
-</div>
+## 更新日志
+
+### v3.0.0 (2026-04-10)
+- 全栈边缘部署：Cloudflare Workers (Hono) + D1 (SQLite)
+- 零服务器成本，全球就近响应

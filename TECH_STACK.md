@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-个人任务管理系统 —— 全栈 Web 应用，采用前后端分离架构，Docker Compose 一键部署。
+个人任务管理系统 —— 全栈边缘部署 Web 应用，前后端均运行在 Cloudflare Workers。
 
 ---
 
@@ -10,36 +10,40 @@
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| Python | 3.10 | 运行环境 |
-| FastAPI | 0.115.0 | Web 框架 |
-| Uvicorn | 0.30.6 | ASGI 服务器 |
-| SQLAlchemy | 2.0.35 | ORM |
-| PyMySQL | 1.1.0 | MySQL 驱动 |
-| Pydantic Settings | 2.5.2 | 配置管理 |
-| itsdangerous | 2.2.0 | Token 认证（URLSafeTimedSerializer） |
-| werkzeug | 3.0.4 | 密码哈希 |
-| python-dotenv | 1.0.0 | 环境变量加载 |
-| cryptography | - | 加密支持 |
-| requests | 2.31.0 | HTTP 客户端（AI 服务调用） |
+| TypeScript | 5.7+ | 编程语言 |
+| Hono | 4.7+ | Web 框架 (Workers 生态首选) |
+| Drizzle ORM | 0.39+ | ORM (D1 原生支持) |
+| jose | 6.0+ | JWT 生成/验证 (Web Crypto API) |
+| Web Crypto API | - | 密码哈希 (PBKDF2) + 加密 (AES-GCM) |
 
 ### 认证机制
 
-- 使用 `itsdangerous.URLSafeTimedSerializer` 生成无状态 Token
+- JWT (HS256)，通过 `jose` 库签发和验证
 - Token 载荷：`{user_id, role}`
-- 有效期：24 小时（86400 秒）
-- 路由保护：`Depends(get_current_user)` / `Depends(require_admin)`
+- 有效期：24 小时
+- 路由保护：`authMiddleware` / `adminMiddleware` (Hono 中间件)
+
+### 密码哈希
+
+- PBKDF2-SHA256，100,000 次迭代（Workers 限制最大 100,000）
+- 存储格式：`pbkdf2$salt_hex$hash_hex`
+
+### 加密
+
+- AES-256-GCM (Web Crypto API)
+- Key derivation：PBKDF2-SHA256，100,000 次迭代
 
 ### 中间件
 
-- CORS：通过 `CORS_ORIGINS` 环境变量配置允许的前端域名
-- 自定义异常处理器：统一 `{"error": "..."}` 格式
-- 请求验证错误返回 400 + `{"error": "参数格式错误"}`
+- CORS：通过 `CORS_ORIGINS` 环境变量配置，`maxAge: 86400` 缓存 preflight
+- 全局错误处理：统一 `{"error": "..."}` 格式
+- Auth 中间件：解析 JWT，查询用户，注入 `c.get('user')`
 
-### 数据库迁移
+### AI 调用
 
-- 启动时通过 `sqlalchemy.inspect()` 检查表结构
-- 使用原生 SQL `ALTER TABLE` 执行内联迁移
-- 不依赖 Alembic
+- 使用 Workers 原生 `fetch` 调用外部 AI API
+- 支持文本和 Vision (图片识别) 两种模式
+- Workers I/O 等待不算 CPU 时间，无超时问题
 
 ---
 
@@ -47,15 +51,13 @@
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| Vue | 3.5.13 | 前端框架 |
-| Vue Router | 4.5.0 | 路由管理 |
-| Vite | 6.3.5 | 构建工具 |
-| Element Plus | 2.9.7 | UI 组件库 |
-| @element-plus/icons-vue | 2.3.1 | 图标库 |
-| Axios | 1.8.4 | HTTP 客户端 |
-| Three.js | 0.175.0 | 3D 渲染引擎 |
+| Vue | 3.5 | 前端框架 |
+| Vue Router | 4.5 | 路由管理 |
+| Vite | 6.3 | 构建工具 |
+| Element Plus | 2.9 | UI 组件库 |
+| Axios | 1.8 | HTTP 客户端 |
+| Three.js | 0.175 | 3D 渲染引擎 |
 | ECharts | 6.0 | 数据可视化图表 |
-| @vitejs/plugin-vue | 5.2.3 | Vite Vue 插件 |
 
 ### 前端架构
 
@@ -92,110 +94,77 @@
 
 ## 数据库
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| MySQL | 8.4 | 主数据库 |
+| 技术 | 说明 |
+|------|------|
+| Cloudflare D1 | SQLite 边缘数据库 |
+| Drizzle ORM | 类型安全的查询构建 |
 
-- 字符集：utf8mb4
-- 连接串：`mysql+pymysql://user:password@db:3306/tasklist_db?charset=utf8mb4`
-- 数据持久化：Docker Volume `tasklist_mysql_data`
+- D1 基于 SQLite：无 ENUM（用 TEXT + CHECK）、日期存 TEXT (ISO 8601)、INTEGER PRIMARY KEY 自增
+- Schema 定义：`workers-backend/src/db/schema.ts`
+- 迁移文件：`workers-backend/drizzle/0000_initial.sql`
 
 ### 数据模型
 
-- `User`：username、password_hash、role（admin/user）
-- `Task`：title、description、status（pending/done）、due_date、user_id（FK）
-- BMI 相关表：体重记录、BMI 档案
-- 占卜相关表：签文记录
-- 密钥盒子：加密笔记
+| 表 | 字段 | 说明 |
+|---|------|------|
+| users | username, password_hash, role, created_at | 用户 |
+| tasks | title, description, status, due_date, user_id | 任务 |
+| bmi_profiles | gender, age, height, weight (per user unique) | BMI 档案 |
+| fortune_records | fortune_number, fortune_type, poem, advice | 签文记录 |
+| secure_notes | title, encrypted_content, salt, password_hash | 加密笔记 |
+| weight_records | weight, date (user+date unique) | 体重记录 |
+| countdowns | title, target_time, remind_before, remind_level, status | 倒计时 |
+| weekly_menus | week_start, menu_json | 每周菜单 |
+
+### 免费额度
+
+| 资源 | 免费额度 |
+|------|----------|
+| Workers 请求 | 10 万次/天 |
+| Workers CPU | 10ms/请求 |
+| D1 读取 | 500 万行/天 |
+| D1 写入 | 10 万行/天 |
+| D1 存储 | 5GB |
 
 ---
 
 ## 部署架构
 
 ```
-┌──────────────────────────┐     ┌─────────────────────────────────────┐
-│   Cloudflare Workers     │     │   1C2G 新加坡服务器                  │
-│                          │     │                                     │
-│  Vue 3 SPA 静态文件       │────│  Caddy (反向代理)                    │
-│  tasklist.ch-tools.org   │ API │  ├── api-tasklist.ch-tools.org      │
-│                          │────│  │   → 127.0.0.1:9000               │
-│  自动构建 & 部署          │     │  │                                   │
-│  (git push 触发)         │     │  ┌──────────┐  ┌──────────┐        │
-└──────────────────────────┘     │  │ FastAPI  │──│  MySQL   │        │
-                                 │  │ (后端)   │  │ (数据库) │        │
-                                 │  │ :8000    │  │ :3306    │        │
-                                 │  └──────────┘  └──────────┘        │
-                                 │  tasklist_network (bridge)          │
-                                 └─────────────────────────────────────┘
+用户 → Cloudflare Edge (最近节点)
+       ├── Workers Static Assets (Vue 3 SPA)  ← tasklist.ch-tools.org
+       └── Workers (Hono API)                 ← api-tasklist.ch-tools.org
+           └── D1 (SQLite 数据库)
 ```
-
-### 生产环境
 
 | 组件 | 技术 | 说明 |
 |------|------|------|
-| 前端托管 | Cloudflare Workers | 静态资源全球 CDN，git push 自动部署 |
-| 反向代理 | Caddy | 自动 HTTPS，反代后端 API |
-| 后端 | FastAPI + Uvicorn | Docker 容器，内存限制 384MB |
-| 数据库 | MySQL 8.4 | Docker 容器，内存限制 512MB |
-| SSL | Cloudflare Proxy | 前端和 API 均通过 Cloudflare 代理 |
+| 前端 | Cloudflare Workers | 静态资源，git push 自动部署 |
+| 后端 | Cloudflare Workers | Hono + TypeScript，`wrangler deploy` |
+| 数据库 | Cloudflare D1 | SQLite，APAC 区域 |
+| SSL | Cloudflare | 自动 HTTPS |
 
 ### 请求链路
 
-**前端页面加载：**
-
 ```
-浏览器 → DNS(tasklist.ch-tools.org)
-  → Cloudflare Workers 边缘节点（全球 CDN 就近响应）
-  → 返回 index.html + JS/CSS
-  → 浏览器渲染 Vue SPA
+浏览器 → tasklist.ch-tools.org → Workers 边缘节点 → 返回 SPA
+Vue 发起 API 请求 → api-tasklist.ch-tools.org → Workers 边缘节点
+  → Hono 路由处理 → Drizzle ORM → D1 (SQLite) → JSON 响应返回
 ```
 
-**API 请求：**
+### 配置
 
-```
-Vue 应用发起请求（如 POST /api/auth/login）
-  → DNS(api-tasklist.ch-tools.org) → Cloudflare Proxy（自动 HTTPS）
-  → Caddy（匹配域名，reverse_proxy 127.0.0.1:9000）
-  → Docker 端口映射（9000 → 容器内 8000）
-  → FastAPI 处理业务逻辑
-  → SQLAlchemy → MySQL（容器内 3306）
-  → JSON 响应原路返回
-```
+**Workers Secrets (敏感)：**
+- `SECRET_KEY`：JWT 签名密钥
+- `AI_API_KEY`：AI 服务密钥
 
-**跨域处理：**
+**Workers Vars (明文)：**
+- `CORS_ORIGINS`：允许的前端域名
+- `AI_BASE_URL`：AI 服务地址
+- `AI_MODEL`：AI 模型名称
 
-```
-前端域: tasklist.ch-tools.org
-后端域: api-tasklist.ch-tools.org
-  → 浏览器检测跨域，先发 OPTIONS preflight
-  → FastAPI CORSMiddleware 校验 Origin 是否在 CORS_ORIGINS 白名单
-  → 返回 Access-Control-Allow-Origin
-  → 正式请求携带 Authorization: Bearer <token>
-```
-
-两条链路完全独立：前端挂了不影响 API，后端挂了前端页面仍可加载。
-
-### 本地开发
-
-| 服务 | 镜像 | CPU 限制 | 内存限制 | 健康检查 |
-|------|------|---------|---------|---------|
-| db | mysql:8.4 | 0.5 | 512MB | mysqladmin ping / 10s |
-| backend | python:3.10-slim | 0.3 | 384MB | HTTP GET /docs / 30s |
-| frontend | nginx:alpine | 0.2 | 128MB | wget /health / 30s |
-
-### 环境变量
-
-| 变量 | 说明 | 默认值 |
-|------|------|-------|
-| MYSQL_ROOT_PASSWORD | 数据库 root 密码 | - |
-| MYSQL_PASSWORD | 应用数据库密码 | - |
-| SECRET_KEY | Token 签名密钥 | dev-secret-key-change-in-production |
-| CORS_ORIGINS | 允许的前端域名（逗号分隔） | https://tasklist.ch-tools.org,http://localhost:3000 |
-| DATABASE_URL | 数据库连接串 | Docker Compose 自动设置 |
-| AI_API_KEY | AI 服务密钥 | - |
-| AI_BASE_URL | AI 服务地址 | https://api.deepseek.com |
-| AI_MODEL | AI 模型名称 | deepseek-chat |
-| VITE_API_BASE_URL | 前端 API 地址（构建时） | /api |
+**前端构建变量：**
+- `VITE_API_BASE_URL`：API 地址（`https://api-tasklist.ch-tools.org/api`）
 
 ---
 
@@ -208,5 +177,7 @@ Vue 应用发起请求（如 POST /api/auth/login）
 | 占卜 | /api/fortune/* | Fortune.vue | AI 灵签占卜、每日限制 |
 | BMI | /api/bmi/* | BmiManager.vue | 体重记录、趋势图表、AI 分析 |
 | 密钥盒子 | /api/secure-notes/* | SecureNotes.vue | 加密笔记存储 |
+| 倒计时 | /api/countdowns/* | - | 倒计时提醒 |
+| 菜单 | /api/menu/* | - | AI Vision 菜单识别 |
 | 用户管理 | /api/auth/users | AdminUsers.vue | 管理员专属 |
 | 体素花园 | - | TaskList.vue 侧边栏 | 10 个 3D 解压动画轮播 |
