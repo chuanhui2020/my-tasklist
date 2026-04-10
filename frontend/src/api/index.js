@@ -20,6 +20,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   response => response,
   error => {
+    if (axios.isCancel(error) || error?.code === 'ERR_CANCELED') {
+      return Promise.reject(error)
+    }
     const status = error.response?.status
     const requestUrl = error.config?.url || ''
     const message = error.response?.data?.error
@@ -82,8 +85,8 @@ export default {
     return api.post('/auth/change-password', data)
   },
 
-  getTasks(params = {}) {
-    return api.get('/tasks', { params })
+  getTasks(params = {}, { signal } = {}) {
+    return api.get('/tasks', { params, signal })
   },
 
   getTask(id) {

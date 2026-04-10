@@ -15,6 +15,8 @@ task_router = APIRouter(prefix='/api')
 def get_tasks(
     status: str = Query(default=None),
     sort: str = Query(default='due_date'),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -23,16 +25,26 @@ def get_tasks(
     if status:
         query = query.filter(Task.status == status)
 
+    total = query.count()
+
     if sort == 'created_at':
-        tasks = query.order_by(Task.created_at.desc()).all()
+        query = query.order_by(Task.created_at.desc())
     else:
-        tasks = query.order_by(
+        query = query.order_by(
             case((Task.due_date.is_(None), 1), else_=0),
             Task.due_date.asc(),
             Task.created_at.desc(),
-        ).all()
+        )
 
-    return [task.to_dict() for task in tasks]
+    offset = (page - 1) * page_size
+    tasks = query.offset(offset).limit(page_size).all()
+
+    return {
+        'items': [task.to_dict() for task in tasks],
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+    }
 
 
 @task_router.get('/tasks/{task_id}')

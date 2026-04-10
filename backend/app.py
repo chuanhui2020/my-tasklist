@@ -64,6 +64,20 @@ async def lifespan(app: FastAPI):
                 except Exception:
                     db.rollback()
 
+        # Add composite indexes for task queries
+        indexes = inspector.get_indexes('tasks')
+        existing_idx_names = {idx['name'] for idx in indexes}
+        for idx_name, idx_cols in [
+            ('idx_tasks_user_status', '(user_id, status)'),
+            ('idx_tasks_user_due_date', '(user_id, due_date)'),
+        ]:
+            if idx_name not in existing_idx_names:
+                try:
+                    db.execute(text(f'ALTER TABLE tasks ADD INDEX {idx_name} {idx_cols}'))
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
         # Migrate fortune_records: add work_fortune column
         if 'fortune_records' in inspector.get_table_names():
             fr_columns = {col['name'] for col in inspector.get_columns('fortune_records')}

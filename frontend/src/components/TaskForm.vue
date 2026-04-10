@@ -123,14 +123,14 @@ export default {
         }
         
         if (isEdit.value) {
-          await api.updateTask(props.task.id, data)
+          const res = await api.updateTask(props.task.id, data)
           ElMessage.success('任务更新成功')
+          emit('submit', { action: 'update', task: res.data })
         } else {
-          await api.createTask(data)
+          const res = await api.createTask(data)
           ElMessage.success('任务创建成功')
+          emit('submit', { action: 'create', task: res.data })
         }
-        
-        emit('submit')
         handleClose()
         
       } catch (error) {
