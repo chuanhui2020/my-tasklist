@@ -60,6 +60,10 @@
             </div>
           </div>
         </div>
+
+        <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
+          <img :src="viewerUrl" class="image-overlay-img" @click.stop />
+        </div>
       </Teleport>
 
       <div class="task-meta">
@@ -139,6 +143,8 @@ export default {
   emits: ['toggle-status', 'edit', 'delete'],
   setup(props) {
     const showAllThumbs = ref(false)
+    const showViewer = ref(false)
+    const viewerUrl = ref('')
 
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
@@ -151,7 +157,9 @@ export default {
     }
 
     const openImage = (img) => {
-      window.open(getImageUrl(img), '_blank')
+      viewerUrl.value = getImageUrl(img)
+      showAllThumbs.value = false
+      showViewer.value = true
     }
 
     const formatDate = (dateString) => {
@@ -172,6 +180,8 @@ export default {
     return {
       isOverdue,
       showAllThumbs,
+      showViewer,
+      viewerUrl,
       getImageUrl,
       openImage,
       formatDate,
@@ -446,5 +456,27 @@ export default {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.image-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  cursor: pointer;
+}
+
+.image-overlay-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
 }
 </style>

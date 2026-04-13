@@ -84,6 +84,12 @@
       </div>
     </template>
   </el-dialog>
+
+  <Teleport to="body">
+    <div v-if="showFormViewer" class="image-overlay" @click="showFormViewer = false">
+      <img :src="formViewerUrl" class="image-overlay-img" @click.stop />
+    </div>
+  </Teleport>
 </template>
 
 <script>
@@ -108,6 +114,8 @@ export default {
     const formRef = ref()
     const imageInputRef = ref()
     const submitting = ref(false)
+    const showFormViewer = ref(false)
+    const formViewerUrl = ref('')
 
     const defaultForm = {
       title: '',
@@ -177,7 +185,8 @@ export default {
     }
 
     const openFormImage = (url) => {
-      window.open(url, '_blank')
+      formViewerUrl.value = url
+      showFormViewer.value = true
     }
 
     const cleanupPreviews = () => {
@@ -290,6 +299,8 @@ export default {
       removeExistingImage,
       removePendingFile,
       openFormImage,
+      showFormViewer,
+      formViewerUrl,
       handleClose,
       handleSubmit
     }
@@ -385,5 +396,27 @@ export default {
 .image-add-text {
   font-size: 11px;
   margin-top: 2px;
+}
+
+.image-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  cursor: pointer;
+}
+
+.image-overlay-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
 }
 </style>
