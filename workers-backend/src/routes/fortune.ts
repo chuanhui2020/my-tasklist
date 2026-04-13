@@ -151,16 +151,14 @@ fortuneRoutes.post('/generate', async (c) => {
   const user = c.get('user')
   const db = drizzle(c.env.DB)
 
-  // Check daily limit - use UTC date boundaries
-  const now = new Date()
-  const todayStart = now.toISOString().slice(0, 10) + 'T00:00:00'
-  const todayEnd = now.toISOString().slice(0, 10) + 'T23:59:59'
+  // Check daily limit - use date prefix match (created_at format: "YYYY-MM-DD HH:MM:SS")
+  const today = new Date().toISOString().slice(0, 10)
 
   const [existing] = await db.select().from(fortuneRecords)
     .where(and(
       eq(fortuneRecords.user_id, user.id),
-      sql`${fortuneRecords.created_at} >= ${todayStart}`,
-      sql`${fortuneRecords.created_at} <= ${todayEnd}`,
+      sql`${fortuneRecords.created_at} >= ${today + ' 00:00:00'}`,
+      sql`${fortuneRecords.created_at} <= ${today + ' 23:59:59'}`,
     ))
     .limit(1)
 
@@ -222,15 +220,13 @@ fortuneRoutes.get('/today', async (c) => {
   const user = c.get('user')
   const db = drizzle(c.env.DB)
 
-  const now = new Date()
-  const todayStart = now.toISOString().slice(0, 10) + 'T00:00:00'
-  const todayEnd = now.toISOString().slice(0, 10) + 'T23:59:59'
+  const today = new Date().toISOString().slice(0, 10)
 
   const [record] = await db.select().from(fortuneRecords)
     .where(and(
       eq(fortuneRecords.user_id, user.id),
-      sql`${fortuneRecords.created_at} >= ${todayStart}`,
-      sql`${fortuneRecords.created_at} <= ${todayEnd}`,
+      sql`${fortuneRecords.created_at} >= ${today + ' 00:00:00'}`,
+      sql`${fortuneRecords.created_at} <= ${today + ' 23:59:59'}`,
     ))
     .limit(1)
 
