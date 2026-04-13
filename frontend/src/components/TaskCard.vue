@@ -34,19 +34,31 @@
           v-for="img in task.images.slice(0, 3)"
           :key="img.id"
           class="task-image-thumb"
-          @click.stop="previewImage(img)"
+          @click.stop="openImage(img)"
         >
           <img :src="getImageUrl(img)" :alt="img.filename" />
         </div>
         <div v-if="task.images.length > 3" class="task-image-more"
-          @click.stop="previewImage(task.images[3])">
+          @click.stop="showAllThumbs = true">
           +{{ task.images.length - 3 }}
         </div>
       </div>
 
       <Teleport to="body">
-        <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
-          <img :src="viewerUrl" class="image-overlay-img" @click.stop />
+        <div v-if="showAllThumbs" class="thumbs-overlay" @click="showAllThumbs = false">
+          <div class="thumbs-panel" @click.stop>
+            <div class="thumbs-panel-title">全部图片 ({{ task.images.length }})</div>
+            <div class="thumbs-panel-grid">
+              <div
+                v-for="img in task.images"
+                :key="img.id"
+                class="thumbs-panel-item"
+                @click="openImage(img)"
+              >
+                <img :src="getImageUrl(img)" :alt="img.filename" />
+              </div>
+            </div>
+          </div>
         </div>
       </Teleport>
 
@@ -126,8 +138,7 @@ export default {
   },
   emits: ['toggle-status', 'edit', 'delete'],
   setup(props) {
-    const showViewer = ref(false)
-    const viewerUrl = ref('')
+    const showAllThumbs = ref(false)
 
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
@@ -139,9 +150,8 @@ export default {
       return api.getTaskImageUrl(props.task.id, img.id)
     }
 
-    const previewImage = (img) => {
-      viewerUrl.value = getImageUrl(img)
-      showViewer.value = true
+    const openImage = (img) => {
+      window.open(getImageUrl(img), '_blank')
     }
 
     const formatDate = (dateString) => {
@@ -161,10 +171,9 @@ export default {
 
     return {
       isOverdue,
-      showViewer,
-      viewerUrl,
+      showAllThumbs,
       getImageUrl,
-      previewImage,
+      openImage,
       formatDate,
       formatDateTime
     }
@@ -308,6 +317,13 @@ export default {
   color: var(--text-muted);
   font-size: 13px;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.task-image-more:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
 .task-meta {
@@ -375,25 +391,60 @@ export default {
   background: var(--accent-success);
 }
 
-.image-overlay {
+.thumbs-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  cursor: pointer;
 }
 
-.image-overlay-img {
-  max-width: 90vw;
-  max-height: 90vh;
-  object-fit: contain;
+.thumbs-panel {
+  background: var(--bg-glass, rgba(15, 23, 42, 0.9));
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.thumbs-panel-title {
+  color: var(--text-primary, #e2e8f0);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.thumbs-panel-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.thumbs-panel-item {
+  width: 80px;
+  height: 80px;
   border-radius: 8px;
-  cursor: default;
+  overflow: hidden;
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.thumbs-panel-item:hover {
+  border-color: var(--primary-color, #06b6d4);
+}
+
+.thumbs-panel-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 </style>

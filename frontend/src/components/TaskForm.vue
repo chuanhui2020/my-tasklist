@@ -36,11 +36,11 @@
         <div class="image-upload-area">
           <div class="image-preview-list">
             <div v-for="img in existingImages" :key="'e-' + img.id" class="image-thumb">
-              <img :src="getImageUrl(img)" :alt="img.filename" @click="previewFormImage(getImageUrl(img))" />
+              <img :src="getImageUrl(img)" :alt="img.filename" @click="openFormImage(getImageUrl(img))" />
               <button type="button" class="image-remove-btn" @click="removeExistingImage(img)" title="删除">×</button>
             </div>
             <div v-for="(file, idx) in pendingFiles" :key="'p-' + idx" class="image-thumb">
-              <img :src="file.preview" :alt="file.raw.name" @click="previewFormImage(file.preview)" />
+              <img :src="file.preview" :alt="file.raw.name" @click="openFormImage(file.preview)" />
               <button type="button" class="image-remove-btn" @click="removePendingFile(idx)" title="删除">×</button>
             </div>
             <div v-if="totalImageCount < 10" class="image-add-btn" @click="triggerFileInput">
@@ -84,12 +84,6 @@
       </div>
     </template>
   </el-dialog>
-
-  <Teleport to="body">
-    <div v-if="showFormViewer" class="image-overlay" @click="showFormViewer = false">
-      <img :src="formViewerUrl" class="image-overlay-img" @click.stop />
-    </div>
-  </Teleport>
 </template>
 
 <script>
@@ -114,8 +108,6 @@ export default {
     const formRef = ref()
     const imageInputRef = ref()
     const submitting = ref(false)
-    const showFormViewer = ref(false)
-    const formViewerUrl = ref('')
 
     const defaultForm = {
       title: '',
@@ -184,9 +176,8 @@ export default {
       pendingFiles.value.splice(idx, 1)
     }
 
-    const previewFormImage = (url) => {
-      formViewerUrl.value = url
-      showFormViewer.value = true
+    const openFormImage = (url) => {
+      window.open(url, '_blank')
     }
 
     const cleanupPreviews = () => {
@@ -298,9 +289,7 @@ export default {
       handleImageSelect,
       removeExistingImage,
       removePendingFile,
-      previewFormImage,
-      showFormViewer,
-      formViewerUrl,
+      openFormImage,
       handleClose,
       handleSubmit
     }
@@ -396,27 +385,5 @@ export default {
 .image-add-text {
   font-size: 11px;
   margin-top: 2px;
-}
-
-.image-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  cursor: pointer;
-}
-
-.image-overlay-img {
-  max-width: 90vw;
-  max-height: 90vh;
-  object-fit: contain;
-  border-radius: 8px;
-  cursor: default;
 }
 </style>
