@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, asc } from 'drizzle-orm'
 import { tasks, taskImages } from '../db/schema'
-import { authMiddleware } from '../middleware/auth'
 import { verifyToken } from '../lib/token'
 import type { Env } from '../types'
 
@@ -74,10 +73,6 @@ taskImageRoutes.get('/:id/images/:imageId/file', async (c) => {
     },
   })
 })
-
-// All remaining routes require standard auth middleware
-taskImageRoutes.use('/:id/images', authMiddleware)
-taskImageRoutes.use('/:id/images/*', authMiddleware)
 
 // POST /:id/images - upload images
 taskImageRoutes.post('/:id/images', async (c) => {
