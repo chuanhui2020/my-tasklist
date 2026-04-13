@@ -10,6 +10,7 @@ Personal Task Management System - A full-stack edge-deployed web application.
 - Backend: Hono, Drizzle ORM, TypeScript, Cloudflare Workers
 - Frontend: Vue 3, Vue Router 4, Element Plus, Vite
 - Database: Cloudflare D1 (SQLite)
+- Storage: Cloudflare R2 (任务图片)
 - Auth: JWT (jose library)
 
 ## Deployment
@@ -19,7 +20,8 @@ Personal Task Management System - A full-stack edge-deployed web application.
 ```
 用户 → Cloudflare Edge (最近节点)
        ├── Workers (后端 API)  ← api-tasklist.ch-tools.org
-       │   └── D1 (SQLite 数据库)
+       │   ├── D1 (SQLite 数据库)
+       │   └── R2 (图片存储)
        └── Workers Static Assets (前端 SPA)  ← tasklist.ch-tools.org
 ```
 
@@ -63,7 +65,7 @@ npx wrangler dev
 
 ```
 workers-backend/
-├── wrangler.jsonc              # Workers 配置 + D1 binding
+├── wrangler.jsonc              # Workers 配置 + D1 binding + R2 binding
 ├── package.json
 ├── tsconfig.json
 ├── drizzle.config.ts           # Drizzle 迁移配置
@@ -76,7 +78,8 @@ workers-backend/
 │   │   └── auth.ts             # JWT 验证中间件 + admin 权限中间件
 │   ├── routes/
 │   │   ├── auth.ts             # /api/auth/* - 登录、用户管理、改密码
-│   │   ├── tasks.ts            # /api/tasks/* - 任务 CRUD + 分页排序
+│   │   ├── tasks.ts            # /api/tasks/* - 任务 CRUD + 分页排序 + 图片上传/预览/删除
+│   │   ├── task-images.ts      # 任务图片路由定义 (未使用，已合并到 tasks.ts)
 │   │   ├── fortune.ts          # /api/fortune/* - AI 运势签文
 │   │   ├── bmi.ts              # /api/bmi/* - BMI + 体重记录 + AI 分析
 │   │   ├── secure-notes.ts     # /api/secure-notes/* - 加密笔记
@@ -87,7 +90,8 @@ workers-backend/
 │       ├── token.ts            # JWT 生成/验证 (jose)
 │       └── ai.ts               # AI API 调用 (fetch)
 ├── drizzle/
-│   └── 0000_initial.sql        # D1 初始化 SQL
+│   ├── 0000_initial.sql        # D1 初始化 SQL
+│   └── 0001_task_images.sql    # 任务图片表迁移
 └── scripts/
     ├── export_data.py          # MySQL → JSON 导出 (迁移用)
     └── import-to-d1.ts         # JSON → D1 SQL 导入 (迁移用)
@@ -111,6 +115,7 @@ workers-backend/
 3. **Models (`db/schema.ts`):**
    - `users`: username, password_hash, role (admin/user)
    - `tasks`: title, description, status (pending/done), due_date, user_id
+   - `taskImages`: task_id, user_id, r2_key, filename, mime_type, size, sort_order
    - `bmiProfiles`: gender, age, height, weight (per user, unique)
    - `fortuneRecords`: fortune_number, fortune_type, poem, interpretation, advice (JSON string)
    - `secureNotes`: title, encrypted_content, salt, password_hash
@@ -131,6 +136,13 @@ workers-backend/
    - AES-256-GCM, prefix `aesgcm$`
    - Key derivation: PBKDF2-SHA256, 100,000 iterations
 
+7. **Task Images (R2 Storage):**
+   - Images stored in R2 bucket `tasklist-images`, key format: `tasks/{user_id}/{task_id}/{uuid}.{ext}`
+   - Supported formats: JPEG, PNG, WebP; max 5MB per file, max 10 per task
+   - Image file serving endpoint supports `?token=JWT` query param for `<img src>` usage (before authMiddleware)
+   - Upload/delete endpoints use standard authMiddleware
+   - Task deletion cascades: deletes R2 objects + DB rows
+
 ### Frontend Structure
 
 ```
@@ -150,6 +162,8 @@ frontend/src/
 │   ├── SecureNotes.vue     # Encrypted notes
 │   └── ChangePassword.vue  # Password change
 ├── components/
+│   ├── TaskForm.vue        # 任务新建/编辑对话框 (含图片上传)
+│   ├── TaskCard.vue        # 任务卡片组件 (含图片缩略图预览)
 │   ├── MilkDragon.vue      # 3D voxel dragon scene (Three.js)
 │   └── relax/              # 9 Three.js 3D relaxation animations
 └── composables/
@@ -182,10 +196,10 @@ frontend/src/
 - `vars.AI_MODEL`: AI model name (default: `deepseek-chat`)
 - Secrets (via `wrangler secret put`): `SECRET_KEY`, `AI_API_KEY`
 - D1 binding: `DB` → `tasklist_db`
+- R2 binding: `IMAGES_BUCKET` → `tasklist-images`
 
-**Frontend (`frontend/vite.config.js`):**
-- `VITE_API_BASE_URL`: API base URL, set at build time
-- Production: `https://api-tasklist.ch-tools.org/api`
+**Frontend (`frontend/.env.production`):**
+- `VITE_API_BASE_URL`: API base URL (production: `https://api-tasklist.ch-tools.org/api`)
 
 **Frontend Deployment (`frontend/wrangler.jsonc`):**
 - Cloudflare Workers static asset deployment
