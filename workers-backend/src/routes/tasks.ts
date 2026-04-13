@@ -1,8 +1,9 @@
 import { Hono } from 'hono'
 import { drizzle } from 'drizzle-orm/d1'
-import { eq, and, sql, asc, desc } from 'drizzle-orm'
-import { tasks } from '../db/schema'
+import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm'
+import { tasks, taskImages } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
+import { taskImageRoutes } from './task-images'
 import type { Env } from '../types'
 
 export const taskRoutes = new Hono<Env>()
@@ -48,8 +49,27 @@ taskRoutes.get('/', async (c) => {
   const offset = (page - 1) * pageSize
   const items = await query.limit(pageSize).offset(offset)
 
+  // Batch fetch images for all tasks
+  const taskIds = items.map(t => t.id)
+  let imagesMap: Record<number, { id: number; filename: string; sort_order: number }[]> = {}
+  if (taskIds.length > 0) {
+    const allImages = await db.select({
+      id: taskImages.id,
+      task_id: taskImages.task_id,
+      filename: taskImages.filename,
+      sort_order: taskImages.sort_order,
+    }).from(taskImages)
+      .where(inArray(taskImages.task_id, taskIds))
+      .orderBy(asc(taskImages.sort_order))
+
+    for (const img of allImages) {
+      if (!imagesMap[img.task_id]) imagesMap[img.task_id] = []
+      imagesMap[img.task_id].push({ id: img.id, filename: img.filename, sort_order: img.sort_order })
+    }
+  }
+
   return c.json({
-    items: items.map(taskToDict),
+    items: items.map(t => ({ ...taskToDict(t), images: imagesMap[t.id] || [] })),
     total: count,
     page,
     page_size: pageSize,
@@ -69,7 +89,18 @@ taskRoutes.get('/:id', async (c) => {
   if (!task) {
     return c.json({ error: '任务不存在' }, 404)
   }
-  return c.json(taskToDict(task))
+
+  const images = await db.select({
+    id: taskImages.id,
+    filename: taskImages.filename,
+    mime_type: taskImages.mime_type,
+    size: taskImages.size,
+    sort_order: taskImages.sort_order,
+  }).from(taskImages)
+    .where(eq(taskImages.task_id, taskId))
+    .orderBy(asc(taskImages.sort_order))
+
+  return c.json({ ...taskToDict(task), images })
 })
 
 // POST /
@@ -178,6 +209,15 @@ taskRoutes.delete('/:id', async (c) => {
     return c.json({ error: '任务不存在' }, 404)
   }
 
+  // Delete associated images from R2 and DB
+  const images = await db.select().from(taskImages)
+    .where(eq(taskImages.task_id, taskId))
+
+  if (images.length > 0) {
+    await Promise.all(images.map(img => c.env.IMAGES_BUCKET.delete(img.r2_key)))
+    await db.delete(taskImages).where(eq(taskImages.task_id, taskId))
+  }
+
   await db.delete(tasks).where(eq(tasks.id, taskId))
   return c.json({ message: '任务已删除' })
 })
@@ -193,3 +233,6 @@ function taskToDict(t: typeof tasks.$inferSelect) {
     user_id: t.user_id,
   }
 }
+
+// Mount image sub-routes
+taskRoutes.route('/', taskImageRoutes)

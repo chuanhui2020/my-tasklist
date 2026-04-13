@@ -13,6 +13,12 @@
       "database_id": "79d5a4b0-8acc-4f83-be77-f0d6ebdf2496",
     },
   ],
+  "r2_buckets": [
+    {
+      "binding": "IMAGES_BUCKET",
+      "bucket_name": "tasklist-images",
+    },
+  ],
   "routes": [
     { "pattern": "api-tasklist.ch-tools.org/*", "zone_name": "ch-tools.org" },
   ],

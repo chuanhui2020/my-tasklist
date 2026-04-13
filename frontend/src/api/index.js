@@ -109,6 +109,24 @@ export default {
     return api.delete(`/tasks/${id}`)
   },
 
+  uploadTaskImages(taskId, files) {
+    const formData = new FormData()
+    files.forEach(file => formData.append('images', file))
+    return api.post(`/tasks/${taskId}/images`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  deleteTaskImage(taskId, imageId) {
+    return api.delete(`/tasks/${taskId}/images/${imageId}`)
+  },
+
+  getTaskImageUrl(taskId, imageId) {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const baseURL = api.defaults.baseURL
+    return `${baseURL}/tasks/${taskId}/images/${imageId}/file?token=${token}`
+  },
+
   generateFortune(fortuneNumber) {
     return api.post('/fortune/generate', { fortuneNumber })
   },

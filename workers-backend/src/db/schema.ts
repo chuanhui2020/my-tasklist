@@ -77,6 +77,20 @@ export const countdowns = sqliteTable('countdowns', {
   created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
+export const taskImages = sqliteTable('task_images', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  task_id: integer('task_id').notNull().references(() => tasks.id),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  r2_key: text('r2_key').notNull(),
+  filename: text('filename').notNull(),
+  mime_type: text('mime_type').notNull(),
+  size: integer('size').notNull(),
+  sort_order: integer('sort_order').notNull().default(0),
+  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index('idx_task_images_task_id').on(table.task_id),
+])
+
 export const weeklyMenus = sqliteTable('weekly_menus', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   week_start: text('week_start').notNull().unique(),

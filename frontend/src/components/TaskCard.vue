@@ -28,7 +28,20 @@
       <p v-if="task.description" class="task-description">
         {{ task.description }}
       </p>
-      
+
+      <div v-if="task.images && task.images.length" class="task-images">
+        <div
+          v-for="img in task.images.slice(0, 3)"
+          :key="img.id"
+          class="task-image-thumb"
+        >
+          <img :src="getImageUrl(img)" :alt="img.filename" />
+        </div>
+        <div v-if="task.images.length > 3" class="task-image-more">
+          +{{ task.images.length - 3 }}
+        </div>
+      </div>
+
       <div class="task-meta">
         <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
           <el-icon><Calendar /></el-icon>
@@ -85,6 +98,7 @@
 <script>
 import { computed } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
+import api from '@/api'
 
 export default {
   name: 'TaskCard',
@@ -109,12 +123,16 @@ export default {
       const today = new Date().toISOString().split('T')[0]
       return props.task.due_date < today
     })
-    
+
+    const getImageUrl = (img) => {
+      return api.getTaskImageUrl(props.task.id, img.id)
+    }
+
     const formatDate = (dateString) => {
       const date = new Date(dateString)
       return date.toLocaleDateString('zh-CN')
     }
-    
+
     const formatDateTime = (dateTimeString) => {
       const date = new Date(dateTimeString)
       return date.toLocaleString('zh-CN', {
@@ -124,9 +142,10 @@ export default {
         minute: '2-digit'
       })
     }
-    
+
     return {
       isOverdue,
+      getImageUrl,
       formatDate,
       formatDateTime
     }
@@ -228,6 +247,42 @@ export default {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.task-images {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.task-image-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.task-image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.task-image-more {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .task-meta {
