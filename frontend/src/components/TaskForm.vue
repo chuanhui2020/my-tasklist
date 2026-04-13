@@ -275,11 +275,15 @@ export default {
     }, { immediate: true })
 
     // Reset on dialog close
+    let resetTimer = null
     watch(() => props.visible, (visible) => {
       if (!visible) {
-        setTimeout(() => {
+        resetTimer = setTimeout(() => {
           resetForm()
         }, 200)
+      } else if (resetTimer) {
+        clearTimeout(resetTimer)
+        resetTimer = null
       }
     })
 
