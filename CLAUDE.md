@@ -79,7 +79,6 @@ workers-backend/
 │   ├── routes/
 │   │   ├── auth.ts             # /api/auth/* - 登录、用户管理、改密码
 │   │   ├── tasks.ts            # /api/tasks/* - 任务 CRUD + 分页排序 + 图片上传/预览/删除
-│   │   ├── task-images.ts      # 任务图片路由定义 (未使用，已合并到 tasks.ts)
 │   │   ├── fortune.ts          # /api/fortune/* - AI 运势签文
 │   │   ├── bmi.ts              # /api/bmi/* - BMI + 体重记录 + AI 分析
 │   │   ├── secure-notes.ts     # /api/secure-notes/* - 加密笔记
