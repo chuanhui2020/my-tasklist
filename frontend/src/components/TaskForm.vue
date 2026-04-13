@@ -36,11 +36,11 @@
         <div class="image-upload-area">
           <div class="image-preview-list">
             <div v-for="img in existingImages" :key="'e-' + img.id" class="image-thumb">
-              <img :src="getImageUrl(img)" :alt="img.filename" />
+              <img :src="getImageUrl(img)" :alt="img.filename" @click="previewFormImage(getImageUrl(img))" />
               <button type="button" class="image-remove-btn" @click="removeExistingImage(img)" title="删除">×</button>
             </div>
             <div v-for="(file, idx) in pendingFiles" :key="'p-' + idx" class="image-thumb">
-              <img :src="file.preview" :alt="file.raw.name" />
+              <img :src="file.preview" :alt="file.raw.name" @click="previewFormImage(file.preview)" />
               <button type="button" class="image-remove-btn" @click="removePendingFile(idx)" title="删除">×</button>
             </div>
             <div v-if="totalImageCount < 10" class="image-add-btn" @click="triggerFileInput">
@@ -84,15 +84,23 @@
       </div>
     </template>
   </el-dialog>
+
+  <el-image-viewer
+    v-if="showFormViewer"
+    :url-list="[formViewerUrl]"
+    :initial-index="0"
+    @close="showFormViewer = false"
+  />
 </template>
 
 <script>
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElImageViewer } from 'element-plus'
 import api from '@/api'
 
 export default {
   name: 'TaskForm',
+  components: { ElImageViewer },
   props: {
     visible: {
       type: Boolean,
@@ -108,6 +116,8 @@ export default {
     const formRef = ref()
     const imageInputRef = ref()
     const submitting = ref(false)
+    const showFormViewer = ref(false)
+    const formViewerUrl = ref('')
 
     const defaultForm = {
       title: '',
@@ -174,6 +184,11 @@ export default {
     const removePendingFile = (idx) => {
       URL.revokeObjectURL(pendingFiles.value[idx].preview)
       pendingFiles.value.splice(idx, 1)
+    }
+
+    const previewFormImage = (url) => {
+      formViewerUrl.value = url
+      showFormViewer.value = true
     }
 
     const cleanupPreviews = () => {
@@ -285,6 +300,9 @@ export default {
       handleImageSelect,
       removeExistingImage,
       removePendingFile,
+      previewFormImage,
+      showFormViewer,
+      formViewerUrl,
       handleClose,
       handleSubmit
     }
@@ -323,6 +341,7 @@ export default {
   height: 100%;
   object-fit: cover;
   display: block;
+  cursor: pointer;
 }
 
 .image-remove-btn {

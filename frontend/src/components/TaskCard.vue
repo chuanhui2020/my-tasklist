@@ -34,13 +34,22 @@
           v-for="img in task.images.slice(0, 3)"
           :key="img.id"
           class="task-image-thumb"
+          @click.stop="previewImage(img)"
         >
           <img :src="getImageUrl(img)" :alt="img.filename" />
         </div>
-        <div v-if="task.images.length > 3" class="task-image-more">
+        <div v-if="task.images.length > 3" class="task-image-more"
+          @click.stop="previewImage(task.images[3])">
           +{{ task.images.length - 3 }}
         </div>
       </div>
+
+      <el-image-viewer
+        v-if="showViewer"
+        :url-list="allImageUrls"
+        :initial-index="viewerIndex"
+        @close="showViewer = false"
+      />
 
       <div class="task-meta">
         <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
@@ -96,8 +105,9 @@
 </template>
 
 <script>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
+import { ElImageViewer } from 'element-plus'
 import api from '@/api'
 
 export default {
@@ -108,7 +118,8 @@ export default {
     Check,
     RefreshLeft,
     Edit,
-    Delete
+    Delete,
+    ElImageViewer
   },
   props: {
     task: {
@@ -118,6 +129,9 @@ export default {
   },
   emits: ['toggle-status', 'edit', 'delete'],
   setup(props) {
+    const showViewer = ref(false)
+    const viewerIndex = ref(0)
+
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
       const today = new Date().toISOString().split('T')[0]
@@ -126,6 +140,17 @@ export default {
 
     const getImageUrl = (img) => {
       return api.getTaskImageUrl(props.task.id, img.id)
+    }
+
+    const allImageUrls = computed(() => {
+      if (!props.task.images) return []
+      return props.task.images.map(img => getImageUrl(img))
+    })
+
+    const previewImage = (img) => {
+      const idx = props.task.images.findIndex(i => i.id === img.id)
+      viewerIndex.value = idx >= 0 ? idx : 0
+      showViewer.value = true
     }
 
     const formatDate = (dateString) => {
@@ -145,7 +170,11 @@ export default {
 
     return {
       isOverdue,
+      showViewer,
+      viewerIndex,
+      allImageUrls,
       getImageUrl,
+      previewImage,
       formatDate,
       formatDateTime
     }
@@ -262,6 +291,12 @@ export default {
   overflow: hidden;
   border: 1px solid var(--glass-border);
   flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.task-image-thumb:hover {
+  border-color: var(--primary-color);
 }
 
 .task-image-thumb img {
