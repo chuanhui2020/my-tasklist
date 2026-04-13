@@ -36,7 +36,13 @@ export function useCountdownAlert() {
   async function poll() {
     try {
       const { data } = await api.getUpcomingCountdowns()
-      const filtered = data.filter(a => !dismissed.has(a.id))
+      const now = Date.now()
+      const filtered = data.filter(a => {
+        if (dismissed.has(a.id)) return false
+        const target = new Date(a.target_time.replace(' ', 'T')).getTime()
+        const remindStart = target - a.remind_before * 60 * 1000
+        return now >= remindStart
+      })
       for (const item of filtered) {
         sendNotification(item)
       }

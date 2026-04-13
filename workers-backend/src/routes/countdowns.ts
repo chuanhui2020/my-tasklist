@@ -123,14 +123,7 @@ countdownRoutes.get('/upcoming', async (c) => {
   const items = await db.select().from(countdowns)
     .where(and(eq(countdowns.user_id, user.id), eq(countdowns.status, 'active')))
 
-  const now = new Date()
-  const upcoming = items.filter(item => {
-    const target = new Date(item.target_time)
-    const remindStart = new Date(target.getTime() - item.remind_before * 60 * 1000)
-    return now >= remindStart
-  })
-
-  return c.json(upcoming.map(countdownToDict))
+  return c.json(items.map(countdownToDict))
 })
 
 // PATCH /:id/dismiss
