@@ -85,22 +85,20 @@
     </template>
   </el-dialog>
 
-  <el-image-viewer
-    v-if="showFormViewer"
-    :url-list="[formViewerUrl]"
-    :initial-index="0"
-    @close="showFormViewer = false"
-  />
+  <Teleport to="body">
+    <div v-if="showFormViewer" class="image-overlay" @click="showFormViewer = false">
+      <img :src="formViewerUrl" class="image-overlay-img" @click.stop />
+    </div>
+  </Teleport>
 </template>
 
 <script>
 import { ref, computed, watch } from 'vue'
-import { ElMessage, ElImageViewer } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import api from '@/api'
 
 export default {
   name: 'TaskForm',
-  components: { ElImageViewer },
   props: {
     visible: {
       type: Boolean,
@@ -398,5 +396,27 @@ export default {
 .image-add-text {
   font-size: 11px;
   margin-top: 2px;
+}
+
+.image-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: pointer;
+}
+
+.image-overlay-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
 }
 </style>

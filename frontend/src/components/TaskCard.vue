@@ -44,12 +44,11 @@
         </div>
       </div>
 
-      <el-image-viewer
-        v-if="showViewer"
-        :url-list="allImageUrls"
-        :initial-index="viewerIndex"
-        @close="showViewer = false"
-      />
+      <Teleport to="body">
+        <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
+          <img :src="viewerUrl" class="image-overlay-img" @click.stop />
+        </div>
+      </Teleport>
 
       <div class="task-meta">
         <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
@@ -107,7 +106,6 @@
 <script>
 import { computed, ref } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
-import { ElImageViewer } from 'element-plus'
 import api from '@/api'
 
 export default {
@@ -118,8 +116,7 @@ export default {
     Check,
     RefreshLeft,
     Edit,
-    Delete,
-    ElImageViewer
+    Delete
   },
   props: {
     task: {
@@ -130,7 +127,7 @@ export default {
   emits: ['toggle-status', 'edit', 'delete'],
   setup(props) {
     const showViewer = ref(false)
-    const viewerIndex = ref(0)
+    const viewerUrl = ref('')
 
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
@@ -142,14 +139,8 @@ export default {
       return api.getTaskImageUrl(props.task.id, img.id)
     }
 
-    const allImageUrls = computed(() => {
-      if (!props.task.images) return []
-      return props.task.images.map(img => getImageUrl(img))
-    })
-
     const previewImage = (img) => {
-      const idx = props.task.images.findIndex(i => i.id === img.id)
-      viewerIndex.value = idx >= 0 ? idx : 0
+      viewerUrl.value = getImageUrl(img)
       showViewer.value = true
     }
 
@@ -171,8 +162,7 @@ export default {
     return {
       isOverdue,
       showViewer,
-      viewerIndex,
-      allImageUrls,
+      viewerUrl,
       getImageUrl,
       previewImage,
       formatDate,
@@ -383,5 +373,27 @@ export default {
 
 .task-completed .card-glow {
   background: var(--accent-success);
+}
+
+.image-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: pointer;
+}
+
+.image-overlay-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
 }
 </style>
