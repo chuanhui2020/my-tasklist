@@ -274,16 +274,29 @@ export default {
       }
     }, { immediate: true })
 
-    // Reset on dialog close
+    // Reset on dialog close, populate on open
     let resetTimer = null
     watch(() => props.visible, (visible) => {
-      if (!visible) {
+      if (visible) {
+        if (resetTimer) {
+          clearTimeout(resetTimer)
+          resetTimer = null
+        }
+        // Always populate form when dialog opens
+        if (props.task) {
+          form.value = {
+            title: props.task.title,
+            description: props.task.description || '',
+            due_date: props.task.due_date
+          }
+          existingImages.value = props.task.images ? [...props.task.images] : []
+          removedImageIds.value = []
+          pendingFiles.value = []
+        }
+      } else {
         resetTimer = setTimeout(() => {
           resetForm()
         }, 200)
-      } else if (resetTimer) {
-        clearTimeout(resetTimer)
-        resetTimer = null
       }
     })
 
