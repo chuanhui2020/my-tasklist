@@ -69,9 +69,11 @@ async function handleReview(params: ReviewRequest): Promise<void> {
     // 1. AI Code Review
     console.log('[container] Running AI review...')
     let reviewResult: { issues: { severity: string; file: string; line: number; message: string }[]; summary: string }
+    let reviewFailed = false
     try {
       reviewResult = await callAIForReview(params.ai_api_key, params.ai_base_url, params.ai_model, params.diff)
     } catch (err: any) {
+      reviewFailed = true
       reviewResult = { issues: [], summary: `AI Review 调用失败: ${err.message}` }
     }
 
@@ -92,9 +94,10 @@ async function handleReview(params: ReviewRequest): Promise<void> {
     console.log('[container] Posting comment...')
     await postPRComment(github_token, github_repo, pr_number, markdown)
 
-    // 5. 自动合并决策
+    // 5. 自动合并决策：review 失败、有 critical 或 warning 都不合并
     const hasCritical = reviewResult.issues.some(i => i.severity === 'critical')
-    if (hasCritical) {
+    const hasWarning = reviewResult.issues.some(i => i.severity === 'warning')
+    if (reviewFailed || hasCritical || hasWarning) {
       await addLabel(github_token, github_repo, pr_number, 'needs-fix')
     } else {
       const merged = await mergePR(github_token, github_repo, pr_number)
@@ -204,6 +207,13 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     try {
       const body = await readBody(req)
       const params = JSON.parse(body) as ReviewRequest
+
+      // 参数校验
+      if (!params.github_token || !params.github_repo || !params.pr_number || !params.ai_base_url || !params.ai_api_key || !params.diff) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Missing required fields' }))
+        return
+      }
 
       // 立即返回 202，异步执行
       res.writeHead(202, { 'Content-Type': 'application/json' })
