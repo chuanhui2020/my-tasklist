@@ -39,7 +39,7 @@ app.route('/api/webhooks/github', githubWebhookRoutes)
 
 // Health check
 app.get('/api/health', (c) => {
-  return c.json({ status: 'ok', version: '1.1.0' })
+  return c.json({ status: 'ok', version: '1.2.0' })
 })
 
 // Global error handler
