@@ -1,31 +1,16 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http'
-import { execSync } from 'node:child_process'
-import { rmSync, existsSync } from 'node:fs'
 
 const PORT = 4000
-const WORK_DIR = '/tmp/repo'
 
 interface ReviewRequest {
-  repo_url: string
-  branch: string
-  base_branch: string
+  diff: string
   commit_messages: string
-  openai_api_key: string
-}
-
-interface ReviewReport {
-  compile: { success: boolean; errors: string[] }
-  review: { issues: { severity: string; file: string; line: number; message: string }[]; summary: string }
-  changelog: string
-}
-
-function run(cmd: string, cwd?: string): { stdout: string; success: boolean } {
-  try {
-    const stdout = execSync(cmd, { cwd, encoding: 'utf-8', timeout: 120_000, maxBuffer: 10 * 1024 * 1024 })
-    return { stdout, success: true }
-  } catch (err: any) {
-    return { stdout: err.stdout || err.stderr || err.message, success: false }
-  }
+  ai_api_key: string
+  ai_base_url: string
+  ai_model: string
+  github_token: string
+  github_repo: string
+  pr_number: number
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -37,141 +22,131 @@ function readBody(req: IncomingMessage): Promise<string> {
   })
 }
 
-async function handleReview(params: ReviewRequest): Promise<ReviewReport> {
-  // 清理上次残留
-  if (existsSync(WORK_DIR)) {
-    rmSync(WORK_DIR, { recursive: true, force: true })
+async function postPRComment(token: string, repo: string, prNumber: number, body: string) {
+  const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/comments`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `token ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'tasklist-code-reviewer',
+    },
+    body: JSON.stringify({ body }),
+  })
+  if (!res.ok) {
+    console.error('Post comment failed:', res.status, await res.text())
   }
-
-  // 1. Clone 仓库
-  const cloneResult = run(`git clone --depth=50 --branch ${params.branch} ${params.repo_url} ${WORK_DIR}`)
-  if (!cloneResult.success) {
-    return {
-      compile: { success: false, errors: [`git clone failed: ${cloneResult.stdout}`] },
-      review: { issues: [], summary: 'Clone 失败，无法执行 review' },
-      changelog: '',
-    }
-  }
-
-  // 2. 安装依赖（检测项目类型）
-  const hasPackageJson = existsSync(`${WORK_DIR}/package.json`)
-  if (hasPackageJson) {
-    run('npm install --ignore-scripts', WORK_DIR)
-  }
-
-  // 检查是否有前后端子目录
-  const subDirs = ['workers-backend', 'frontend']
-  for (const dir of subDirs) {
-    if (existsSync(`${WORK_DIR}/${dir}/package.json`)) {
-      run('npm install --ignore-scripts', `${WORK_DIR}/${dir}`)
-    }
-  }
-
-  // 3. 编译检查
-  const compileErrors: string[] = []
-  let compileSuccess = true
-
-  // 检查 workers-backend
-  if (existsSync(`${WORK_DIR}/workers-backend/tsconfig.json`)) {
-    const tscResult = run('npx tsc --noEmit 2>&1', `${WORK_DIR}/workers-backend`)
-    if (!tscResult.success) {
-      compileSuccess = false
-      compileErrors.push('=== workers-backend ===', tscResult.stdout)
-    }
-  }
-
-  // 检查根目录
-  if (existsSync(`${WORK_DIR}/tsconfig.json`)) {
-    const tscResult = run('npx tsc --noEmit 2>&1', WORK_DIR)
-    if (!tscResult.success) {
-      compileSuccess = false
-      compileErrors.push('=== root ===', tscResult.stdout)
-    }
-  }
-
-  // 4. 获取 diff
-  const diffResult = run(`git diff origin/${params.base_branch}...HEAD -- . ':!package-lock.json' ':!node_modules'`, WORK_DIR)
-  const diff = diffResult.stdout.slice(0, 15000) // 限制大小
-
-  // 5. Codex CLI code review
-  let reviewResult: { issues: { severity: string; file: string; line: number; message: string }[]; summary: string }
-
-  try {
-    // 设置 OPENAI_API_KEY 环境变量
-    process.env.OPENAI_API_KEY = params.openai_api_key
-
-    const reviewPrompt = `You are a code reviewer. Analyze the following git diff and provide a review in JSON format.
-
-Return ONLY valid JSON with this structure:
-{
-  "issues": [
-    {"severity": "critical|warning|info", "file": "path/to/file", "line": 0, "message": "description"}
-  ],
-  "summary": "overall assessment in Chinese"
 }
 
-Rules:
-- severity "critical": bugs, security issues, data loss risks
-- severity "warning": code quality, performance, maintainability
-- severity "info": style, suggestions
-- Write summary and messages in Chinese
-- If no issues found, return empty issues array
+async function mergePR(token: string, repo: string, prNumber: number): Promise<boolean> {
+  const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/merge`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `token ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'tasklist-code-reviewer',
+    },
+    body: JSON.stringify({ merge_method: 'squash' }),
+  })
+  return res.ok
+}
 
-Git diff:
-${diff}`
+async function addLabel(token: string, repo: string, prNumber: number, label: string) {
+  await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/labels`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `token ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'tasklist-code-reviewer',
+    },
+    body: JSON.stringify({ labels: [label] }),
+  })
+}
 
-    // 尝试用 codex CLI
-    const codexResult = run(
-      `codex --approval-mode full-auto --quiet -p "${reviewPrompt.replace(/"/g, '\\"')}"`,
-      WORK_DIR
-    )
+async function handleReview(params: ReviewRequest): Promise<void> {
+  const { github_token, github_repo, pr_number } = params
 
-    if (codexResult.success) {
-      // 尝试从输出中提取 JSON
-      const jsonMatch = codexResult.stdout.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        reviewResult = JSON.parse(jsonMatch[0])
-      } else {
-        throw new Error('No JSON in codex output')
-      }
+  try {
+    // 1. AI Code Review
+    console.log('[container] Running AI review...')
+    let reviewResult: { issues: { severity: string; file: string; line: number; message: string }[]; summary: string }
+    try {
+      reviewResult = await callAIForReview(params.ai_api_key, params.ai_base_url, params.ai_model, params.diff)
+    } catch (err: any) {
+      reviewResult = { issues: [], summary: `AI Review 调用失败: ${err.message}` }
+    }
+
+    // 2. 生成 Changelog
+    console.log('[container] Generating changelog...')
+    let changelog = ''
+    try {
+      changelog = await callAIChat(params.ai_api_key, params.ai_base_url, params.ai_model,
+        `Based on these git commit messages, generate a changelog in Chinese using Keep a Changelog format (Added/Fixed/Changed sections). Only include relevant sections.\n\nCommit messages:\n${params.commit_messages}\n\nReturn ONLY the changelog content in Markdown.`)
+    } catch {
+      changelog = params.commit_messages.split('\n').map(line => `- ${line}`).join('\n')
+    }
+
+    // 3. 格式化报告
+    const markdown = formatReport(reviewResult, changelog)
+
+    // 4. 写回 PR comment
+    console.log('[container] Posting comment...')
+    await postPRComment(github_token, github_repo, pr_number, markdown)
+
+    // 5. 自动合并决策
+    const hasCritical = reviewResult.issues.some(i => i.severity === 'critical')
+    if (hasCritical) {
+      await addLabel(github_token, github_repo, pr_number, 'needs-fix')
     } else {
-      throw new Error('Codex CLI failed, falling back to API')
+      const merged = await mergePR(github_token, github_repo, pr_number)
+      if (!merged) {
+        await postPRComment(github_token, github_repo, pr_number, '⚠️ 自动合并失败，请手动处理。')
+      }
     }
-  } catch {
-    // 降级：直接调用 OpenAI API
-    reviewResult = await callOpenAIForReview(params.openai_api_key, diff)
-  }
 
-  // 6. 生成 Changelog
-  let changelog = ''
-  try {
-    const changelogPrompt = `Based on these git commit messages, generate a changelog in Chinese using Keep a Changelog format (Added/Fixed/Changed sections). Only include relevant sections.
-
-Commit messages:
-${params.commit_messages}
-
-Return ONLY the changelog content in Markdown, no JSON wrapping.`
-
-    changelog = await callOpenAIChat(params.openai_api_key, changelogPrompt)
-  } catch {
-    // 降级：直接用 commit messages
-    changelog = params.commit_messages
-      .split('\n')
-      .map(line => `- ${line}`)
-      .join('\n')
-  }
-
-  // 清理
-  rmSync(WORK_DIR, { recursive: true, force: true })
-
-  return {
-    compile: { success: compileSuccess, errors: compileErrors },
-    review: reviewResult,
-    changelog,
+    console.log('[container] Review complete!')
+  } catch (err: any) {
+    const errMsg = err.message || String(err)
+    console.error('[container] Error:', errMsg)
+    await postPRComment(github_token, github_repo, pr_number,
+      `## ❌ Review 流程出错\n\n\`\`\`\n${errMsg}\n\`\`\``)
   }
 }
 
-async function callOpenAIForReview(apiKey: string, diff: string) {
+function formatReport(review: { issues: { severity: string; file: string; line: number; message: string }[]; summary: string }, changelog: string): string {
+  const lines: string[] = []
+  lines.push('## 🔍 自动 Review 报告\n')
+
+  lines.push('### Code Review')
+  if (review.issues.length > 0) {
+    lines.push('| 严重度 | 文件 | 说明 |')
+    lines.push('|--------|------|------|')
+    for (const issue of review.issues) {
+      const icon = issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '⚠️' : 'ℹ️'
+      const location = issue.line > 0 ? `${issue.file}:${issue.line}` : issue.file
+      lines.push(`| ${icon} ${issue.severity} | ${location} | ${issue.message} |`)
+    }
+  } else {
+    lines.push('> 未发现问题')
+  }
+  lines.push('')
+
+  lines.push('### 总结')
+  lines.push(review.summary)
+  lines.push('')
+
+  if (changelog) {
+    lines.push('---\n')
+    lines.push('## 📋 Changelog')
+    lines.push(changelog)
+    lines.push('')
+  }
+
+  lines.push('---')
+  lines.push('*自动生成 by Code Review Bot*')
+  return lines.join('\n')
+}
+
+async function callAIForReview(apiKey: string, baseUrl: string, model: string, diff: string) {
   const prompt = `You are a code reviewer. Analyze the following git diff and provide a review in JSON format.
 
 Return ONLY valid JSON with this structure:
@@ -192,7 +167,7 @@ Rules:
 Git diff:
 ${diff}`
 
-  const result = await callOpenAIChat(apiKey, prompt)
+  const result = await callAIChat(apiKey, baseUrl, model, prompt)
   const jsonMatch = result.match(/\{[\s\S]*\}/)
   if (jsonMatch) {
     return JSON.parse(jsonMatch[0])
@@ -200,15 +175,15 @@ ${diff}`
   return { issues: [], summary: 'Review 解析失败' }
 }
 
-async function callOpenAIChat(apiKey: string, prompt: string): Promise<string> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+async function callAIChat(apiKey: string, baseUrl: string, model: string, prompt: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       max_tokens: 4000,
@@ -216,7 +191,8 @@ async function callOpenAIChat(apiKey: string, prompt: string): Promise<string> {
   })
 
   if (!res.ok) {
-    throw new Error(`OpenAI API error: ${res.status}`)
+    const text = await res.text()
+    throw new Error(`AI API error: ${res.status} ${text}`)
   }
 
   const data = await res.json() as { choices: { message: { content: string } }[] }
@@ -228,12 +204,16 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     try {
       const body = await readBody(req)
       const params = JSON.parse(body) as ReviewRequest
-      const report = await handleReview(params)
 
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(report))
+      // 立即返回 202，异步执行
+      res.writeHead(202, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ message: 'Review started' }))
+
+      handleReview(params).catch(err => {
+        console.error('[container] Unhandled review error:', err)
+      })
     } catch (err: any) {
-      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.writeHead(400, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: err.message }))
     }
   } else if (req.method === 'GET' && req.url === '/health') {

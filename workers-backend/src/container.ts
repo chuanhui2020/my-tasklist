@@ -3,6 +3,7 @@ import { Container } from '@cloudflare/containers'
 export class CodeReviewContainer extends Container {
   defaultPort = 4000
   sleepAfter = '5m'
+  enableInternet = true
 
   override onStart() {
     console.log('CodeReviewContainer started')
