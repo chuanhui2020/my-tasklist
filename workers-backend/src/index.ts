@@ -8,6 +8,9 @@ import { bmiRoutes } from './routes/bmi'
 import { secureNotesRoutes } from './routes/secure-notes'
 import { countdownRoutes } from './routes/countdowns'
 import { menuRoutes } from './routes/menu'
+import { githubWebhookRoutes } from './routes/github-webhook'
+
+export { CodeReviewContainer } from './container'
 
 const app = new Hono<Env>()
 
@@ -32,6 +35,7 @@ app.route('/api/bmi', bmiRoutes)
 app.route('/api/secure-notes', secureNotesRoutes)
 app.route('/api/countdowns', countdownRoutes)
 app.route('/api/menu', menuRoutes)
+app.route('/api/webhooks/github', githubWebhookRoutes)
 
 // Global error handler
 app.onError((err, c) => {

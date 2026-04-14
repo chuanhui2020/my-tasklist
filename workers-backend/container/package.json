@@ -1,0 +1,11 @@
+{
+  "name": "code-review-container",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "typescript": "^5.5.0"
+  }
+}

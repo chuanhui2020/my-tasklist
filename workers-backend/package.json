@@ -10,8 +10,9 @@
     "db:migrate:prod": "wrangler d1 migrations apply tasklist-db --remote"
   },
   "dependencies": {
-    "hono": "^4.7.0",
+    "@cloudflare/containers": "^0.3.0",
     "drizzle-orm": "^0.39.0",
+    "hono": "^4.7.0",
     "jose": "^6.0.0"
   },
   "devDependencies": {
