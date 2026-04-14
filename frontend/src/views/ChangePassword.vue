@@ -185,6 +185,7 @@ const handleReset = () => {
   filter: blur(100px);
   z-index: -1;
   opacity: 0.4;
+  pointer-events: none;
 }
 
 .shape-1 {
