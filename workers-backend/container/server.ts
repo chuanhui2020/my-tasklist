@@ -1,16 +1,34 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { existsSync } from 'node:fs'
 
+const exec = promisify(execFile)
 const PORT = 4000
+const WORKSPACE = '/workspace'
+
+// Simple async mutex to prevent concurrent git operations
+let reviewLock = false
+const waitForLock = () => new Promise<void>((resolve) => {
+  const check = () => {
+    if (!reviewLock) { reviewLock = true; resolve() }
+    else { setTimeout(check, 1000) }
+  }
+  check()
+})
+const releaseLock = () => { reviewLock = false }
 
 interface ReviewRequest {
-  diff: string
-  commit_messages: string
-  ai_api_key: string
-  ai_base_url: string
-  ai_model: string
   github_token: string
   github_repo: string
   pr_number: number
+  pr_branch: string
+  base_branch: string
+  commit_messages: string
+  openai_api_key: string
+  ai_api_key: string
+  ai_base_url: string
+  ai_model: string
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -62,121 +80,73 @@ async function addLabel(token: string, repo: string, prNumber: number, label: st
   })
 }
 
-async function handleReview(params: ReviewRequest): Promise<void> {
-  const { github_token, github_repo, pr_number } = params
+// --- Git helpers ---
+
+// NOTE: 仅用 repo 名称作为目录，不同 owner 下同名仓库会冲突。
+// 当前为单仓库场景，无此风险。如需支持多仓库，改用 `${owner}/${repo}` 路径。
+function repoDir(repo: string): string {
+  return `${WORKSPACE}/${repo.split('/')[1]}`
+}
+
+async function ensureRepo(token: string, repo: string): Promise<string> {
+  const dir = repoDir(repo)
+  const cloneUrl = `https://x-access-token:${token}@github.com/${repo}.git`
+
+  if (existsSync(`${dir}/.git`)) {
+    console.log('[git] Repo exists, fetching...')
+    await exec('git', ['remote', 'set-url', 'origin', cloneUrl], { cwd: dir })
+    await exec('git', ['fetch', '--all', '--prune'], { cwd: dir })
+  } else {
+    console.log('[git] Cloning repo...')
+    await exec('git', ['clone', cloneUrl, dir])
+  }
+  return dir
+}
+
+async function checkoutPR(dir: string, prBranch: string, baseBranch: string): Promise<void> {
+  await exec('git', ['checkout', baseBranch], { cwd: dir })
+  await exec('git', ['pull', 'origin', baseBranch], { cwd: dir })
+  await exec('git', ['checkout', prBranch], { cwd: dir })
+  await exec('git', ['pull', 'origin', prBranch], { cwd: dir })
+}
+
+// --- Codex CLI ---
+
+async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: string): Promise<string> {
+  const prompt =
+    `You are a code reviewer. Your task is READ-ONLY review. ` +
+    `IMPORTANT: Do NOT modify any files, do NOT create commits, do NOT push code. Only read and analyze. ` +
+    `Run git diff ${baseBranch}...HEAD to see the changes. ` +
+    'You may read source files to understand context, but NEVER write or edit any file. ' +
+    'Provide a structured review: 1) Summary of changes, 2) Critical issues (bugs, security), ' +
+    '3) Warnings (quality, performance), 4) Suggestions. Write in Chinese. Format as Markdown. ' +
+    'At the very end of your review, you MUST output exactly one of these verdict lines on its own line:\n' +
+    'VERDICT: PASS\n' +
+    'VERDICT: FAIL\n' +
+    'Use FAIL if there are any critical issues (bugs, security vulnerabilities, data loss risks). ' +
+    'Use PASS if there are no critical issues (warnings and suggestions alone do not warrant FAIL).'
 
   try {
-    // 1. AI Code Review
-    console.log('[container] Running AI review...')
-    let reviewResult: { issues: { severity: string; file: string; line: number; message: string }[]; summary: string }
-    let reviewFailed = false
-    try {
-      reviewResult = await callAIForReview(params.ai_api_key, params.ai_base_url, params.ai_model, params.diff)
-    } catch (err: any) {
-      reviewFailed = true
-      reviewResult = { issues: [], summary: `AI Review 调用失败: ${err.message}` }
-    }
+    const result = await exec('codex', [
+      '--approval-mode', 'full-auto',
+      '--quiet',
+      prompt,
+    ], {
+      cwd: dir,
+      env: { ...process.env, OPENAI_API_KEY: openaiApiKey },
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 300_000,
+    })
 
-    // 2. 生成 Changelog
-    console.log('[container] Generating changelog...')
-    let changelog = ''
-    try {
-      changelog = await callAIChat(params.ai_api_key, params.ai_base_url, params.ai_model,
-        `Based on these git commit messages, generate a changelog in Chinese using Keep a Changelog format (Added/Fixed/Changed sections). Only include relevant sections.\n\nCommit messages:\n${params.commit_messages}\n\nReturn ONLY the changelog content in Markdown.`)
-    } catch {
-      changelog = params.commit_messages.split('\n').map(line => `- ${line}`).join('\n')
-    }
-
-    // 3. 格式化报告
-    const markdown = formatReport(reviewResult, changelog)
-
-    // 4. 写回 PR comment
-    console.log('[container] Posting comment...')
-    await postPRComment(github_token, github_repo, pr_number, markdown)
-
-    // 5. 自动合并决策：review 失败、有 critical 或 warning 都不合并
-    const hasCritical = reviewResult.issues.some(i => i.severity === 'critical')
-    const hasWarning = reviewResult.issues.some(i => i.severity === 'warning')
-    if (reviewFailed || hasCritical || hasWarning) {
-      await addLabel(github_token, github_repo, pr_number, 'needs-fix')
-    } else {
-      const merged = await mergePR(github_token, github_repo, pr_number)
-      if (!merged) {
-        await postPRComment(github_token, github_repo, pr_number, '⚠️ 自动合并失败，请手动处理。')
-      }
-    }
-
-    console.log('[container] Review complete!')
-  } catch (err: any) {
-    const errMsg = err.message || String(err)
-    console.error('[container] Error:', errMsg)
-    await postPRComment(github_token, github_repo, pr_number,
-      `## ❌ Review 流程出错\n\n\`\`\`\n${errMsg}\n\`\`\``)
+    return result.stdout || result.stderr || 'Codex produced no output'
+  } finally {
+    // Discard any changes Codex might have made
+    await exec('git', ['checkout', '.'], { cwd: dir }).catch(() => {})
+    await exec('git', ['clean', '-fd'], { cwd: dir }).catch(() => {})
   }
 }
 
-function formatReport(review: { issues: { severity: string; file: string; line: number; message: string }[]; summary: string }, changelog: string): string {
-  const lines: string[] = []
-  lines.push('## 🔍 自动 Review 报告\n')
-
-  lines.push('### Code Review')
-  if (review.issues.length > 0) {
-    lines.push('| 严重度 | 文件 | 说明 |')
-    lines.push('|--------|------|------|')
-    for (const issue of review.issues) {
-      const icon = issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '⚠️' : 'ℹ️'
-      const location = issue.line > 0 ? `${issue.file}:${issue.line}` : issue.file
-      lines.push(`| ${icon} ${issue.severity} | ${location} | ${issue.message} |`)
-    }
-  } else {
-    lines.push('> 未发现问题')
-  }
-  lines.push('')
-
-  lines.push('### 总结')
-  lines.push(review.summary)
-  lines.push('')
-
-  if (changelog) {
-    lines.push('---\n')
-    lines.push('## 📋 Changelog')
-    lines.push(changelog)
-    lines.push('')
-  }
-
-  lines.push('---')
-  lines.push('*自动生成 by Code Review Bot*')
-  return lines.join('\n')
-}
-
-async function callAIForReview(apiKey: string, baseUrl: string, model: string, diff: string) {
-  const prompt = `You are a code reviewer. Analyze the following git diff and provide a review in JSON format.
-
-Return ONLY valid JSON with this structure:
-{
-  "issues": [
-    {"severity": "critical|warning|info", "file": "path/to/file", "line": 0, "message": "description"}
-  ],
-  "summary": "overall assessment in Chinese"
-}
-
-Rules:
-- severity "critical": bugs, security issues, data loss risks
-- severity "warning": code quality, performance, maintainability
-- severity "info": style, suggestions
-- Write summary and messages in Chinese
-- If no issues found, return empty issues array
-
-Git diff:
-${diff}`
-
-  const result = await callAIChat(apiKey, baseUrl, model, prompt)
-  const jsonMatch = result.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    return JSON.parse(jsonMatch[0])
-  }
-  return { issues: [], summary: 'Review 解析失败' }
-}
+// --- AI Chat (for changelog) ---
 
 async function callAIChat(apiKey: string, baseUrl: string, model: string, prompt: string): Promise<string> {
   const res = await fetch(`${baseUrl}/v1/chat/completions`, {
@@ -202,20 +172,101 @@ async function callAIChat(apiKey: string, baseUrl: string, model: string, prompt
   return data.choices[0].message.content
 }
 
+// --- Review orchestration ---
+
+async function handleReview(params: ReviewRequest): Promise<void> {
+  const { github_token, github_repo, pr_number, pr_branch, base_branch } = params
+
+  await waitForLock()
+  try {
+    console.log('[container] Ensuring repo clone...')
+    const dir = await ensureRepo(github_token, github_repo)
+
+    console.log('[container] Checking out PR branch...')
+    await checkoutPR(dir, pr_branch, base_branch)
+
+    console.log('[container] Running Codex review...')
+    let codexOutput: string
+    let reviewFailed = false
+    try {
+      codexOutput = await runCodexReview(dir, params.openai_api_key, base_branch)
+    } catch (err: any) {
+      reviewFailed = true
+      codexOutput = `Codex review failed: ${err.message}\nstderr: ${err.stderr || 'none'}`
+    }
+
+    console.log('[container] Generating changelog...')
+    let changelog = ''
+    try {
+      changelog = await callAIChat(params.ai_api_key, params.ai_base_url, params.ai_model,
+        `Based on these git commit messages, generate a changelog in Chinese using Keep a Changelog format (Added/Fixed/Changed sections). Only include relevant sections.\n\nCommit messages:\n${params.commit_messages}\n\nReturn ONLY the changelog content in Markdown.`)
+    } catch {
+      changelog = params.commit_messages.split('\n').map(line => `- ${line}`).join('\n')
+    }
+
+    const markdown = formatReport(codexOutput, changelog)
+
+    console.log('[container] Posting comment...')
+    await postPRComment(github_token, github_repo, pr_number, markdown)
+
+    // Auto-merge decision based on VERDICT line
+    const verdictMatch = codexOutput.match(/^VERDICT:\s*(PASS|FAIL)\s*$/m)
+    const verdict = verdictMatch ? verdictMatch[1] : null
+    const hasBlocker = reviewFailed || verdict === 'FAIL' || !verdict
+    if (hasBlocker) {
+      await addLabel(github_token, github_repo, pr_number, 'needs-fix')
+    } else {
+      const merged = await mergePR(github_token, github_repo, pr_number)
+      if (!merged) {
+        await postPRComment(github_token, github_repo, pr_number, '⚠️ 自动合并失败，请手动处理。')
+      }
+    }
+
+    console.log('[container] Review complete!')
+  } catch (err: any) {
+    const errMsg = err.message || String(err)
+    console.error('[container] Error:', errMsg)
+    await postPRComment(github_token, github_repo, pr_number,
+      `## ❌ Review 流程出错\n\n\`\`\`\n${errMsg}\n\`\`\``)
+  } finally {
+    releaseLock()
+  }
+}
+
+function formatReport(codexOutput: string, changelog: string): string {
+  const lines: string[] = []
+  lines.push('## 🔍 Codex AI Review 报告\n')
+  lines.push('### Code Review')
+  lines.push(codexOutput)
+  lines.push('')
+
+  if (changelog) {
+    lines.push('---\n')
+    lines.push('### 📋 Changelog')
+    lines.push(changelog)
+    lines.push('')
+  }
+
+  lines.push('---')
+  lines.push('*自动生成 by Codex Code Review Bot*')
+  return lines.join('\n')
+}
+
+// --- HTTP Server ---
+
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (req.method === 'POST' && req.url === '/review') {
     try {
       const body = await readBody(req)
       const params = JSON.parse(body) as ReviewRequest
 
-      // 参数校验
-      if (!params.github_token || !params.github_repo || !params.pr_number || !params.ai_base_url || !params.ai_api_key || !params.diff) {
+      if (!params.github_token || !params.github_repo || !params.pr_number ||
+          !params.pr_branch || !params.base_branch || !params.openai_api_key) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: 'Missing required fields' }))
         return
       }
 
-      // 立即返回 202，异步执行
       res.writeHead(202, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ message: 'Review started' }))
 
@@ -228,7 +279,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     }
   } else if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok' }))
+    res.end(JSON.stringify({ status: 'ok', version: '2.0.0' }))
   } else {
     res.writeHead(404)
     res.end('Not Found')
@@ -236,5 +287,5 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 })
 
 server.listen(PORT, () => {
-  console.log(`Code review container listening on port ${PORT}`)
+  console.log(`Code review container (Codex) listening on port ${PORT}`)
 })

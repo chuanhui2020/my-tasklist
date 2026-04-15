@@ -1,11 +1,16 @@
 FROM node:20-slim
 
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+RUN npm install -g @openai/codex
+
 WORKDIR /app
 COPY package.json tsconfig.json ./
 RUN npm install
 
 COPY server.ts ./
 RUN npx tsc
+
+RUN mkdir -p /workspace
 
 EXPOSE 4000
 
