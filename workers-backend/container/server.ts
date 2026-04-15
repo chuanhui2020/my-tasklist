@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
 
@@ -133,18 +133,26 @@ async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: str
     'PASS for everything else including warnings and suggestions.'
 
   try {
-    const result = await exec('codex', [
-      'exec',
-      '--full-auto',
-      '-C', dir,
-      '--prompt', prompt,
-    ], {
-      env: { ...process.env, OPENAI_API_KEY: openaiApiKey },
-      maxBuffer: 10 * 1024 * 1024,
-      timeout: 300_000,
+    const codexOutput = await new Promise<string>((resolve, reject) => {
+      const args = ['exec', '--full-auto', '-C', dir, '--prompt', prompt]
+      const child = spawn('codex', args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, OPENAI_API_KEY: openaiApiKey },
+        timeout: 300_000,
+      })
+
+      let stdout = ''
+      let stderr = ''
+      child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+      child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout || stderr || 'Codex produced no output')
+        else reject(new Error(`Codex exited with code ${code}\nstderr: ${stderr}`))
+      })
+      child.on('error', reject)
     })
 
-    return result.stdout || result.stderr || 'Codex produced no output'
+    return codexOutput
   } finally {
     // Discard any changes Codex might have made
     await exec('git', ['checkout', '.'], { cwd: dir }).catch(() => {})
