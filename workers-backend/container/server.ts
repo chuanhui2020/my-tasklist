@@ -82,6 +82,8 @@ async function addLabel(token: string, repo: string, prNumber: number, label: st
 
 // --- Git helpers ---
 
+// NOTE: 仅用 repo 名称作为目录，不同 owner 下同名仓库会冲突。
+// 当前为单仓库场景，无此风险。如需支持多仓库，改用 `${owner}/${repo}` 路径。
 function repoDir(repo: string): string {
   return `${WORKSPACE}/${repo.split('/')[1]}`
 }
@@ -117,7 +119,12 @@ async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: str
     `Run git diff ${baseBranch}...HEAD to see the changes. ` +
     'You may read source files to understand context, but NEVER write or edit any file. ' +
     'Provide a structured review: 1) Summary of changes, 2) Critical issues (bugs, security), ' +
-    '3) Warnings (quality, performance), 4) Suggestions. Write in Chinese. Format as Markdown.'
+    '3) Warnings (quality, performance), 4) Suggestions. Write in Chinese. Format as Markdown. ' +
+    'At the very end of your review, you MUST output exactly one of these verdict lines on its own line:\n' +
+    'VERDICT: PASS\n' +
+    'VERDICT: FAIL\n' +
+    'Use FAIL if there are any critical issues (bugs, security vulnerabilities, data loss risks). ' +
+    'Use PASS if there are no critical issues (warnings and suggestions alone do not warrant FAIL).'
 
   try {
     const result = await exec('codex', [
@@ -202,9 +209,10 @@ async function handleReview(params: ReviewRequest): Promise<void> {
     console.log('[container] Posting comment...')
     await postPRComment(github_token, github_repo, pr_number, markdown)
 
-    // Auto-merge decision
-    const lowerOutput = codexOutput.toLowerCase()
-    const hasBlocker = reviewFailed || lowerOutput.includes('critical') || lowerOutput.includes('严重') || lowerOutput.includes('bug')
+    // Auto-merge decision based on VERDICT line
+    const verdictMatch = codexOutput.match(/^VERDICT:\s*(PASS|FAIL)\s*$/m)
+    const verdict = verdictMatch ? verdictMatch[1] : null
+    const hasBlocker = reviewFailed || verdict === 'FAIL' || !verdict
     if (hasBlocker) {
       await addLabel(github_token, github_repo, pr_number, 'needs-fix')
     } else {
