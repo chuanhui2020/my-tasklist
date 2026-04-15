@@ -114,17 +114,23 @@ async function checkoutPR(dir: string, prBranch: string, baseBranch: string): Pr
 
 async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: string): Promise<string> {
   const prompt =
-    `You are a code reviewer. Your task is READ-ONLY review. ` +
+    `You are a code reviewer for a personal project. Your task is READ-ONLY review. ` +
     `IMPORTANT: Do NOT modify any files, do NOT create commits, do NOT push code. Only read and analyze. ` +
     `Run git diff ${baseBranch}...HEAD to see the changes. ` +
     'You may read source files to understand context, but NEVER write or edit any file. ' +
-    'Provide a structured review: 1) Summary of changes, 2) Critical issues (bugs, security), ' +
-    '3) Warnings (quality, performance), 4) Suggestions. Write in Chinese. Format as Markdown. ' +
-    'At the very end of your review, you MUST output exactly one of these verdict lines on its own line:\n' +
+    'Context: This is a personal single-repo project running on Cloudflare Workers with an internal container. ' +
+    'Review standards:\n' +
+    '- Critical: ONLY real bugs that will cause runtime errors, data loss, or broken functionality\n' +
+    '- Warning: Performance issues, code quality concerns worth noting\n' +
+    '- Info: Style suggestions, potential improvements, architectural trade-offs\n' +
+    '- Do NOT mark security hardening suggestions (like token handling, lock mechanisms) as critical in this internal/personal context\n' +
+    '- Do NOT mark design trade-offs or single-use-case limitations as critical\n' +
+    'Provide a structured review: 1) Summary, 2) Critical issues, 3) Warnings, 4) Suggestions. Write in Chinese. Format as Markdown. ' +
+    'At the very end, output exactly one verdict on its own line:\n' +
     'VERDICT: PASS\n' +
     'VERDICT: FAIL\n' +
-    'Use FAIL if there are any critical issues (bugs, security vulnerabilities, data loss risks). ' +
-    'Use PASS if there are no critical issues (warnings and suggestions alone do not warrant FAIL).'
+    'Use FAIL only if there are real bugs that will cause runtime errors or data loss. ' +
+    'PASS for everything else including warnings and suggestions.'
 
   try {
     const result = await exec('codex', [
