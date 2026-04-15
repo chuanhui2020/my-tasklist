@@ -293,8 +293,15 @@
 <script setup>
 import { computed, reactive, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
 import api from '@/api'
+
+let echarts = null
+const loadEcharts = async () => {
+  if (!echarts) {
+    echarts = await import('echarts')
+  }
+  return echarts
+}
 
 const FORM_DEFAULTS = {
   gender: 'male',
@@ -638,11 +645,12 @@ const loadAnalysisHistory = async () => {
   }
 }
 
-const renderChart = () => {
+const renderChart = async () => {
   if (!chartRef.value || !weightHistory.value.length) return
   if (chartInstance) chartInstance.dispose()
 
-  chartInstance = echarts.init(chartRef.value)
+  const ec = await loadEcharts()
+  chartInstance = ec.init(chartRef.value)
 
   const dates = weightHistory.value.map(r => r.date)
   const weights = weightHistory.value.map(r => r.weight)
@@ -710,7 +718,7 @@ const renderChart = () => {
         borderWidth: 2
       },
       areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        color: new ec.graphic.LinearGradient(0, 0, 0, 1, [
           { offset: 0, color: 'rgba(6,182,212,0.25)' },
           { offset: 1, color: 'rgba(6,182,212,0.02)' }
         ])

@@ -24,12 +24,12 @@
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top" size="large" class="password-form">
         <el-form-item label="当前密码" prop="oldPassword">
           <el-input v-model="form.oldPassword" type="password" placeholder="请输入当前使用的密码" show-password
-            autocomplete="current-password" prefix-icon="Key" />
+            autocomplete="current-password" :prefix-icon="Key" />
         </el-form-item>
 
         <el-form-item label="新密码" prop="newPassword">
           <el-input v-model="form.newPassword" type="password" placeholder="请输入新密码" show-password
-            autocomplete="new-password" prefix-icon="Lock" @input="checkPasswordStrength" />
+            autocomplete="new-password" :prefix-icon="Lock" @input="checkPasswordStrength" />
           <div class="password-strength" v-if="form.newPassword">
             <div class="strength-bar">
               <div class="strength-fill" :class="strengthClass" :style="{ width: strengthPercent + '%' }"></div>
@@ -40,7 +40,7 @@
 
         <el-form-item label="确认新密码" prop="confirmPassword">
           <el-input v-model="form.confirmPassword" type="password" placeholder="请再次输入新密码" show-password
-            autocomplete="new-password" prefix-icon="CircleCheck" />
+            autocomplete="new-password" :prefix-icon="CircleCheck" />
         </el-form-item>
 
         <el-form-item class="form-actions">
@@ -185,6 +185,7 @@ const handleReset = () => {
   filter: blur(100px);
   z-index: -1;
   opacity: 0.4;
+  pointer-events: none;
 }
 
 .shape-1 {

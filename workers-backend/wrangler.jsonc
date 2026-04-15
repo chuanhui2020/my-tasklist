@@ -1,0 +1,52 @@
+{
+  "name": "tasklist-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-08",
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true },
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tasklist_db",
+      "database_id": "79d5a4b0-8acc-4f83-be77-f0d6ebdf2496",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "IMAGES_BUCKET",
+      "bucket_name": "tasklist-images",
+    },
+  ],
+  "containers": [
+    {
+      "class_name": "CodeReviewContainer",
+      "image": "./container/Dockerfile",
+      "max_instances": 3,
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CODE_REVIEW_CONTAINER",
+        "class_name": "CodeReviewContainer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CodeReviewContainer"],
+    },
+  ],
+  "routes": [
+    { "pattern": "api-tasklist.ch-tools.org/*", "zone_name": "ch-tools.org" },
+  ],
+  "vars": {
+    "CORS_ORIGINS": "https://tasklist.ch-tools.org",
+    "AI_BASE_URL": "https://api.ch-tools.org",
+    "AI_MODEL": "gpt-5.4",
+  },
+  // SECRET_KEY, AI_API_KEY, GITHUB_TOKEN, GITHUB_WEBHOOK_SECRET, OPENAI_API_KEY 通过 wrangler secret put 设置
+}

@@ -17,7 +17,7 @@
         <el-form-item prop="username">
           <el-input
             v-model="form.username"
-            prefix-icon="User"
+            :prefix-icon="User"
             placeholder="用户名"
             clearable
           />
@@ -25,7 +25,7 @@
         <el-form-item prop="password">
           <el-input
             v-model="form.password"
-            prefix-icon="Lock"
+            :prefix-icon="Lock"
             placeholder="密码"
             show-password
           />

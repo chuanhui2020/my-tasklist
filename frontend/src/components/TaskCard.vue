@@ -28,7 +28,44 @@
       <p v-if="task.description" class="task-description">
         {{ task.description }}
       </p>
-      
+
+      <div v-if="task.images && task.images.length" class="task-images">
+        <div
+          v-for="img in task.images.slice(0, 3)"
+          :key="img.id"
+          class="task-image-thumb"
+          @click.stop="openImage(img)"
+        >
+          <img :src="getImageUrl(img)" :alt="img.filename" />
+        </div>
+        <div v-if="task.images.length > 3" class="task-image-more"
+          @click.stop="showAllThumbs = true">
+          +{{ task.images.length - 3 }}
+        </div>
+      </div>
+
+      <Teleport to="body">
+        <div v-if="showAllThumbs" class="thumbs-overlay" @click="showAllThumbs = false">
+          <div class="thumbs-panel" @click.stop>
+            <div class="thumbs-panel-title">全部图片 ({{ task.images.length }})</div>
+            <div class="thumbs-panel-grid">
+              <div
+                v-for="img in task.images"
+                :key="img.id"
+                class="thumbs-panel-item"
+                @click="openImage(img)"
+              >
+                <img :src="getImageUrl(img)" :alt="img.filename" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
+          <img :src="viewerUrl" class="image-overlay-img" @click.stop />
+        </div>
+      </Teleport>
+
       <div class="task-meta">
         <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
           <el-icon><Calendar /></el-icon>
@@ -83,8 +120,9 @@
 </template>
 
 <script>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
+import api from '@/api'
 
 export default {
   name: 'TaskCard',
@@ -104,17 +142,31 @@ export default {
   },
   emits: ['toggle-status', 'edit', 'delete'],
   setup(props) {
+    const showAllThumbs = ref(false)
+    const showViewer = ref(false)
+    const viewerUrl = ref('')
+
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
       const today = new Date().toISOString().split('T')[0]
       return props.task.due_date < today
     })
-    
+
+    const getImageUrl = (img) => {
+      return api.getTaskImageUrl(props.task.id, img.id)
+    }
+
+    const openImage = (img) => {
+      viewerUrl.value = getImageUrl(img)
+      showAllThumbs.value = false
+      showViewer.value = true
+    }
+
     const formatDate = (dateString) => {
       const date = new Date(dateString)
       return date.toLocaleDateString('zh-CN')
     }
-    
+
     const formatDateTime = (dateTimeString) => {
       const date = new Date(dateTimeString)
       return date.toLocaleString('zh-CN', {
@@ -124,9 +176,14 @@ export default {
         minute: '2-digit'
       })
     }
-    
+
     return {
       isOverdue,
+      showAllThumbs,
+      showViewer,
+      viewerUrl,
+      getImageUrl,
+      openImage,
       formatDate,
       formatDateTime
     }
@@ -230,6 +287,55 @@ export default {
   overflow: hidden;
 }
 
+.task-images {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.task-image-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.task-image-thumb:hover {
+  border-color: var(--primary-color);
+}
+
+.task-image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.task-image-more {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.task-image-more:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
 .task-meta {
   display: flex;
   gap: 16px;
@@ -293,5 +399,84 @@ export default {
 
 .task-completed .card-glow {
   background: var(--accent-success);
+}
+
+.thumbs-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.thumbs-panel {
+  background: var(--bg-glass, rgba(15, 23, 42, 0.9));
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.thumbs-panel-title {
+  color: var(--text-primary, #e2e8f0);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.thumbs-panel-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.thumbs-panel-item {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.thumbs-panel-item:hover {
+  border-color: var(--primary-color, #06b6d4);
+}
+
+.thumbs-panel-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  cursor: pointer;
+}
+
+.image-overlay-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
 }
 </style>

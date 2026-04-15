@@ -60,10 +60,10 @@
         autocomplete="off"
       >
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" prefix-icon="User" autocomplete="new-username" />
+          <el-input v-model="form.username" placeholder="请输入用户名" :prefix-icon="User" autocomplete="new-username" />
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input v-model="form.password" placeholder="请输入密码" show-password prefix-icon="Lock" autocomplete="new-password" />
+          <el-input v-model="form.password" placeholder="请输入密码" show-password :prefix-icon="Lock" autocomplete="new-password" />
         </el-form-item>
         <el-form-item label="角色" prop="role">
           <el-select v-model="form.role" style="width: 100%;" popper-class="dark-select-dropdown">
@@ -83,7 +83,7 @@
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { UserFilled } from '@element-plus/icons-vue'
+import { UserFilled, User, Lock } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const formRef = ref(null)

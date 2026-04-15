@@ -93,7 +93,7 @@
                 </div>
                 <div class="task-subtitle">当前筛选：{{ statusFilterLabel }} · 排序依据：{{ sortByLabel }}</div>
               </div>
-              <el-tag v-if="tasks.length" size="small" effect="dark" class="tech-tag">{{ tasks.length }} 项</el-tag>
+              <el-tag v-if="totalTasks" size="small" effect="dark" class="tech-tag">{{ totalTasks }} 项</el-tag>
             </div>
           </template>
 
@@ -108,6 +108,17 @@
           <div v-else class="task-grid">
             <TaskCard v-for="task in tasks" :key="task.id" :task="task" @toggle-status="handleToggleStatus"
               @edit="handleEdit" @delete="handleDelete" />
+          </div>
+
+          <div v-if="totalTasks > pageSize" class="pagination-wrap">
+            <el-pagination
+              v-model:current-page="currentPage"
+              :page-size="pageSize"
+              :total="totalTasks"
+              layout="prev, pager, next"
+              small
+              background
+            />
           </div>
         </el-card>
       </main>
@@ -219,6 +230,9 @@ export default {
     const sortBy = ref('due_date')
     const showTaskForm = ref(false)
     const editingTask = ref(null)
+    const currentPage = ref(1)
+    const pageSize = 20
+    const totalTasks = ref(0)
 
     // Sidebar toggle: anim <-> progress
     const sidebarMode = ref('anim')
@@ -350,22 +364,53 @@ export default {
 
     const sortByLabel = computed(() => (sortBy.value === 'created_at' ? '创建时间' : '截止日期'))
 
+    // Task list cache with TTL (stale-while-revalidate)
+    const CACHE_TTL = 30_000 // 30 seconds
+    const taskCache = {}
+    const getCacheKey = () => `${statusFilter.value || 'all'}_${sortBy.value}_${currentPage.value}`
+
+    let loadAbortController = null
+
     const loadTasks = async ({ showSpinner = true } = {}) => {
-      if (showSpinner) {
+      // Cancel any in-flight request
+      if (loadAbortController) {
+        loadAbortController.abort()
+      }
+      loadAbortController = new AbortController()
+      const { signal } = loadAbortController
+
+      const cacheKey = getCacheKey()
+      const cached = taskCache[cacheKey]
+      const cacheValid = cached && (Date.now() - cached.ts < CACHE_TTL)
+
+      if (cacheValid && showSpinner) {
+        tasks.value = cached.items
+        totalTasks.value = cached.total
+        loading.value = false
+      }
+      if (showSpinner && !cacheValid) {
         loading.value = true
       }
       try {
         const params = {
           status: statusFilter.value || undefined,
-          sort: sortBy.value
+          sort: sortBy.value,
+          page: currentPage.value,
+          page_size: pageSize,
         }
-        const response = await api.getTasks(params)
-        tasks.value = response.data
+        const response = await api.getTasks(params, { signal })
+        const data = response.data
+        tasks.value = data.items
+        totalTasks.value = data.total
+        taskCache[cacheKey] = { items: data.items, total: data.total, ts: Date.now() }
       } catch (error) {
-        console.error('加载任务失败:', error)
-        ElMessage.error('加载任务失败，请稍后重试')
+        if (error?.code === 'ERR_CANCELED') return
+        if (!cacheValid) {
+          console.error('加载任务失败:', error)
+          ElMessage.error('加载任务失败，请稍后重试')
+        }
       } finally {
-        if (showSpinner) {
+        if (!signal.aborted && showSpinner) {
           loading.value = false
         }
       }
@@ -378,13 +423,16 @@ export default {
 
     const handleToggleStatus = async (task) => {
       const newStatus = task.status === 'pending' ? 'done' : 'pending'
+      const oldStatus = task.status
+      task.status = newStatus
       try {
         await api.updateTaskStatus(task.id, newStatus)
         ElMessage.success('任务状态已更新')
-        await loadTasks({ showSpinner: false })
       } catch (error) {
+        task.status = oldStatus
         console.error('更新任务状态失败:', error)
         ElMessage.error('更新任务状态失败，请稍后重试')
+        await loadTasks({ showSpinner: false })
       }
     }
 
@@ -398,30 +446,62 @@ export default {
         await ElMessageBox.confirm('确定要删除这个任务吗？', '确认删除', {
           type: 'warning'
         })
-        await api.deleteTask(task.id)
-        await loadTasks({ showSpinner: false })
-        ElMessage.success('任务已删除')
-      } catch (error) {
-        if (error !== 'cancel') {
+        const oldTasks = [...tasks.value]
+        const oldTotal = totalTasks.value
+        tasks.value = tasks.value.filter(t => t.id !== task.id)
+        totalTasks.value = Math.max(0, totalTasks.value - 1)
+        try {
+          await api.deleteTask(task.id)
+          Object.keys(taskCache).forEach(k => delete taskCache[k])
+          ElMessage.success('任务已删除')
+          // If current page is now empty and not the first page, go back
+          if (tasks.value.length === 0 && currentPage.value > 1) {
+            currentPage.value--
+          }
+        } catch (error) {
+          tasks.value = oldTasks
+          totalTasks.value = oldTotal
           console.error('删除任务失败:', error)
           ElMessage.error('删除任务失败，请稍后重试')
         }
+      } catch (error) {
+        // user cancelled
       }
     }
 
-    const handleTaskSubmit = async () => {
+    const handleTaskSubmit = async ({ action, task: taskData } = {}) => {
       showTaskForm.value = false
       editingTask.value = null
-      await loadTasks({ showSpinner: false })
+      // Invalidate all cache entries since sort order may change
+      Object.keys(taskCache).forEach(k => delete taskCache[k])
+      if (action === 'update' && taskData) {
+        const idx = tasks.value.findIndex(t => t.id === taskData.id)
+        if (idx !== -1) {
+          tasks.value[idx] = taskData
+        } else {
+          await loadTasks({ showSpinner: false })
+        }
+      } else if (action === 'create') {
+        // Reload current page to get correct sort position and total
+        await loadTasks({ showSpinner: false })
+      } else {
+        await loadTasks({ showSpinner: false })
+      }
     }
 
     watch([statusFilter, sortBy], () => {
+      currentPage.value = 1
+      loadTasks()
+    })
+
+    watch(currentPage, () => {
       loadTasks()
     })
 
     onBeforeUnmount(() => {
       if (animTimerId) clearInterval(animTimerId)
       clearAnimReadyWatch()
+      if (loadAbortController) loadAbortController.abort()
     })
 
     onMounted(async () => {
@@ -464,7 +544,10 @@ export default {
       animNext,
       animPrev,
       animGoTo,
-      sidebarMode
+      sidebarMode,
+      currentPage,
+      pageSize,
+      totalTasks
     }
   }
 }
@@ -706,6 +789,12 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
+}
+
+.pagination-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
 }
 
 .loading-spinner {

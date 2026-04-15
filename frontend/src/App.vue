@@ -10,6 +10,7 @@
           <div v-if="isAuthenticated" class="nav-area">
             <nav class="custom-nav">
               <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
+              <router-link to="/countdown" class="nav-link" active-class="active">疯狂倒计时</router-link>
               <router-link to="/change-password" class="nav-link" active-class="active">修改密码</router-link>
               <router-link to="/fortune" class="nav-link" active-class="active">灵签占卜</router-link>
               <router-link to="/bmi" class="nav-link" active-class="active">BMI管理</router-link>
@@ -41,16 +42,26 @@
         </el-main>
       </el-container>
     </div>
+    <CountdownOverlay v-if="isAuthenticated" :alerts="countdownAlerts" @dismiss="dismissCountdown" />
   </template>
 
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useCountdownAlert } from '@/composables/useCountdownAlert'
+import CountdownOverlay from '@/components/CountdownOverlay.vue'
 
 const router = useRouter()
 const route = useRoute()
 const { state: authState, isAuthenticated, isAdmin, clearAuth } = useAuth()
+const { alerts: countdownAlerts, dismiss: dismissCountdown, start: startCountdownPoll, stop: stopCountdownPoll } = useCountdownAlert()
+
+import { watch } from 'vue'
+watch(isAuthenticated, (val) => {
+  if (val) startCountdownPoll()
+  else stopCountdownPoll()
+}, { immediate: true })
 
 const goHome = () => {
   if (isAuthenticated.value) {

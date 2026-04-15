@@ -20,6 +20,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   response => response,
   error => {
+    if (axios.isCancel(error) || error?.code === 'ERR_CANCELED') {
+      return Promise.reject(error)
+    }
     const status = error.response?.status
     const requestUrl = error.config?.url || ''
     const message = error.response?.data?.error
@@ -36,7 +39,7 @@ api.interceptors.response.use(
       }
     } else if (status === 429) {
       // Let the caller handle rate limiting (e.g. fortune daily limit)
-    } else {
+    } else if (!error.config?._silent) {
       ElMessage.error(message || '请求失败')
     }
     return Promise.reject(error)
@@ -82,8 +85,8 @@ export default {
     return api.post('/auth/change-password', data)
   },
 
-  getTasks(params = {}) {
-    return api.get('/tasks', { params })
+  getTasks(params = {}, { signal } = {}) {
+    return api.get('/tasks', { params, signal })
   },
 
   getTask(id) {
@@ -104,6 +107,24 @@ export default {
 
   deleteTask(id) {
     return api.delete(`/tasks/${id}`)
+  },
+
+  uploadTaskImages(taskId, files) {
+    const formData = new FormData()
+    files.forEach(file => formData.append('images', file))
+    return api.post(`/tasks/${taskId}/images`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  deleteTaskImage(taskId, imageId) {
+    return api.delete(`/tasks/${taskId}/images/${imageId}`)
+  },
+
+  getTaskImageUrl(taskId, imageId) {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const baseURL = api.defaults.baseURL
+    return `${baseURL}/tasks/${taskId}/images/${imageId}/file?token=${token}`
   },
 
   generateFortune(fortuneNumber) {
@@ -185,5 +206,29 @@ export default {
 
   deleteSecureNote(id) {
     return api.delete(`/secure-notes/${id}`)
+  },
+
+  getCountdowns() {
+    return api.get('/countdowns')
+  },
+
+  createCountdown(data) {
+    return api.post('/countdowns', data)
+  },
+
+  updateCountdown(id, data) {
+    return api.put(`/countdowns/${id}`, data)
+  },
+
+  deleteCountdown(id) {
+    return api.delete(`/countdowns/${id}`)
+  },
+
+  getUpcomingCountdowns() {
+    return api.get('/countdowns/upcoming', { _silent: true })
+  },
+
+  dismissCountdown(id) {
+    return api.patch(`/countdowns/${id}/dismiss`)
   }
 }
