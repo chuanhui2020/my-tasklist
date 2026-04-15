@@ -134,7 +134,7 @@ async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: str
 
   try {
     const codexOutput = await new Promise<string>((resolve, reject) => {
-      const args = ['exec', '--full-auto', '-C', dir, '--prompt', prompt]
+      const args = ['exec', '--full-auto', '-C', dir, prompt]
       const child = spawn('codex', args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, OPENAI_API_KEY: openaiApiKey },
