@@ -49,6 +49,7 @@ export const secureNotes = sqliteTable('secure_notes', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   title: text('title').notNull(),
+  description: text('description').default(''),
   encrypted_content: text('encrypted_content').notNull(),
   salt: text('salt').notNull(),
   password_hash: text('password_hash').notNull(),

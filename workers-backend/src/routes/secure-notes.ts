@@ -10,7 +10,7 @@ export const secureNotesRoutes = new Hono<Env>()
 secureNotesRoutes.use('*', authMiddleware)
 
 function noteToDict(n: typeof secureNotes.$inferSelect) {
-  return { id: n.id, title: n.title, created_at: n.created_at, updated_at: n.updated_at }
+  return { id: n.id, title: n.title, description: n.description || '', created_at: n.created_at, updated_at: n.updated_at }
 }
 
 // GET /
@@ -27,7 +27,7 @@ secureNotesRoutes.get('/', async (c) => {
 secureNotesRoutes.post('/', async (c) => {
   const user = c.get('user')
   const db = drizzle(c.env.DB)
-  const body = await c.req.json<{ title?: string; content?: string; password?: string }>()
+  const body = await c.req.json<{ title?: string; description?: string; content?: string; password?: string }>()
 
   if (!body.title?.trim()) return c.json({ error: '标题不能为空' }, 400)
   if (!body.content?.trim()) return c.json({ error: '内容不能为空' }, 400)
@@ -39,6 +39,7 @@ secureNotesRoutes.post('/', async (c) => {
   const [note] = await db.insert(secureNotes).values({
     user_id: user.id,
     title: body.title.trim(),
+    description: (body.description || '').trim(),
     encrypted_content: encrypted,
     salt,
     password_hash: pwd_hash,
@@ -72,7 +73,7 @@ secureNotesRoutes.put('/:id', async (c) => {
   const user = c.get('user')
   const db = drizzle(c.env.DB)
   const noteId = parseInt(c.req.param('id'), 10)
-  const body = await c.req.json<{ title?: string; content?: string; password?: string; new_password?: string }>()
+  const body = await c.req.json<{ title?: string; description?: string; content?: string; password?: string; new_password?: string }>()
 
   const [note] = await db.select().from(secureNotes)
     .where(and(eq(secureNotes.id, noteId), eq(secureNotes.user_id, user.id)))
@@ -90,6 +91,7 @@ secureNotesRoutes.put('/:id', async (c) => {
 
   const updates: Record<string, unknown> = {
     title: body.title.trim(),
+    description: (body.description || '').trim(),
     encrypted_content: encrypted,
     salt,
     updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
