@@ -1,9 +1,5 @@
 FROM node:20-slim
 
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g @openai/codex typescript
-
 WORKDIR /app
 COPY package.json tsconfig.json ./
 RUN npm install

@@ -73,6 +73,17 @@ export async function getPRCommits(token: string, repo: string, prNumber: number
   return commits.map(c => ({ sha: c.sha, message: c.commit.message }))
 }
 
+export async function getPRDiff(token: string, repo: string, prNumber: number): Promise<string> {
+  const res = await fetch(`${GITHUB_API}/repos/${repo}/pulls/${prNumber}`, {
+    headers: {
+      ...headers(token),
+      'Accept': 'application/vnd.github.diff',
+    },
+  })
+  if (!res.ok) throw new Error(`Get PR diff failed: ${res.status}`)
+  return res.text()
+}
+
 export async function verifyWebhookSignature(secret: string, payload: string, signature: string): Promise<boolean> {
   const encoder = new TextEncoder()
   const key = await crypto.subtle.importKey(

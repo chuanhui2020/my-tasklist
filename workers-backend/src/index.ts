@@ -37,6 +37,11 @@ app.route('/api/countdowns', countdownRoutes)
 app.route('/api/menu', menuRoutes)
 app.route('/api/webhooks/github', githubWebhookRoutes)
 
+// Health check
+app.get('/api/health', (c) => {
+  return c.json({ status: 'ok', version: '1.2.0' })
+})
+
 // Global error handler
 app.onError((err, c) => {
   console.error('Unhandled error:', err)
