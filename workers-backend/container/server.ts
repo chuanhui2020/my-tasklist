@@ -134,11 +134,11 @@ async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: str
 
   try {
     const result = await exec('codex', [
-      '--approval-mode', 'full-auto',
-      '--quiet',
+      'exec',
+      '--full-auto',
+      '-C', dir,
       prompt,
     ], {
-      cwd: dir,
       env: { ...process.env, OPENAI_API_KEY: openaiApiKey },
       maxBuffer: 10 * 1024 * 1024,
       timeout: 300_000,
