@@ -23,7 +23,8 @@
     {
       "class_name": "CodeReviewContainer",
       "image": "./container/Dockerfile",
-      "max_instances": 3,
+      "instance_type": "standard-1",
+      "max_instances": 1,
     },
   ],
   "durable_objects": {

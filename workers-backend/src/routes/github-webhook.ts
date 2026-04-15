@@ -5,10 +5,7 @@ import {
   findOpenPR,
   createPR,
   postPRComment,
-  mergePR,
-  addLabel,
   getPRCommits,
-  getPRDiff,
 } from '../lib/github'
 
 export const githubWebhookRoutes = new Hono<Env>()
@@ -35,7 +32,6 @@ githubWebhookRoutes.get('/test', async (c) => {
 
     const commits = await getPRCommits(token, repo, pr.number)
     const commitMessages = commits.map(cm => `${cm.sha.slice(0, 7)} ${cm.message}`).join('\n')
-    const diff = await getPRDiff(token, repo, pr.number)
 
     const container = env.CODE_REVIEW_CONTAINER.get(
       env.CODE_REVIEW_CONTAINER.idFromName('code-reviewer')
@@ -45,14 +41,16 @@ githubWebhookRoutes.get('/test', async (c) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        diff: diff.slice(0, 15000),
-        commit_messages: commitMessages,
-        ai_api_key: env.AI_API_KEY,
-        ai_base_url: env.AI_BASE_URL,
-        ai_model: env.AI_MODEL,
         github_token: token,
         github_repo: repo,
         pr_number: pr.number,
+        pr_branch: branch,
+        base_branch: 'master',
+        commit_messages: commitMessages,
+        openai_api_key: env.OPENAI_API_KEY,
+        ai_api_key: env.AI_API_KEY,
+        ai_base_url: env.AI_BASE_URL,
+        ai_model: env.AI_MODEL,
       }),
     })
 
@@ -106,12 +104,11 @@ async function dispatchReview(env: Env['Bindings'], repo: string, branch: string
       prNumber = await createPR(token, repo, branch, 'master', `Auto PR: ${branch}`)
     }
 
-    // 2. 获取 commits 和 diff
+    // 2. 获取 commits
     const commits = await getPRCommits(token, repo, prNumber)
     const commitMessages = commits.map(c => `${c.sha.slice(0, 7)} ${c.message}`).join('\n')
-    const diff = await getPRDiff(token, repo, prNumber)
 
-    // 3. 发送给容器（容器立即返回 202，异步执行 review 并直接写 GitHub）
+    // 3. 发送给容器（容器 clone/fetch 代码，用 Codex CLI review）
     const container = env.CODE_REVIEW_CONTAINER.get(
       env.CODE_REVIEW_CONTAINER.idFromName('code-reviewer')
     )
@@ -120,14 +117,16 @@ async function dispatchReview(env: Env['Bindings'], repo: string, branch: string
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        diff: diff.slice(0, 15000),
-        commit_messages: commitMessages,
-        ai_api_key: env.AI_API_KEY,
-        ai_base_url: env.AI_BASE_URL,
-        ai_model: env.AI_MODEL,
         github_token: token,
         github_repo: repo,
         pr_number: prNumber,
+        pr_branch: branch,
+        base_branch: 'master',
+        commit_messages: commitMessages,
+        openai_api_key: env.OPENAI_API_KEY,
+        ai_api_key: env.AI_API_KEY,
+        ai_base_url: env.AI_BASE_URL,
+        ai_model: env.AI_MODEL,
       }),
     })
   } catch (err) {
