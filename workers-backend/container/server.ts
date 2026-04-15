@@ -137,7 +137,7 @@ async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: str
       'exec',
       '--full-auto',
       '-C', dir,
-      prompt,
+      '--prompt', prompt,
     ], {
       env: { ...process.env, OPENAI_API_KEY: openaiApiKey },
       maxBuffer: 10 * 1024 * 1024,
