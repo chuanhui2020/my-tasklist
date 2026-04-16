@@ -1,10 +1,7 @@
 <template>
   <el-card
     class="task-card"
-    :class="{
-      'task-completed': task.status === 'done',
-      'task-overdue': isOverdue && task.status !== 'done'
-    }"
+    :class="{ 'task-completed': task.status === 'done' }"
   >
     <!-- 标题 + 操作按钮 -->
     <div class="task-header">
@@ -99,7 +96,7 @@
 </template>
 
 <script>
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
@@ -147,12 +144,6 @@ export default {
       clearTimeout(resizeTimer)
     })
 
-    const isOverdue = computed(() => {
-      if (!props.task.due_date || props.task.status === 'done') return false
-      const today = new Date().toISOString().split('T')[0]
-      return props.task.due_date < today
-    })
-
     const getImageUrl = (img) => {
       return api.getTaskImageUrl(props.task.id, img.id)
     }
@@ -164,7 +155,6 @@ export default {
     }
 
     return {
-      isOverdue,
       showAllThumbs,
       showViewer,
       viewerUrl,
