@@ -100,8 +100,8 @@
 | Drizzle ORM | 类型安全的查询构建 |
 
 - D1 基于 SQLite：无 ENUM（用 TEXT + CHECK）、日期存 TEXT (ISO 8601)、INTEGER PRIMARY KEY 自增
-- Schema 定义：`workers-backend/src/db/schema.ts`
-- 迁移文件：`workers-backend/drizzle/0000_initial.sql`
+- Schema 定义：`backend/src/db/schema.ts`
+- 迁移文件：`backend/drizzle/0000_initial.sql`
 
 ### 数据模型
 

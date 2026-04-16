@@ -29,7 +29,7 @@ Personal Task Management System - A full-stack edge-deployed web application.
 
 **部署后端：**
 ```bash
-cd workers-backend
+cd backend
 npx wrangler deploy
 ```
 
@@ -52,7 +52,7 @@ npx wrangler d1 execute tasklist_db --remote --file=drizzle/0000_initial.sql
 ### Local Development
 
 ```bash
-cd workers-backend
+cd backend
 npm install
 npx wrangler dev
 ```
@@ -64,7 +64,7 @@ npx wrangler dev
 ### Backend Structure
 
 ```
-workers-backend/
+backend/
 ├── wrangler.jsonc              # Workers 配置 + D1 binding + R2 binding
 ├── package.json
 ├── tsconfig.json
@@ -189,7 +189,7 @@ frontend/src/
 
 ## Configuration
 
-**Backend (`workers-backend/wrangler.jsonc`):**
+**Backend (`backend/wrangler.jsonc`):**
 - `vars.CORS_ORIGINS`: Allowed frontend origins (comma-separated)
 - `vars.AI_BASE_URL`: AI service URL (default: `https://api.deepseek.com`)
 - `vars.AI_MODEL`: AI model name (default: `deepseek-chat`)
