@@ -69,14 +69,18 @@
         <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
           <img :src="viewerUrl" class="image-overlay-img" @click.stop />
         </div>
-
-        <div v-if="showDesc" class="thumbs-overlay" @click="showDesc = false">
-          <div class="thumbs-panel desc-panel" @click.stop>
-            <div class="thumbs-panel-title">{{ task.title }}</div>
-            <div class="desc-panel-content">{{ task.description }}</div>
-          </div>
-        </div>
       </Teleport>
+
+      <el-dialog
+        v-model="showDesc"
+        :title="task.title"
+        width="500px"
+        class="desc-dialog"
+        append-to-body
+        destroy-on-close
+      >
+        <div class="desc-dialog-content">{{ task.description }}</div>
+      </el-dialog>
 
       <div class="task-meta">
         <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
@@ -132,7 +136,7 @@
 </template>
 
 <script>
-import { computed, ref, onMounted, onUpdated, nextTick } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
@@ -167,8 +171,16 @@ export default {
       }
     }
 
-    onMounted(() => nextTick(checkTruncation))
-    onUpdated(() => nextTick(checkTruncation))
+    let resizeObserver = null
+    watch(() => props.task.description, () => nextTick(checkTruncation))
+    watch(descRef, (el, oldEl) => {
+      if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
+      if (el) {
+        resizeObserver = new ResizeObserver(checkTruncation)
+        resizeObserver.observe(el)
+      }
+    }, { immediate: true })
+    onBeforeUnmount(() => { if (resizeObserver) resizeObserver.disconnect() })
 
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
@@ -518,13 +530,7 @@ export default {
   cursor: default;
 }
 
-.desc-panel {
-  max-width: 500px;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.desc-panel-content {
+.desc-dialog-content {
   color: var(--text-secondary, #94a3b8);
   font-size: 14px;
   line-height: 1.8;
