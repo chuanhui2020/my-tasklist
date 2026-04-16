@@ -230,6 +230,13 @@ export default {
   border: 1px solid var(--glass-border) !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  height: 100%;
+}
+
+:deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .task-card:hover {
@@ -304,6 +311,7 @@ export default {
 
 .task-content {
   margin-bottom: 16px;
+  flex: 1;
 }
 
 .task-description {
