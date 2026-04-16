@@ -1,30 +1,60 @@
 <template>
-  <el-card 
-    class="task-card" 
-    :class="{ 
+  <el-card
+    class="task-card"
+    :class="{
       'task-completed': task.status === 'done',
       'task-overdue': isOverdue && task.status !== 'done'
     }"
   >
     <div class="card-glow"></div>
+
+    <!-- 顶部：状态点 + 标题 + 操作按钮 -->
     <div class="task-header">
-      <div class="title-section">
+      <div class="title-row">
         <div class="status-indicator" :class="task.status"></div>
         <span class="task-title" :class="{ 'completed-title': task.status === 'done' }">
           {{ task.title }}
         </span>
       </div>
-      <el-tag 
-        :type="task.status === 'done' ? 'success' : 'warning'" 
-        size="small"
-        effect="dark"
-        class="status-tag"
-      >
-        {{ task.status === 'done' ? '已完成' : '进行中' }}
-      </el-tag>
+      <div class="header-actions">
+        <el-button
+          :type="task.status === 'done' ? 'info' : 'success'"
+          size="small"
+          circle
+          plain
+          @click="$emit('toggle-status', task)"
+          :title="task.status === 'done' ? '标记未完成' : '标记完成'"
+        >
+          <el-icon>
+            <Check v-if="task.status === 'pending'" />
+            <RefreshLeft v-else />
+          </el-icon>
+        </el-button>
+        <el-button
+          type="primary"
+          size="small"
+          circle
+          plain
+          @click="$emit('edit', task)"
+          title="编辑"
+        >
+          <el-icon><Edit /></el-icon>
+        </el-button>
+        <el-button
+          type="danger"
+          size="small"
+          circle
+          plain
+          @click="$emit('delete', task)"
+          title="删除"
+        >
+          <el-icon><Delete /></el-icon>
+        </el-button>
+      </div>
     </div>
-    
-    <div class="task-content">
+
+    <!-- 中间：描述 + 图片（可选） -->
+    <div class="task-body">
       <p v-if="task.description"
         ref="descRef"
         class="task-description"
@@ -48,79 +78,52 @@
           +{{ task.images.length - 3 }}
         </div>
       </div>
+    </div>
 
-      <Teleport to="body">
-        <div v-if="showAllThumbs" class="thumbs-overlay" @click="showAllThumbs = false">
-          <div class="thumbs-panel" @click.stop>
-            <div class="thumbs-panel-title">全部图片 ({{ task.images.length }})</div>
-            <div class="thumbs-panel-grid">
-              <div
-                v-for="img in task.images"
-                :key="img.id"
-                class="thumbs-panel-item"
-                @click="openImage(img)"
-              >
-                <img :src="getImageUrl(img)" :alt="img.filename" />
-              </div>
+    <!-- 底部：状态标签 + 时间信息 -->
+    <div class="task-footer">
+      <el-tag
+        :type="task.status === 'done' ? 'success' : 'warning'"
+        size="small"
+        effect="dark"
+        class="status-tag"
+      >
+        {{ task.status === 'done' ? '已完成' : '进行中' }}
+      </el-tag>
+      <div class="task-meta">
+        <span v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
+          <el-icon><Calendar /></el-icon>
+          {{ formatDate(task.due_date) }}
+          <span v-if="isOverdue" class="overdue-badge">!</span>
+        </span>
+        <span class="meta-item">
+          <el-icon><Clock /></el-icon>
+          {{ formatDateTime(task.created_at) }}
+        </span>
+      </div>
+    </div>
+
+    <Teleport to="body">
+      <div v-if="showAllThumbs" class="thumbs-overlay" @click="showAllThumbs = false">
+        <div class="thumbs-panel" @click.stop>
+          <div class="thumbs-panel-title">全部图片 ({{ task.images.length }})</div>
+          <div class="thumbs-panel-grid">
+            <div
+              v-for="img in task.images"
+              :key="img.id"
+              class="thumbs-panel-item"
+              @click="openImage(img)"
+            >
+              <img :src="getImageUrl(img)" :alt="img.filename" />
             </div>
           </div>
         </div>
-
-        <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
-          <img :src="viewerUrl" class="image-overlay-img" @click.stop />
-        </div>
-      </Teleport>
-
-      <div class="task-meta">
-        <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
-          <el-icon><Calendar /></el-icon>
-          <span>{{ formatDate(task.due_date) }}</span>
-          <span v-if="isOverdue" class="overdue-badge">!</span>
-        </div>
-        <div class="meta-item">
-          <el-icon><Clock /></el-icon>
-          <span>{{ formatDateTime(task.created_at) }}</span>
-        </div>
       </div>
-    </div>
-    
-    <div class="task-actions">
-      <el-button 
-        :type="task.status === 'done' ? 'info' : 'success'"
-        size="small"
-        circle
-        plain
-        @click="$emit('toggle-status', task)"
-        :title="task.status === 'done' ? '标记未完成' : '标记完成'"
-      >
-        <el-icon>
-          <Check v-if="task.status === 'pending'" />
-          <RefreshLeft v-else />
-        </el-icon>
-      </el-button>
-      
-      <el-button 
-        type="primary" 
-        size="small" 
-        circle
-        plain
-        @click="$emit('edit', task)"
-        title="编辑"
-      >
-        <el-icon><Edit /></el-icon>
-      </el-button>
-      
-      <el-button 
-        type="danger" 
-        size="small" 
-        circle
-        plain
-        @click="$emit('delete', task)"
-        title="删除"
-      >
-        <el-icon><Delete /></el-icon>
-      </el-button>
-    </div>
+
+      <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
+        <img :src="viewerUrl" class="image-overlay-img" @click.stop />
+      </div>
+    </Teleport>
   </el-card>
 </template>
 
@@ -223,6 +226,7 @@ export default {
 </script>
 
 <style scoped>
+/* === Card Container === */
 .task-card {
   position: relative;
   background: var(--bg-glass) !important;
@@ -237,7 +241,7 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  padding: 16px;
 }
 
 .task-card:hover {
@@ -261,18 +265,21 @@ export default {
   opacity: 1;
 }
 
+/* === Header: title + action buttons === */
 .task-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.title-section {
+.title-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
   flex: 1;
+  min-width: 0;
 }
 
 .status-indicator {
@@ -295,9 +302,10 @@ export default {
 
 .task-title {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--text-primary);
   line-height: 1.4;
+  word-break: break-word;
 }
 
 .completed-title {
@@ -305,20 +313,42 @@ export default {
   text-decoration: line-through;
 }
 
-.status-tag {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid var(--border-color);
+.header-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.task-content {
-  margin-bottom: 16px;
+.task-card:hover .header-actions {
+  opacity: 1;
+}
+
+:deep(.el-button.is-circle) {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+}
+
+:deep(.el-button.is-circle:hover) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+/* === Body: description + images === */
+.task-body {
   flex: 1;
+  margin-bottom: 10px;
 }
 
 .task-description {
   color: var(--text-secondary);
-  font-size: 14px;
-  margin-bottom: 12px;
+  font-size: 13px;
+  margin: 0 0 8px;
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -341,13 +371,12 @@ export default {
 .task-images {
   display: flex;
   gap: 6px;
-  margin-bottom: 12px;
 }
 
 .task-image-thumb {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--glass-border);
   flex-shrink: 0;
@@ -367,16 +396,16 @@ export default {
 }
 
 .task-image-more {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
   border: 1px solid var(--glass-border);
   background: rgba(15, 23, 42, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
   flex-shrink: 0;
   cursor: pointer;
   transition: border-color 0.2s;
@@ -387,17 +416,34 @@ export default {
   color: var(--primary-color);
 }
 
+/* === Footer: status tag + meta === */
+.task-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  margin-top: auto;
+}
+
+.status-tag {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
 .task-meta {
   display: flex;
-  gap: 16px;
-  font-size: 12px;
+  gap: 12px;
+  font-size: 11px;
   color: var(--text-muted);
+  flex-wrap: wrap;
 }
 
 .meta-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .text-danger {
@@ -407,39 +453,19 @@ export default {
 .overdue-badge {
   background: var(--accent-danger);
   color: white;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 10px;
+  font-size: 9px;
 }
 
-.task-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color);
-}
-
-:deep(.el-button.is-circle) {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-}
-
-:deep(.el-button.is-circle:hover) {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-  border-color: var(--text-primary);
-}
-
-/* Completed State Overrides */
+/* === Completed State === */
 .task-completed {
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 .task-completed:hover {
@@ -452,6 +478,7 @@ export default {
   background: var(--accent-success);
 }
 
+/* === Overlays === */
 .thumbs-overlay {
   position: fixed;
   top: 0;
