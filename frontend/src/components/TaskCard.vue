@@ -125,7 +125,7 @@
 </template>
 
 <script>
-import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
@@ -160,7 +160,20 @@ export default {
     }
 
     watch(() => props.task.description, () => nextTick(checkTruncation))
-    onMounted(() => nextTick(checkTruncation))
+    onMounted(() => {
+      nextTick(checkTruncation)
+      window.addEventListener('resize', onResize)
+    })
+
+    let resizeTimer = null
+    const onResize = () => {
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(checkTruncation, 200)
+    }
+    onBeforeUnmount(() => {
+      window.removeEventListener('resize', onResize)
+      clearTimeout(resizeTimer)
+    })
 
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
