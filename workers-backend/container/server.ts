@@ -65,7 +65,7 @@ async function mergePR(token: string, repo: string, prNumber: number): Promise<b
       'Accept': 'application/vnd.github+json',
       'User-Agent': 'tasklist-code-reviewer',
     },
-    body: JSON.stringify({ merge_method: 'squash' }),
+    body: JSON.stringify({ merge_method: 'merge' }),
   })
   return res.ok
 }
