@@ -261,3 +261,22 @@ app.route('/api/your-feature', yourRoutes)
 - Username: `admin`
 - Password: `123456`
 - Role: `admin`
+
+## Git 工作流：提交 → Review → 修复
+
+本项目配置了自动 Code Review 流程，每次 push 到 dev 分支后会自动触发。提交代码后必须遵循以下流程：
+
+1. **提交并推送到 dev 分支**
+2. **等待 PR 自动创建**：webhook 会自动创建 dev→master 的 PR（如果没有 open 的）
+3. **等待 Review 完成**：轮询 PR 状态直到评论数增加（Codex AI Review 会发评论）
+4. **检查 Review 结果**：
+   - `VERDICT: PASS` → PR 会被自动合并，同步本地 `git fetch origin master && git merge origin/master`
+   - `VERDICT: FAIL` → PR 不会合并，需要修复 critical issues 后重新提交
+5. **修复 Review 问题**：
+   - Critical issues：必须修复，否则无法合并
+   - Warnings：应当修复，提交新 commit 推送到 dev，会触发新一轮 review
+   - Suggestions：可选优化，视情况决定是否处理
+6. **重复步骤 3-5**，直到 PASS 且无 critical/warning
+
+轮询命令：`gh pr view <number> --json state,comments --jq '{state: .state, comment_count: (.comments | length)}'`
+查看评论：`gh api repos/chuanhui2020/my-tasklist/issues/<number>/comments --jq '.[<last_index>].body'`
