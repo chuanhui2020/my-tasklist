@@ -4,7 +4,7 @@
  * 用法:
  *   1. 先在服务器上运行 export_data.py 导出 data.json
  *   2. 将 data.json 放到 backend/scripts/ 目录
- *   3. 运行: npx wrangler d1 execute tasklist-db --remote --file=scripts/import.sql
+ *   3. 运行: npx wrangler d1 execute tasklist_db --remote --file=scripts/import.sql
  *      或者用本脚本生成 SQL: npx tsx scripts/import-to-d1.ts > scripts/import.sql
  */
 
