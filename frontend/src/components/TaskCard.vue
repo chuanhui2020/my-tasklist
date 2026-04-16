@@ -229,7 +229,7 @@ export default {
   backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border) !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
+  overflow: visible;
   height: 100%;
 }
 
@@ -237,6 +237,7 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
 
 .task-card:hover {
