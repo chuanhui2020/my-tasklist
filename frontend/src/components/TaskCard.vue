@@ -6,16 +6,11 @@
       'task-overdue': isOverdue && task.status !== 'done'
     }"
   >
-    <div class="card-glow"></div>
-
-    <!-- 顶部：状态点 + 标题 + 操作按钮 -->
+    <!-- 标题 + 操作按钮 -->
     <div class="task-header">
-      <div class="title-row">
-        <div class="status-indicator" :class="task.status"></div>
-        <span class="task-title" :class="{ 'completed-title': task.status === 'done' }">
-          {{ task.title }}
-        </span>
-      </div>
+      <span class="task-title" :class="{ 'completed-title': task.status === 'done' }">
+        {{ task.title }}
+      </span>
       <div class="header-actions">
         <el-button
           :type="task.status === 'done' ? 'info' : 'success'"
@@ -53,53 +48,29 @@
       </div>
     </div>
 
-    <!-- 中间：描述 + 图片（可选） -->
-    <div class="task-body">
-      <p v-if="task.description"
-        ref="descRef"
-        class="task-description"
-        :class="{ 'is-truncated': isTruncated }"
-        @click.stop="isTruncated && $emit('show-desc', task)"
-      >
-        {{ task.description }}
-      </p>
+    <!-- 描述 -->
+    <p v-if="task.description"
+      ref="descRef"
+      class="task-description"
+      :class="{ 'is-truncated': isTruncated }"
+      @click.stop="isTruncated && $emit('show-desc', task)"
+    >
+      {{ task.description }}
+    </p>
 
-      <div v-if="task.images && task.images.length" class="task-images">
-        <div
-          v-for="img in task.images.slice(0, 3)"
-          :key="img.id"
-          class="task-image-thumb"
-          @click.stop="openImage(img)"
-        >
-          <img :src="getImageUrl(img)" :alt="img.filename" />
-        </div>
-        <div v-if="task.images.length > 3" class="task-image-more"
-          @click.stop="showAllThumbs = true">
-          +{{ task.images.length - 3 }}
-        </div>
+    <!-- 图片 -->
+    <div v-if="task.images && task.images.length" class="task-images">
+      <div
+        v-for="img in task.images.slice(0, 3)"
+        :key="img.id"
+        class="task-image-thumb"
+        @click.stop="openImage(img)"
+      >
+        <img :src="getImageUrl(img)" :alt="img.filename" />
       </div>
-    </div>
-
-    <!-- 底部：状态标签 + 时间信息 -->
-    <div class="task-footer">
-      <el-tag
-        :type="task.status === 'done' ? 'success' : 'warning'"
-        size="small"
-        effect="dark"
-        class="status-tag"
-      >
-        {{ task.status === 'done' ? '已完成' : '进行中' }}
-      </el-tag>
-      <div class="task-meta">
-        <span v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
-          <el-icon><Calendar /></el-icon>
-          {{ formatDate(task.due_date) }}
-          <span v-if="isOverdue" class="overdue-badge">!</span>
-        </span>
-        <span class="meta-item">
-          <el-icon><Clock /></el-icon>
-          {{ formatDateTime(task.created_at) }}
-        </span>
+      <div v-if="task.images.length > 3" class="task-image-more"
+        @click.stop="showAllThumbs = true">
+        +{{ task.images.length - 3 }}
       </div>
     </div>
 
@@ -129,14 +100,12 @@
 
 <script>
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
+import { Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
 export default {
   name: 'TaskCard',
   components: {
-    Calendar,
-    Clock,
     Check,
     RefreshLeft,
     Edit,
@@ -194,21 +163,6 @@ export default {
       showViewer.value = true
     }
 
-    const formatDate = (dateString) => {
-      const date = new Date(dateString)
-      return date.toLocaleDateString('zh-CN')
-    }
-
-    const formatDateTime = (dateTimeString) => {
-      const date = new Date(dateTimeString)
-      return date.toLocaleString('zh-CN', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    }
-
     return {
       isOverdue,
       showAllThumbs,
@@ -217,23 +171,20 @@ export default {
       descRef,
       isTruncated,
       getImageUrl,
-      openImage,
-      formatDate,
-      formatDateTime
+      openImage
     }
   }
 }
 </script>
 
 <style scoped>
-/* === Card Container === */
 .task-card {
   position: relative;
   background: var(--bg-glass) !important;
   backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border) !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: visible;
+  border-radius: 16px !important;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   height: 100%;
 }
 
@@ -241,71 +192,36 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 16px;
+  padding: 20px;
 }
 
 .task-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg), var(--glow-primary);
-  border-color: rgba(6, 182, 212, 0.3) !important;
+  transform: translateY(-2px);
+  border-color: rgba(6, 182, 212, 0.25) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
-.card-glow {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.task-card:hover .card-glow {
-  opacity: 1;
-}
-
-/* === Header: title + action buttons === */
+/* === Header === */
 .task-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.title-row {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  flex: 1;
-  min-width: 0;
-}
-
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-
-.status-indicator.pending {
-  background-color: var(--accent-warning);
-  box-shadow: 0 0 8px var(--accent-warning);
-}
-
-.status-indicator.done {
-  background-color: var(--accent-success);
-  box-shadow: 0 0 8px var(--accent-success);
+  gap: 12px;
 }
 
 .task-title {
   font-weight: 600;
   font-size: 15px;
   color: var(--text-primary);
-  line-height: 1.4;
+  line-height: 1.5;
   word-break: break-word;
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .completed-title {
@@ -334,22 +250,17 @@ export default {
 }
 
 :deep(.el-button.is-circle:hover) {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
   border-color: var(--text-primary);
 }
 
-/* === Body: description + images === */
-.task-body {
-  flex: 1;
-  margin-bottom: 10px;
-}
-
+/* === Description === */
 .task-description {
   color: var(--text-secondary);
   font-size: 13px;
-  margin: 0 0 8px;
-  line-height: 1.5;
+  margin: 10px 0 0;
+  line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -368,15 +279,17 @@ export default {
   color: var(--text-primary);
 }
 
+/* === Images === */
 .task-images {
   display: flex;
   gap: 6px;
+  margin-top: 12px;
 }
 
 .task-image-thumb {
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--glass-border);
   flex-shrink: 0;
@@ -398,9 +311,9 @@ export default {
 .task-image-more {
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--glass-border);
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 23, 42, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -408,7 +321,7 @@ export default {
   font-size: 12px;
   flex-shrink: 0;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, color 0.2s;
 }
 
 .task-image-more:hover {
@@ -416,66 +329,13 @@ export default {
   color: var(--primary-color);
 }
 
-/* === Footer: status tag + meta === */
-.task-footer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color);
-  margin-top: auto;
-}
-
-.status-tag {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.task-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--text-muted);
-  flex-wrap: wrap;
-}
-
-.meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.text-danger {
-  color: var(--accent-danger);
-}
-
-.overdue-badge {
-  background: var(--accent-danger);
-  color: white;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 9px;
-}
-
 /* === Completed State === */
 .task-completed {
-  opacity: 0.75;
+  opacity: 0.6;
 }
 
 .task-completed:hover {
-  opacity: 1;
-  border-color: var(--accent-success) !important;
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
-}
-
-.task-completed .card-glow {
-  background: var(--accent-success);
+  opacity: 0.85;
 }
 
 /* === Overlays === */
