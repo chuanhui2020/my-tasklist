@@ -19,38 +19,11 @@
 
     <Transition name="settings-slide">
       <div v-if="showSettings" class="lp-settings">
-        <div class="setting-row">
-          <span class="setting-label">退休日期</span>
-          <input type="month" v-model="retireDate" class="setting-input setting-input-date" @change="saveSettings" />
-        </div>
         <div class="setting-section">
           <div class="setting-section-header">
-            <span class="setting-label">💧 喝水时间（最多{{ MAX_WATER }}条）</span>
-            <button class="setting-reset-btn" @click="resetSchedules">恢复默认</button>
+            <span class="setting-label">退休日期</span>
           </div>
-          <div class="schedule-tags">
-            <span v-for="h in waterHours" :key="'w'+h" class="schedule-tag">
-              {{ String(h).padStart(2,'0') }}:00
-              <button class="tag-remove" @click="removeWaterTime(h)">&times;</button>
-            </span>
-            <span v-if="waterHours.length < MAX_WATER" class="schedule-add">
-              <input type="number" min="0" max="23" v-model="newWaterTime" placeholder="时" class="schedule-add-input" @keyup.enter="addWaterTime" />
-              <button class="tag-add-btn" @click="addWaterTime">+</button>
-            </span>
-          </div>
-        </div>
-        <div class="setting-section">
-          <span class="setting-label">💩 拉屎时间（最多{{ MAX_POOP }}条）</span>
-          <div class="schedule-tags">
-            <span v-for="h in poopHours" :key="'p'+h" class="schedule-tag poop">
-              {{ String(h).padStart(2,'0') }}:00
-              <button class="tag-remove" @click="removePoopTime(h)">&times;</button>
-            </span>
-            <span v-if="poopHours.length < MAX_POOP" class="schedule-add">
-              <input type="number" min="0" max="23" v-model="newPoopTime" placeholder="时" class="schedule-add-input" @keyup.enter="addPoopTime" />
-              <button class="tag-add-btn" @click="addPoopTime">+</button>
-            </span>
-          </div>
+          <input type="month" v-model="retireDate" class="setting-input setting-input-date" @change="saveSettings" />
         </div>
       </div>
     </Transition>
@@ -115,7 +88,7 @@
       </Transition>
     </Teleport>
 
-    <!-- 喝水/拉屎提醒弹窗 -->
+    <!-- 提醒弹窗（下班/发薪/放假） -->
     <Teleport to="body">
       <Transition name="alert-fade">
         <div v-if="alertVisible" class="timer-alert-overlay" @click="dismissAlert">
@@ -142,10 +115,6 @@ const emit = defineEmits(['switch-mode'])
 const WORK_START = 9
 const WORK_END = 20.5  // 上海时间 20:30
 const PAYDAY = 5
-const DEFAULT_WATER_HOURS = [8, 10, 12, 14, 16, 18, 20]
-const DEFAULT_POOP_HOURS = [9, 13, 19]
-const MAX_WATER = 10
-const MAX_POOP = 5
 
 // 中国法定节假日（数据来源：国务院办公厅）
 const HOLIDAYS = [
@@ -170,61 +139,6 @@ const defaultRetireDate = '2065-01'
 const retireDate = ref(localStorage.getItem('life_progress_retire_date') || defaultRetireDate)
 const showSettings = ref(false)
 
-// 自定义喝水/拉屎时间表（localStorage 持久化）
-function loadSchedule(key, defaults, max) {
-  try {
-    const stored = JSON.parse(localStorage.getItem(key))
-    if (Array.isArray(stored) && stored.length && stored.length <= max && stored.every(h => typeof h === 'number' && h >= 0 && h < 24)) {
-      return [...stored].sort((a, b) => a - b)
-    }
-  } catch {}
-  return [...defaults]
-}
-const waterHours = ref(loadSchedule('lp_water_hours', DEFAULT_WATER_HOURS, MAX_WATER))
-const poopHours = ref(loadSchedule('lp_poop_hours', DEFAULT_POOP_HOURS, MAX_POOP))
-const newWaterTime = ref('')
-const newPoopTime = ref('')
-
-function saveWaterHours() {
-  localStorage.setItem('lp_water_hours', JSON.stringify(waterHours.value))
-}
-function savePoopHours() {
-  localStorage.setItem('lp_poop_hours', JSON.stringify(poopHours.value))
-}
-function addWaterTime() {
-  const h = parseInt(newWaterTime.value)
-  if (isNaN(h) || h < 0 || h > 23) return
-  if (waterHours.value.includes(h)) { newWaterTime.value = ''; return }
-  if (waterHours.value.length >= MAX_WATER) return
-  waterHours.value.push(h)
-  waterHours.value.sort((a, b) => a - b)
-  saveWaterHours()
-  newWaterTime.value = ''
-}
-function removeWaterTime(h) {
-  waterHours.value = waterHours.value.filter(v => v !== h)
-  saveWaterHours()
-}
-function addPoopTime() {
-  const h = parseInt(newPoopTime.value)
-  if (isNaN(h) || h < 0 || h > 23) return
-  if (poopHours.value.includes(h)) { newPoopTime.value = ''; return }
-  if (poopHours.value.length >= MAX_POOP) return
-  poopHours.value.push(h)
-  poopHours.value.sort((a, b) => a - b)
-  savePoopHours()
-  newPoopTime.value = ''
-}
-function removePoopTime(h) {
-  poopHours.value = poopHours.value.filter(v => v !== h)
-  savePoopHours()
-}
-function resetSchedules() {
-  waterHours.value = [...DEFAULT_WATER_HOURS]
-  poopHours.value = [...DEFAULT_POOP_HOURS]
-  saveWaterHours()
-  savePoopHours()
-}
 const todayMenu = ref({
   week_start: '',
   weekday: '',
@@ -240,10 +154,6 @@ const menuDialogMeals = ref([])
 // 提醒弹窗
 const alertVisible = ref(false)
 const alertData = ref({ icon: '', title: '', desc: '', btn: '' })
-
-// 记录已弹过的时刻，避免同一时刻重复弹窗（用sessionStorage防止组件重挂载时重置）
-const alertedWaterHour = ref(parseInt(sessionStorage.getItem('lp_alerted_water') || '-1'))
-const alertedPoopHour = ref(parseInt(sessionStorage.getItem('lp_alerted_poop') || '-1'))
 
 function saveSettings() {
   localStorage.setItem('life_progress_retire_date', retireDate.value)
@@ -587,86 +497,7 @@ const bars = computed(() => {
     ...getBarStyle(holidayPct, inHoliday, false),
   })
 
-  // 7. 距离下次喝水（固定时刻表：每2小时）
-  const waterNowMin = n.getHours() * 60 + n.getMinutes()
-  let nextWaterHour = waterHours.value.find(h => h * 60 > waterNowMin)
-  let prevWaterHour = null
-  if (!nextWaterHour && nextWaterHour !== 0) {
-    nextWaterHour = waterHours.value[0]
-    prevWaterHour = waterHours.value[waterHours.value.length - 1]
-  } else {
-    const idx = waterHours.value.indexOf(nextWaterHour)
-    prevWaterHour = idx > 0 ? waterHours.value[idx - 1] : waterHours.value[waterHours.value.length - 1]
-  }
-  const waterRemainMin = nextWaterHour * 60 > waterNowMin
-    ? nextWaterHour * 60 - waterNowMin
-    : (24 * 60 - waterNowMin + nextWaterHour * 60)
-  const waterIntervalMin = 120 // 2小时
-  const waterPct = Math.max((1 - waterRemainMin / waterIntervalMin) * 100, 0)
-  const waterAlert = waterRemainMin <= 5
-  let waterDisplay
-  if (waterRemainMin <= 5) {
-    const quips = ['该喝水了！再不喝要变木乃伊了', '喝水时间到！你的细胞在求救', '快去接水！你比沙漠还干']
-    waterDisplay = quips[n.getMinutes() % quips.length]
-  } else if (waterRemainMin <= 30) {
-    waterDisplay = `还有${waterRemainMin}分钟，嘴巴已经开始抗议了`
-  } else {
-    const wh = Math.floor(waterRemainMin / 60)
-    const wm = waterRemainMin % 60
-    waterDisplay = wh > 0 ? `还有${wh}小时${wm}分钟` : `还有${wm}分钟`
-  }
-  list.push({
-    id: 'water',
-    title: '距离下次喝水',
-    subtitle: '多喝热水，包治百病',
-    percent: waterAlert ? 100 : waterPct.toFixed(1),
-    display: waterDisplay,
-    ...getBarStyle(waterPct, false, waterAlert),
-    alert: waterAlert,
-  })
-
-  // 8. 距离下次拉屎（固定时刻表：9:00, 13:00, 19:00）
-  const poopNowMin = waterNowMin
-  let nextPoopHour = poopHours.value.find(h => h * 60 > poopNowMin)
-  let prevPoopHour = null
-  if (!nextPoopHour) {
-    nextPoopHour = poopHours.value[0]
-    prevPoopHour = poopHours.value[poopHours.value.length - 1]
-  } else {
-    const idx = poopHours.value.indexOf(nextPoopHour)
-    prevPoopHour = idx > 0 ? poopHours.value[idx - 1] : poopHours.value[poopHours.value.length - 1]
-  }
-  const poopRemainMin = nextPoopHour * 60 > poopNowMin
-    ? nextPoopHour * 60 - poopNowMin
-    : (24 * 60 - poopNowMin + nextPoopHour * 60)
-  // 计算当前间隔长度
-  const poopIntervalMin = nextPoopHour * 60 > poopNowMin
-    ? (nextPoopHour - (prevPoopHour || 0)) * 60
-    : (24 * 60 - (prevPoopHour || 0) * 60 + nextPoopHour * 60)
-  const poopPct = Math.max((1 - poopRemainMin / Math.max(poopIntervalMin, 1)) * 100, 0)
-  const poopAlert = poopRemainMin <= 10
-  let poopDisplay
-  if (poopRemainMin <= 10) {
-    const quips = ['肠道来电了，请接听！', '马桶已就绪，请就位！', '排毒时间到，冲鸭！']
-    poopDisplay = quips[n.getMinutes() % quips.length]
-  } else if (poopRemainMin <= 30) {
-    poopDisplay = `还有${poopRemainMin}分钟，肚子开始有想法了`
-  } else {
-    const ph = Math.floor(poopRemainMin / 60)
-    const pm = poopRemainMin % 60
-    poopDisplay = ph > 0 ? `还有${ph}小时${pm}分钟，先忍忍` : `还有${pm}分钟，做好准备`
-  }
-  list.push({
-    id: 'poop',
-    title: '距离下次拉屎',
-    subtitle: '人生大事，不可忽视',
-    percent: poopAlert ? 100 : poopPct.toFixed(1),
-    display: poopDisplay,
-    ...getBarStyle(poopPct, false, poopAlert),
-    alert: poopAlert,
-  })
-
-  // 9. 距离退休
+  // 7. 距离退休
   const [retireY, retireM] = retireDate.value.split('-').map(Number)
   const retireTarget = new Date(retireY, retireM - 1, 1)
   const msLeft = retireTarget - n
@@ -704,23 +535,7 @@ const bars = computed(() => {
   return list
 })
 
-function formatCountdown(sec) {
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return `${m}分${s < 10 ? '0' : ''}${s}秒`
-}
-
 // --- 提醒逻辑 ---
-const waterAlerts = [
-  { icon: '💧', title: '喝水警报！', desc: '你的身体已经在沙漠边缘了，快去接杯水！', btn: '已喝，重置计时' },
-  { icon: '🚰', title: '水分告急！', desc: '再不喝水，你就要变成人干了！', btn: '喝完了，谢谢提醒' },
-  { icon: '🫗', title: '补水时间到！', desc: '你上次喝水是什么时候？想不起来就对了！', btn: '这就去喝' },
-]
-const poopAlerts = [
-  { icon: '💩', title: '拉屎预警！', desc: '你的肠道已经发来三条未读消息！', btn: '已处理，重置计时' },
-  { icon: '🚽', title: '厕所在召唤你！', desc: '忍住不是本事，拉出来才是能力！', btn: '搞定了' },
-  { icon: '🧻', title: '排毒时间到！', desc: '该去和马桶进行一次深入的交流了！', btn: '交流完毕' },
-]
 const offWorkAlerts = [
   { icon: '🎉', title: '下班啦！', desc: '恭喜你又存活了一天，快跑！别让老板看到你还在！', btn: '已跑路' },
   { icon: '🏃', title: '自由时刻！', desc: '打工人的灵魂已经飞出了工位，肉体也该跟上了！', btn: '冲了冲了' },
@@ -747,7 +562,7 @@ const alertedPayday = ref(sessionStorage.getItem('lp_alerted_payday') || '')
 const alertedHoliday = ref(sessionStorage.getItem('lp_alerted_holiday') || '')
 
 function triggerAlert(type) {
-  const pools = { water: waterAlerts, poop: poopAlerts, offwork: offWorkAlerts, payday: paydayAlerts, holiday: holidayAlerts }
+  const pools = { offwork: offWorkAlerts, payday: paydayAlerts, holiday: holidayAlerts }
   const pool = pools[type]
   if (!pool) return
   const data = pool[Math.floor(Math.random() * pool.length)]
@@ -759,13 +574,7 @@ function triggerAlert(type) {
 function dismissAlert() {
   alertVisible.value = false
   const todayKey = new Date().toDateString()
-  if (pendingAlertType === 'water') {
-    alertedWaterHour.value = new Date().getHours()
-    sessionStorage.setItem('lp_alerted_water', alertedWaterHour.value)
-  } else if (pendingAlertType === 'poop') {
-    alertedPoopHour.value = new Date().getHours()
-    sessionStorage.setItem('lp_alerted_poop', alertedPoopHour.value)
-  } else if (pendingAlertType === 'offwork') {
+  if (pendingAlertType === 'offwork') {
     alertedOffWork.value = todayKey
     sessionStorage.setItem('lp_alerted_offwork', todayKey)
   } else if (pendingAlertType === 'payday') {
@@ -793,14 +602,6 @@ onMounted(() => {
       loadTodayMenu()
     }
 
-    // 喝水提醒：整点时刻前后5分钟内触发
-    if (waterHours.value.includes(curH) && curM < 5 && alertedWaterHour.value !== curH && !alertVisible.value) {
-      triggerAlert('water')
-    }
-    // 拉屎提醒：整点时刻前后10分钟内触发
-    if (poopHours.value.includes(curH) && curM < 10 && alertedPoopHour.value !== curH && !alertVisible.value) {
-      triggerAlert('poop')
-    }
     // 下班提醒：20:30 后5分钟内触发，每天一次
     const curHourDec = curH + curM / 60
     if (curHourDec >= WORK_END && curHourDec < WORK_END + 0.1 && alertedOffWork.value !== currentDateKey && !alertVisible.value) {
@@ -937,123 +738,6 @@ onBeforeUnmount(() => {
 
 .setting-section {
   margin-top: 12px;
-}
-
-.setting-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.setting-reset-btn {
-  font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.setting-reset-btn:hover {
-  color: var(--primary-color);
-  border-color: var(--primary-color);
-}
-
-.schedule-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.schedule-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.2);
-  font-size: 12px;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.schedule-tag.poop {
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.2);
-}
-
-.tag-remove {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
-  transition: color 0.2s;
-}
-
-.tag-remove:hover {
-  color: #ef4444;
-}
-
-.schedule-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.schedule-add-input {
-  width: 36px;
-  padding: 3px 4px;
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary);
-  font-size: 12px;
-  text-align: center;
-  outline: none;
-}
-
-.schedule-add-input:focus {
-  border-color: var(--primary-color);
-}
-
-/* hide number input spinners */
-.schedule-add-input::-webkit-inner-spin-button,
-.schedule-add-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.schedule-add-input[type=number] {
-  -moz-appearance: textfield;
-}
-
-.tag-add-btn {
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.tag-add-btn:hover {
-  background: rgba(6, 182, 212, 0.15);
-  border-color: var(--primary-color);
-  color: var(--primary-color);
 }
 
 .settings-slide-enter-active { transition: all 0.3s ease; }
