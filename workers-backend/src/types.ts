@@ -11,5 +11,7 @@ export type Env = {
     GITHUB_TOKEN: string
     GITHUB_WEBHOOK_SECRET: string
     OPENAI_API_KEY: string
+    OPENAI_BASE_URL?: string
+    OPENAI_MODEL?: string
   }
 }

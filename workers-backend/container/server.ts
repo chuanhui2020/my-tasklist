@@ -1,7 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http'
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 
 const exec = promisify(execFile)
 const PORT = 4000
@@ -26,6 +26,8 @@ interface ReviewRequest {
   base_branch: string
   commit_messages: string
   openai_api_key: string
+  openai_base_url: string
+  openai_model: string
   ai_api_key: string
   ai_base_url: string
   ai_model: string
@@ -112,7 +114,7 @@ async function checkoutPR(dir: string, prBranch: string, baseBranch: string): Pr
 
 // --- Codex CLI ---
 
-async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: string): Promise<string> {
+async function runCodexReview(dir: string, openaiApiKey: string, openaiBaseUrl: string, model: string, baseBranch: string): Promise<string> {
   const prompt =
     `You are a code reviewer for a personal project. Your task is READ-ONLY review. ` +
     `IMPORTANT: Do NOT modify any files, do NOT create commits, do NOT push code. Only read and analyze. ` +
@@ -133,11 +135,25 @@ async function runCodexReview(dir: string, openaiApiKey: string, baseBranch: str
     'PASS for everything else including warnings and suggestions.'
 
   try {
+    // Write Codex config with custom provider (force HTTP, no websocket)
+    const codexHome = '/root/.codex'
+    if (!existsSync(codexHome)) mkdirSync(codexHome, { recursive: true })
+    writeFileSync(`${codexHome}/config.toml`, [
+      `model = "${model}"`,
+      `model_provider = "proxy"`,
+      ``,
+      `[model_providers.proxy]`,
+      `name = "Custom Proxy"`,
+      `base_url = "${openaiBaseUrl}"`,
+      `env_key = "OPENAI_API_KEY"`,
+      `supports_websockets = false`,
+    ].join('\n'))
+
     const codexOutput = await new Promise<string>((resolve, reject) => {
       const args = ['exec', '--full-auto', '-C', dir, prompt]
       const child = spawn('codex', args, {
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, OPENAI_API_KEY: openaiApiKey },
+        env: { ...process.env, CODEX_HOME: codexHome, OPENAI_API_KEY: openaiApiKey },
         timeout: 300_000,
       })
 
@@ -203,7 +219,7 @@ async function handleReview(params: ReviewRequest): Promise<void> {
     let codexOutput: string
     let reviewFailed = false
     try {
-      codexOutput = await runCodexReview(dir, params.openai_api_key, base_branch)
+      codexOutput = await runCodexReview(dir, params.openai_api_key, params.openai_base_url, params.openai_model, base_branch)
     } catch (err: any) {
       reviewFailed = true
       codexOutput = `Codex review failed: ${err.message}\nstderr: ${err.stderr || 'none'}`
