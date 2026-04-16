@@ -25,7 +25,12 @@
     </div>
     
     <div class="task-content">
-      <p v-if="task.description" class="task-description">
+      <p v-if="task.description"
+        ref="descRef"
+        class="task-description"
+        :class="{ 'is-truncated': isTruncated }"
+        @click.stop="isTruncated && (showDesc = true)"
+      >
         {{ task.description }}
       </p>
 
@@ -63,6 +68,13 @@
 
         <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
           <img :src="viewerUrl" class="image-overlay-img" @click.stop />
+        </div>
+
+        <div v-if="showDesc" class="thumbs-overlay" @click="showDesc = false">
+          <div class="thumbs-panel desc-panel" @click.stop>
+            <div class="thumbs-panel-title">{{ task.title }}</div>
+            <div class="desc-panel-content">{{ task.description }}</div>
+          </div>
         </div>
       </Teleport>
 
@@ -120,7 +132,7 @@
 </template>
 
 <script>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUpdated, nextTick } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
@@ -145,6 +157,18 @@ export default {
     const showAllThumbs = ref(false)
     const showViewer = ref(false)
     const viewerUrl = ref('')
+    const showDesc = ref(false)
+    const descRef = ref(null)
+    const isTruncated = ref(false)
+
+    const checkTruncation = () => {
+      if (descRef.value) {
+        isTruncated.value = descRef.value.scrollHeight > descRef.value.clientHeight
+      }
+    }
+
+    onMounted(() => nextTick(checkTruncation))
+    onUpdated(() => nextTick(checkTruncation))
 
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
@@ -182,6 +206,9 @@ export default {
       showAllThumbs,
       showViewer,
       viewerUrl,
+      showDesc,
+      descRef,
+      isTruncated,
       getImageUrl,
       openImage,
       formatDate,
@@ -285,6 +312,17 @@ export default {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.task-description.is-truncated {
+  cursor: pointer;
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+  transition: color 0.2s;
+}
+
+.task-description.is-truncated:hover {
+  color: var(--text-primary);
 }
 
 .task-images {
@@ -478,5 +516,19 @@ export default {
   object-fit: contain;
   border-radius: 8px;
   cursor: default;
+}
+
+.desc-panel {
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.desc-panel-content {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
