@@ -107,9 +107,9 @@ async function ensureRepo(token: string, repo: string): Promise<string> {
 
 async function checkoutPR(dir: string, prBranch: string, baseBranch: string): Promise<void> {
   await exec('git', ['checkout', baseBranch], { cwd: dir })
-  await exec('git', ['pull', 'origin', baseBranch], { cwd: dir })
+  await exec('git', ['reset', '--hard', `origin/${baseBranch}`], { cwd: dir })
   await exec('git', ['checkout', prBranch], { cwd: dir })
-  await exec('git', ['pull', 'origin', prBranch], { cwd: dir })
+  await exec('git', ['reset', '--hard', `origin/${prBranch}`], { cwd: dir })
 }
 
 // --- Codex CLI ---
