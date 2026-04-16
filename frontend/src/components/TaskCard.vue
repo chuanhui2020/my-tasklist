@@ -317,7 +317,7 @@ export default {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
-  opacity: 0;
+  opacity: 0.4;
   transition: opacity 0.2s;
 }
 
@@ -465,7 +465,7 @@ export default {
 
 /* === Completed State === */
 .task-completed {
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 .task-completed:hover {
