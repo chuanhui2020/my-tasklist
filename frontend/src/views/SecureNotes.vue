@@ -11,6 +11,7 @@
           <span class="lock-icon">🔒</span>
           <span class="note-title">{{ note.title }}</span>
         </div>
+        <div v-if="note.description" class="note-description">{{ note.description }}</div>
         <div class="note-card-footer">
           <span class="note-time">{{ note.created_at }}</span>
           <div class="note-actions" @click.stop>
@@ -52,6 +53,9 @@
       <el-form :model="form" label-position="top">
         <el-form-item label="标题">
           <el-input v-model="form.title" placeholder="密钥标题" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="form.description" placeholder="可选，简要描述密钥用途" maxlength="200" />
         </el-form-item>
         <el-form-item label="内容">
           <el-input v-model="form.content" type="textarea" :rows="6" placeholder="输入要加密保存的内容" />
@@ -99,7 +103,7 @@ const formVisible = ref(false)
 const isEditing = ref(false)
 const editingNoteId = ref(null)
 const submitting = ref(false)
-const form = ref({ title: '', content: '', password: '', new_password: '' })
+const form = ref({ title: '', description: '', content: '', password: '', new_password: '' })
 
 async function fetchNotes() {
   loading.value = true
@@ -142,6 +146,7 @@ async function handleUnlock() {
       editingNoteId.value = selectedNote.value.id
       form.value = {
         title: data.title,
+        description: data.description || '',
         content: data.content,
         password: unlockPassword.value,
         new_password: '',
@@ -167,12 +172,12 @@ function clearViewer() {
 function openCreateDialog() {
   isEditing.value = false
   editingNoteId.value = null
-  form.value = { title: '', content: '', password: '', new_password: '' }
+  form.value = { title: '', description: '', content: '', password: '', new_password: '' }
   formVisible.value = true
 }
 
 function resetForm() {
-  form.value = { title: '', content: '', password: '', new_password: '' }
+  form.value = { title: '', description: '', content: '', password: '', new_password: '' }
 }
 
 async function handleSubmit() {
@@ -201,6 +206,7 @@ async function handleSubmit() {
     } else {
       await api.createSecureNote({
         title: form.value.title,
+        description: form.value.description,
         content: form.value.content,
         password: form.value.password,
       })
@@ -291,6 +297,15 @@ onMounted(fetchNotes)
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
