@@ -107,7 +107,7 @@
 
           <div v-else class="task-grid">
             <TaskCard v-for="task in tasks" :key="task.id" :task="task" @toggle-status="handleToggleStatus"
-              @edit="handleEdit" @delete="handleDelete" />
+              @edit="handleEdit" @delete="handleDelete" @show-desc="handleShowDesc" />
           </div>
 
           <div v-if="totalTasks > pageSize" class="pagination-wrap">
@@ -125,6 +125,17 @@
     </div>
 
     <TaskForm :visible="showTaskForm" :task="editingTask" @close="showTaskForm = false" @submit="handleTaskSubmit" />
+
+    <el-dialog
+      v-model="showDescDialog"
+      :title="descDialogTask.title"
+      width="500px"
+      class="desc-dialog"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="desc-dialog-content">{{ descDialogTask.description }}</div>
+    </el-dialog>
   </div>
 </template>
 
@@ -441,6 +452,13 @@ export default {
       showTaskForm.value = true
     }
 
+    const showDescDialog = ref(false)
+    const descDialogTask = ref({ title: '', description: '' })
+    const handleShowDesc = (task) => {
+      descDialogTask.value = task
+      showDescDialog.value = true
+    }
+
     const handleDelete = async (task) => {
       try {
         await ElMessageBox.confirm('确定要删除这个任务吗？', '确认删除', {
@@ -535,6 +553,9 @@ export default {
       handleEdit,
       handleDelete,
       handleTaskSubmit,
+      showDescDialog,
+      descDialogTask,
+      handleShowDesc,
       renderedScenes,
       activeSceneKey,
       animList,
@@ -877,4 +898,12 @@ export default {
 .sidebar-fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
 .sidebar-fade-enter-from { opacity: 0; transform: translateY(12px); }
 .sidebar-fade-leave-to { opacity: 0; transform: translateY(-12px); }
+
+.desc-dialog-content {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 </style>

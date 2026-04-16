@@ -29,7 +29,7 @@
         ref="descRef"
         class="task-description"
         :class="{ 'is-truncated': isTruncated }"
-        @click.stop="isTruncated && (showDesc = true)"
+        @click.stop="isTruncated && $emit('show-desc', task)"
       >
         {{ task.description }}
       </p>
@@ -70,17 +70,6 @@
           <img :src="viewerUrl" class="image-overlay-img" @click.stop />
         </div>
       </Teleport>
-
-      <el-dialog
-        v-model="showDesc"
-        :title="task.title"
-        width="500px"
-        class="desc-dialog"
-        append-to-body
-        destroy-on-close
-      >
-        <div class="desc-dialog-content">{{ task.description }}</div>
-      </el-dialog>
 
       <div class="task-meta">
         <div v-if="task.due_date" class="meta-item" :class="{ 'text-danger': isOverdue }">
@@ -136,7 +125,7 @@
 </template>
 
 <script>
-import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { Calendar, Clock, Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
@@ -156,12 +145,11 @@ export default {
       required: true
     }
   },
-  emits: ['toggle-status', 'edit', 'delete'],
+  emits: ['toggle-status', 'edit', 'delete', 'show-desc'],
   setup(props) {
     const showAllThumbs = ref(false)
     const showViewer = ref(false)
     const viewerUrl = ref('')
-    const showDesc = ref(false)
     const descRef = ref(null)
     const isTruncated = ref(false)
 
@@ -171,16 +159,8 @@ export default {
       }
     }
 
-    let resizeObserver = null
     watch(() => props.task.description, () => nextTick(checkTruncation))
-    watch(descRef, (el, oldEl) => {
-      if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null }
-      if (el) {
-        resizeObserver = new ResizeObserver(checkTruncation)
-        resizeObserver.observe(el)
-      }
-    }, { immediate: true })
-    onBeforeUnmount(() => { if (resizeObserver) resizeObserver.disconnect() })
+    onMounted(() => nextTick(checkTruncation))
 
     const isOverdue = computed(() => {
       if (!props.task.due_date || props.task.status === 'done') return false
@@ -218,7 +198,6 @@ export default {
       showAllThumbs,
       showViewer,
       viewerUrl,
-      showDesc,
       descRef,
       isTruncated,
       getImageUrl,
@@ -528,13 +507,5 @@ export default {
   object-fit: contain;
   border-radius: 8px;
   cursor: default;
-}
-
-.desc-dialog-content {
-  color: var(--text-secondary, #94a3b8);
-  font-size: 14px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 </style>
