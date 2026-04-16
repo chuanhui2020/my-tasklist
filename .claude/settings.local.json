@@ -38,7 +38,8 @@
       "Bash(git rebase *)",
       "Bash(git stash *)",
       "Bash(git reset *)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(git pull *)"
     ],
     "deny": [],
     "ask": []

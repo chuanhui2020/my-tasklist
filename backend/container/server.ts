@@ -58,16 +58,23 @@ async function postPRComment(token: string, repo: string, prNumber: number, body
 }
 
 async function mergePR(token: string, repo: string, prNumber: number): Promise<boolean> {
-  const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/merge`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `token ${token}`,
-      'Accept': 'application/vnd.github+json',
-      'User-Agent': 'tasklist-code-reviewer',
-    },
-    body: JSON.stringify({ merge_method: 'merge' }),
-  })
-  return res.ok
+  const maxRetries = 3
+  for (let i = 0; i < maxRetries; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 5000 * i))
+    const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/merge`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'tasklist-code-reviewer',
+      },
+      body: JSON.stringify({ merge_method: 'merge' }),
+    })
+    if (res.ok) return true
+    const body = await res.text()
+    console.log(`[merge] Attempt ${i + 1}/${maxRetries} failed: ${res.status} ${body}`)
+  }
+  return false
 }
 
 async function addLabel(token: string, repo: string, prNumber: number, label: string) {
