@@ -54,7 +54,7 @@
 
 ```
 my-tasklist/
-├── workers-backend/            # 后端 (Cloudflare Workers)
+├── backend/            # 后端 (Cloudflare Workers)
 │   ├── wrangler.jsonc          # Workers + D1 配置
 │   ├── src/
 │   │   ├── index.ts            # Hono 入口，路由注册，CORS
@@ -85,7 +85,7 @@ my-tasklist/
 ### 后端部署
 
 ```bash
-cd workers-backend
+cd backend
 npm install
 npx wrangler deploy
 ```
@@ -104,7 +104,7 @@ echo "your-api-key" | npx wrangler secret put AI_API_KEY
 
 ```bash
 # 后端
-cd workers-backend && npm install && npx wrangler dev
+cd backend && npm install && npx wrangler dev
 
 # 前端
 cd frontend && npm install && npm run dev
