@@ -54,6 +54,7 @@
     >
       {{ task.description }}
     </p>
+    <p v-else class="task-description placeholder">{{ placeholder }}</p>
 
     <!-- 图片 -->
     <div v-if="task.images && task.images.length" class="task-images">
@@ -100,6 +101,15 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
 import api from '@/api'
 
+const PLACEHOLDERS = [
+  '此处省略一万字 📖',
+  '做就完了，不需要解释 🫡',
+  '这个任务神秘到连描述都没有 🕵️',
+  '主人太懒了，啥也没写 🦥',
+  '留白也是一种艺术 🎨',
+  '想象力就是超能力 🧠',
+]
+
 export default {
   name: 'TaskCard',
   components: {
@@ -144,6 +154,8 @@ export default {
       clearTimeout(resizeTimer)
     })
 
+    const placeholder = PLACEHOLDERS[(props.task.id || 0) % PLACEHOLDERS.length]
+
     const getImageUrl = (img) => {
       return api.getTaskImageUrl(props.task.id, img.id)
     }
@@ -160,6 +172,7 @@ export default {
       viewerUrl,
       descRef,
       isTruncated,
+      placeholder,
       getImageUrl,
       openImage
     }
@@ -267,6 +280,11 @@ export default {
 
 .task-description.is-truncated:hover {
   color: var(--text-primary);
+}
+
+.task-description.placeholder {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* === Images === */
