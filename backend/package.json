@@ -6,8 +6,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "wrangler d1 migrations apply tasklist-db --local",
-    "db:migrate:prod": "wrangler d1 migrations apply tasklist-db --remote"
+    "db:migrate": "wrangler d1 migrations apply tasklist_db --local",
+    "db:migrate:prod": "wrangler d1 migrations apply tasklist_db --remote"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.0",
