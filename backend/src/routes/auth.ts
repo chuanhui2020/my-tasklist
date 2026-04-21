@@ -26,10 +26,10 @@ authRoutes.post('/login', async (c) => {
   }
 
   const token = await generateToken({ user_id: user.id, role: user.role }, c.env.SECRET_KEY)
-  await db.update(users).set({ last_login_at: sql`(datetime('now'))` }).where(eq(users.id, user.id))
+  const [updated] = await db.update(users).set({ last_login_at: sql`(datetime('now'))` }).where(eq(users.id, user.id)).returning({ last_login_at: users.last_login_at })
   return c.json({
     token,
-    user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at, last_login_at: user.last_login_at },
+    user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at, last_login_at: updated.last_login_at },
   })
 })
 
