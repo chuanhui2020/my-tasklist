@@ -36,6 +36,7 @@
             <div class="user-info">
               <span class="user-name">{{ u.username }}</span>
               <span class="user-role-tag" :class="u.role">{{ u.role === 'admin' ? '管理员' : '普通用户' }}</span>
+              <span class="user-login-time">最近登录: {{ formatTime(u.last_login_at) }}</span>
             </div>
           </div>
         </div>
@@ -138,6 +139,13 @@ const handleReset = () => {
   form.password = ''
   form.role = 'user'
   formRef.value?.clearValidate()
+}
+
+const formatTime = (t) => {
+  if (!t) return '未知'
+  const d = new Date(t + 'Z')
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 </script>
 
@@ -348,6 +356,11 @@ const handleReset = () => {
 .user-role-tag.user {
   background: rgba(6, 182, 212, 0.15);
   color: var(--primary-color);
+}
+
+.user-login-time {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .section-divider {
