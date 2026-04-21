@@ -144,6 +144,7 @@ const handleReset = () => {
 const formatTime = (t) => {
   if (!t) return '未知'
   const d = new Date(t + 'Z')
+  if (isNaN(d.getTime())) return '未知'
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
