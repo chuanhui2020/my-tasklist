@@ -41,7 +41,8 @@ api.interceptors.response.use(
       // Let the caller handle rate limiting (e.g. fortune daily limit)
     } else if (!error.config?._silent) {
       const detail = error.response?.data?.detail
-      ElMessage.error(detail ? `${message}: ${detail}` : (message || '请求失败'))
+      const msg = message || '请求失败'
+      ElMessage.error(detail ? `${msg}: ${detail}` : msg)
     }
     return Promise.reject(error)
   }
