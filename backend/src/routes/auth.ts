@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { drizzle } from 'drizzle-orm/d1'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { users } from '../db/schema'
 import { hashPassword, verifyPassword } from '../lib/crypto'
 import { generateToken } from '../lib/token'
@@ -26,9 +26,10 @@ authRoutes.post('/login', async (c) => {
   }
 
   const token = await generateToken({ user_id: user.id, role: user.role }, c.env.SECRET_KEY)
+  await db.update(users).set({ last_login_at: sql`(datetime('now'))` }).where(eq(users.id, user.id))
   return c.json({
     token,
-    user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at },
+    user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at, last_login_at: user.last_login_at },
   })
 })
 
@@ -38,7 +39,7 @@ authRoutes.get('/me', authMiddleware, async (c) => {
   const db = drizzle(c.env.DB)
   const [user] = await db.select().from(users).where(eq(users.id, u.id)).limit(1)
   return c.json({
-    user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at },
+    user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at, last_login_at: user.last_login_at },
   })
 })
 
@@ -47,7 +48,7 @@ authRoutes.get('/users', authMiddleware, adminMiddleware, async (c) => {
   const db = drizzle(c.env.DB)
   const allUsers = await db.select().from(users).orderBy(users.id)
   return c.json({
-    users: allUsers.map(u => ({ id: u.id, username: u.username, role: u.role, created_at: u.created_at })),
+    users: allUsers.map(u => ({ id: u.id, username: u.username, role: u.role, created_at: u.created_at, last_login_at: u.last_login_at })),
   })
 })
 
