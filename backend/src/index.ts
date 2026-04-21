@@ -45,7 +45,8 @@ app.get('/api/health', (c) => {
 // Global error handler
 app.onError((err, c) => {
   console.error('Unhandled error:', err)
-  return c.json({ error: '服务器内部错误' }, 500)
+  const detail = String(err.message || err).slice(0, 200)
+  return c.json({ error: '服务器内部错误', detail }, 500)
 })
 
 // 404

@@ -5,6 +5,7 @@
   "observability": {
     "enabled": true,
     "logs": { "enabled": true },
+    "traces": { "enabled": true },
   },
   "d1_databases": [
     {
