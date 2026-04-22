@@ -75,20 +75,30 @@
 
 ### 3D 动画模块（体素花园）
 
-10 个 Three.js 3D 场景，每 10 秒自动轮播：
+20 个 Three.js 3D 放松动画场景，每 10 秒自动轮播：
 
-| 场景 | 技术要点 |
-|------|---------|
-| 奶龙 | InstancedMesh 体素渲染、粒子系统（樱花）、OrbitControls |
-| 极光 | ShaderMaterial 自定义顶点/片元着色器、三角带网格 |
-| 数字雨 | Sprite + CanvasTexture 动态文字、Additive Blending |
-| 粒子星系 | 8000 粒子 BufferGeometry、螺旋臂算法、径向渐变色 |
-| 几何隧道 | RingGeometry 多边形环、HSL 色相循环、脉冲缩放 |
-| 粒子网络 | 120 节点动态连线、LineSegments、距离阈值检测 |
-| 流光线条 | 参数方程螺旋曲线、Line + Points 双层渲染 |
-| 分形生长 | 递归分形树生成、生长动画插值、周期性颜色变化 |
-| 波形山脉 | PlaneGeometry + 顶点着色器波形变形、Synthwave 风格 |
-| DNA 螺旋 | CatmullRomCurve3 + TubeGeometry 骨架、MeshPhongMaterial 光照 |
+| 场景 | 组件 | 技术要点 |
+|------|------|---------|
+| 弹跳球 | BouncingBalls | 物理弹跳模拟、球体碰撞 |
+| 呼吸圆环 | BreathingCircle | 缩放动画、节奏呼吸引导 |
+| 电路脉冲 | CircuitPulse | 电路板风格、脉冲流动动画 |
+| 宇宙尘埃 | CosmicDust | 粒子系统、深空漂浮效果 |
+| 水晶矩阵 | CrystalMatrix | 几何晶体排列、折射光效 |
+| 赛博网格 | CyberGrid | 网格地形、Synthwave 风格 |
+| 数据流 | DataStream | Sprite + CanvasTexture 动态文字、Additive Blending |
+| 引力井 | GravityWell | 粒子引力模拟、轨道运动 |
+| 全息光环 | HologramRing | 环形全息投影、扫描线效果 |
+| 万花筒 | Kaleidoscope | 对称镜像、HSL 色相循环 |
+| 熔岩灯 | LavaLamp | 流体模拟、Metaball 效果 |
+| 神经网络 | NeuralWeb | 节点动态连线、LineSegments、距离阈值检测 |
+| 粒子烟花 | ParticleFireworks | 爆发粒子系统、重力衰减 |
+| 钟摆波 | PendulumWave | 参数方程、相位差波动 |
+| 等离子球 | PlasmaOrb | ShaderMaterial 自定义着色器、发光效果 |
+| 雨滴 | RainDrops | 粒子下落、涟漪扩散 |
+| 星空 | StarrySky | BufferGeometry 粒子、螺旋臂算法 |
+| 涡旋场 | VortexField | 螺旋曲线、Line + Points 双层渲染 |
+| 水波纹 | WaterRipple | PlaneGeometry + 顶点着色器波形变形 |
+| 波函数 | WaveFunction | 数学波函数可视化、周期性颜色变化 |
 
 ---
 
@@ -101,20 +111,21 @@
 
 - D1 基于 SQLite：无 ENUM（用 TEXT + CHECK）、日期存 TEXT (ISO 8601)、INTEGER PRIMARY KEY 自增
 - Schema 定义：`backend/src/db/schema.ts`
-- 迁移文件：`backend/drizzle/0000_initial.sql`
+- 迁移文件：`backend/drizzle/` 目录下 (0000_initial, 0001_task_images, 0002_last_login_at, 0002_secure_notes_description)
 
 ### 数据模型
 
 | 表 | 字段 | 说明 |
 |---|------|------|
-| users | username, password_hash, role, created_at | 用户 |
+| users | username, password_hash, role, created_at, last_login_at | 用户 |
 | tasks | title, description, status, due_date, user_id | 任务 |
+| task_images | task_id, user_id, r2_key, filename, mime_type, size, sort_order | 任务图片 (R2) |
 | bmi_profiles | gender, age, height, weight (per user unique) | BMI 档案 |
-| fortune_records | fortune_number, fortune_type, poem, advice | 签文记录 |
-| secure_notes | title, encrypted_content, salt, password_hash | 加密笔记 |
+| fortune_records | fortune_number, fortune_type, type_text, poem, interpretation, advice, work_fortune | 签文记录 |
+| secure_notes | title, description, encrypted_content, salt, password_hash | 加密笔记 |
 | weight_records | weight, date (user+date unique) | 体重记录 |
 | countdowns | title, target_time, remind_before, remind_level, status | 倒计时 |
-| weekly_menus | week_start, menu_json | 每周菜单 |
+| weekly_menus | week_start, menu_json, uploaded_by | 每周菜单 |
 
 ### 免费额度
 
@@ -134,7 +145,9 @@
 用户 → Cloudflare Edge (最近节点)
        ├── Workers Static Assets (Vue 3 SPA)  ← tasklist.ch-tools.org
        └── Workers (Hono API)                 ← api-tasklist.ch-tools.org
-           └── D1 (SQLite 数据库)
+           ├── D1 (SQLite 数据库)
+           ├── R2 (图片存储)
+           └── Container (Code Review 自动化)
 ```
 
 | 组件 | 技术 | 说明 |
@@ -142,6 +155,8 @@
 | 前端 | Cloudflare Workers | 静态资源，git push 自动部署 |
 | 后端 | Cloudflare Workers | Hono + TypeScript，`wrangler deploy` |
 | 数据库 | Cloudflare D1 | SQLite，APAC 区域 |
+| 图片存储 | Cloudflare R2 | 任务图片存储 |
+| Code Review | Cloudflare Container | GitHub Webhook + AI 自动审查 |
 | SSL | Cloudflare | 自动 HTTPS |
 
 ### 请求链路
@@ -157,6 +172,9 @@ Vue 发起 API 请求 → api-tasklist.ch-tools.org → Workers 边缘节点
 **Workers Secrets (敏感)：**
 - `SECRET_KEY`：JWT 签名密钥
 - `AI_API_KEY`：AI 服务密钥
+- `GITHUB_TOKEN`：GitHub API 访问令牌 (Code Review 自动化)
+- `GITHUB_WEBHOOK_SECRET`：GitHub Webhook 签名验证密钥
+- `OPENAI_API_KEY`：OpenAI API 密钥 (Code Review 用)
 
 **Workers Vars (明文)：**
 - `CORS_ORIGINS`：允许的前端域名
@@ -173,11 +191,12 @@ Vue 发起 API 请求 → api-tasklist.ch-tools.org → Workers 边缘节点
 | 模块 | 后端路由 | 前端页面 | 说明 |
 |------|---------|---------|------|
 | 认证 | /api/auth/* | Login.vue | 登录、用户管理 |
-| 任务 | /api/tasks/* | TaskList.vue | 任务 CRUD、筛选排序 |
+| 任务 | /api/tasks/* | TaskList.vue | 任务 CRUD、筛选排序、图片上传 |
 | 占卜 | /api/fortune/* | Fortune.vue | AI 灵签占卜、每日限制 |
 | BMI | /api/bmi/* | BmiManager.vue | 体重记录、趋势图表、AI 分析 |
 | 密钥盒子 | /api/secure-notes/* | SecureNotes.vue | 加密笔记存储 |
-| 倒计时 | /api/countdowns/* | - | 倒计时提醒 |
-| 菜单 | /api/menu/* | - | AI Vision 菜单识别 |
+| 倒计时 | /api/countdowns/* | CrazyCountdown.vue | 倒计时提醒 |
+| 菜单 | /api/menu/* | MenuManager.vue | AI Vision 菜单识别 |
 | 用户管理 | /api/auth/users | AdminUsers.vue | 管理员专属 |
-| 体素花园 | - | TaskList.vue 侧边栏 | 10 个 3D 解压动画轮播 |
+| Code Review | /api/webhooks/github | - | GitHub Webhook + AI 自动代码审查 |
+| 体素花园 | - | TaskList.vue 侧边栏 | 20 个 3D 解压动画轮播 |

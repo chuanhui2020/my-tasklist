@@ -19,7 +19,8 @@
 - **加密笔记** — AES-GCM 加密，密码保护
 - **倒计时提醒** — 自定义提醒时间和级别
 - **菜单识别** — AI Vision 识别菜单图片
-- **3D 动画** — 10 个 Three.js 放松动画场景
+- **自动 Code Review** — GitHub Webhook + AI 自动代码审查
+- **3D 动画** — 20 个 Three.js 放松动画场景
 
 ---
 
@@ -29,7 +30,9 @@
 用户 → Cloudflare Edge (最近节点)
        ├── Workers Static Assets (Vue 3 SPA)  ← tasklist.ch-tools.org
        └── Workers (Hono API)                 ← api-tasklist.ch-tools.org
-           └── D1 (SQLite 数据库)
+           ├── D1 (SQLite 数据库)
+           ├── R2 (图片存储)
+           └── Container (Code Review 自动化)
 ```
 
 全栈运行在 Cloudflare 边缘，零服务器，免费额度内。
@@ -46,6 +49,7 @@
 | UI 组件 | Element Plus |
 | 构建工具 | Vite 6 |
 | 3D 动画 | Three.js |
+| 数据可视化 | ECharts |
 | 部署 | Cloudflare Workers |
 
 ---
@@ -55,26 +59,29 @@
 ```
 my-tasklist/
 ├── backend/            # 后端 (Cloudflare Workers)
-│   ├── wrangler.jsonc          # Workers + D1 配置
+│   ├── wrangler.jsonc          # Workers + D1 + R2 + Container 配置
 │   ├── src/
 │   │   ├── index.ts            # Hono 入口，路由注册，CORS
 │   │   ├── types.ts            # 类型定义
+│   │   ├── container.ts        # CodeReviewContainer (Durable Object)
 │   │   ├── db/schema.ts        # Drizzle 表定义
 │   │   ├── middleware/auth.ts  # JWT 认证中间件
-│   │   ├── routes/             # API 路由 (auth/tasks/fortune/bmi/...)
-│   │   └── lib/                # 工具库 (crypto/token/ai)
+│   │   ├── routes/             # API 路由 (auth/tasks/fortune/bmi/secure-notes/countdowns/menu/github-webhook)
+│   │   └── lib/                # 工具库 (crypto/token/ai/github)
+│   ├── container/              # Code Review Container (Node.js)
 │   └── drizzle/                # D1 SQL 迁移
 │
 ├── frontend/                   # 前端 (Vue 3 SPA)
 │   ├── wrangler.jsonc          # Workers 静态部署配置
 │   ├── src/
 │   │   ├── api/index.js        # Axios API 客户端
-│   │   ├── views/              # 页面组件
-│   │   ├── components/         # 通用组件 + Three.js 动画
+│   │   ├── views/              # 页面组件 (10 个)
+│   │   ├── components/         # 通用组件 + Three.js 动画 (20 个)
 │   │   └── router.js           # 路由配置
 │   └── vite.config.js
 │
 ├── CLAUDE.md                   # 开发者指南
+├── TECH_STACK.md               # 技术栈详情
 └── README.md
 ```
 
@@ -94,6 +101,9 @@ Secrets 配置：
 ```bash
 echo "your-secret" | npx wrangler secret put SECRET_KEY
 echo "your-api-key" | npx wrangler secret put AI_API_KEY
+echo "your-token" | npx wrangler secret put GITHUB_TOKEN
+echo "your-secret" | npx wrangler secret put GITHUB_WEBHOOK_SECRET
+echo "your-key" | npx wrangler secret put OPENAI_API_KEY
 ```
 
 ### 前端部署
@@ -148,6 +158,8 @@ npx wrangler d1 execute tasklist_db --remote --command="SELECT * FROM users"
 | Countdown | GET/POST | /api/countdowns | 倒计时列表/创建 |
 | Menu | GET | /api/menu/today | 今日菜单 |
 | Menu | POST | /api/menu/upload | 上传菜单图片 (admin) |
+| Webhook | POST | /api/webhooks/github | GitHub Webhook (Code Review 自动化) |
+| Health | GET | /api/health | 健康检查 |
 
 ---
 
