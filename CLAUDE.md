@@ -285,7 +285,7 @@ app.route('/api/your-feature', yourRoutes)
 2. **等待 PR 自动创建**：webhook 会自动创建 dev→master 的 PR（如果没有 open 的）
 3. **等待 Review 完成**：轮询 PR 状态直到评论数增加（Codex AI Review 会发评论）
 4. **检查 Review 结果**：
-   - `VERDICT: PASS` → PR 会被自动合并（若自动合并失败需人工处理），同步本地 `git fetch origin master && git merge origin/master`
+   - `VERDICT: PASS` → PR 会被自动合并（若自动合并失败需人工处理），同步本地 `git fetch origin master && git merge origin/master && git push origin dev`
    - `VERDICT: FAIL` → PR 不会合并，需要修复后重新提交
 5. **修复 Review 问题**：
    - FAIL 时的 critical issues：必须修复，否则 verdict 不会变为 PASS
