@@ -21,7 +21,8 @@ Personal Task Management System - A full-stack edge-deployed web application.
 用户 → Cloudflare Edge (最近节点)
        ├── Workers (后端 API)  ← api-tasklist.ch-tools.org
        │   ├── D1 (SQLite 数据库)
-       │   └── R2 (图片存储)
+       │   ├── R2 (图片存储)
+       │   └── Container (Code Review 自动化)
        └── Workers Static Assets (前端 SPA)  ← tasklist.ch-tools.org
 ```
 
@@ -65,13 +66,14 @@ npx wrangler dev
 
 ```
 backend/
-├── wrangler.jsonc              # Workers 配置 + D1 binding + R2 binding
+├── wrangler.jsonc              # Workers 配置 + D1 binding + R2 binding + Container
 ├── package.json
 ├── tsconfig.json
 ├── drizzle.config.ts           # Drizzle 迁移配置
 ├── src/
 │   ├── index.ts                # Hono app 入口，路由注册，CORS
 │   ├── types.ts                # Env 类型定义 (Bindings)
+│   ├── container.ts            # CodeReviewContainer (Durable Object + Container)
 │   ├── db/
 │   │   └── schema.ts           # Drizzle 表定义 (所有模型)
 │   ├── middleware/
@@ -83,14 +85,19 @@ backend/
 │   │   ├── bmi.ts              # /api/bmi/* - BMI + 体重记录 + AI 分析
 │   │   ├── secure-notes.ts     # /api/secure-notes/* - 加密笔记
 │   │   ├── countdowns.ts       # /api/countdowns/* - 倒计时提醒
-│   │   └── menu.ts             # /api/menu/* - 菜单识别 (AI vision)
+│   │   ├── menu.ts             # /api/menu/* - 菜单识别 (AI vision)
+│   │   └── github-webhook.ts   # /api/webhooks/github - GitHub Webhook (自动 Code Review)
 │   └── lib/
 │       ├── crypto.ts           # 密码哈希 (PBKDF2) + 笔记加密 (AES-GCM)
 │       ├── token.ts            # JWT 生成/验证 (jose)
-│       └── ai.ts               # AI API 调用 (fetch)
+│       ├── ai.ts               # AI API 调用 (fetch)
+│       └── github.ts           # GitHub API 工具函数
+├── container/                  # Code Review Container (Node.js 运行时)
 ├── drizzle/
 │   ├── 0000_initial.sql        # D1 初始化 SQL
-│   └── 0001_task_images.sql    # 任务图片表迁移
+│   ├── 0001_task_images.sql    # 任务图片表迁移
+│   ├── 0002_last_login_at.sql  # 用户最近登录时间
+│   └── 0002_secure_notes_description.sql  # 笔记描述字段
 └── scripts/
     ├── export_data.py          # MySQL → JSON 导出 (迁移用)
     └── import-to-d1.ts         # JSON → D1 SQL 导入 (迁移用)
@@ -112,15 +119,15 @@ backend/
    - 无自动迁移，schema 变更需手动写 SQL 并执行
 
 3. **Models (`db/schema.ts`):**
-   - `users`: username, password_hash, role (admin/user)
+   - `users`: username, password_hash, role (admin/user), last_login_at
    - `tasks`: title, description, status (pending/done), due_date, user_id
    - `taskImages`: task_id, user_id, r2_key, filename, mime_type, size, sort_order
    - `bmiProfiles`: gender, age, height, weight (per user, unique)
-   - `fortuneRecords`: fortune_number, fortune_type, poem, interpretation, advice (JSON string)
-   - `secureNotes`: title, encrypted_content, salt, password_hash
+   - `fortuneRecords`: fortune_number, fortune_type, type_text, poem, interpretation, advice, work_fortune
+   - `secureNotes`: title, description, encrypted_content, salt, password_hash
    - `weightRecords`: weight, date (unique per user per date)
    - `countdowns`: title, target_time, remind_before, remind_level, status
-   - `weeklyMenus`: week_start, menu_json (JSON string)
+   - `weeklyMenus`: week_start, menu_json, uploaded_by
 
 4. **API Response Pattern:**
    - Success: `c.json({...})` or `c.json({...}, 201)`
@@ -159,12 +166,15 @@ frontend/src/
 │   ├── BmiManager.vue      # BMI calculator
 │   ├── AdminUsers.vue      # User management (admin only)
 │   ├── SecureNotes.vue     # Encrypted notes
-│   └── ChangePassword.vue  # Password change
+│   ├── ChangePassword.vue  # Password change
+│   ├── CrazyCountdown.vue  # Countdown timer page
+│   └── MenuManager.vue     # Weekly menu management (AI vision)
 ├── components/
 │   ├── TaskForm.vue        # 任务新建/编辑对话框 (含图片上传)
 │   ├── TaskCard.vue        # 任务卡片组件 (含图片缩略图预览)
-│   ├── MilkDragon.vue      # 3D voxel dragon scene (Three.js)
-│   └── relax/              # 9 Three.js 3D relaxation animations
+│   ├── CountdownOverlay.vue # 倒计时全屏覆盖提醒
+│   ├── LifeProgress.vue    # 人生进度可视化
+│   └── relax/              # 20 个 Three.js 3D 放松动画
 └── composables/
     └── useAuth.js          # Auth state composable
 ```
@@ -191,11 +201,13 @@ frontend/src/
 
 **Backend (`backend/wrangler.jsonc`):**
 - `vars.CORS_ORIGINS`: Allowed frontend origins (comma-separated)
-- `vars.AI_BASE_URL`: AI service URL (default: `https://api.deepseek.com`)
-- `vars.AI_MODEL`: AI model name (default: `deepseek-chat`)
-- Secrets (via `wrangler secret put`): `SECRET_KEY`, `AI_API_KEY`
+- `vars.AI_BASE_URL`: AI service URL
+- `vars.AI_MODEL`: AI model name
+- Secrets (via `wrangler secret put`): `SECRET_KEY`, `AI_API_KEY`, `GITHUB_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `OPENAI_API_KEY`
 - D1 binding: `DB` → `tasklist_db`
 - R2 binding: `IMAGES_BUCKET` → `tasklist-images`
+- Durable Object binding: `CODE_REVIEW_CONTAINER` → `CodeReviewContainer`
+- Container: `CodeReviewContainer` (Node.js, Code Review 自动化)
 
 **Frontend (`frontend/.env.production`):**
 - `VITE_API_BASE_URL`: API base URL (production: `https://api-tasklist.ch-tools.org/api`)
