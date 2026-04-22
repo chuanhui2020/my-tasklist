@@ -40,6 +40,9 @@ npx wrangler deploy
 ```bash
 echo "value" | npx wrangler secret put SECRET_KEY
 echo "value" | npx wrangler secret put AI_API_KEY
+echo "value" | npx wrangler secret put GITHUB_TOKEN
+echo "value" | npx wrangler secret put GITHUB_WEBHOOK_SECRET
+echo "value" | npx wrangler secret put OPENAI_API_KEY
 ```
 
 **D1 数据库操作：**

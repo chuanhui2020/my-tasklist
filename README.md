@@ -123,8 +123,11 @@ cd frontend && npm install && npm run dev
 ### D1 数据库
 
 ```bash
-# 初始化 schema
+# 初始化 schema（需按顺序执行所有迁移）
 npx wrangler d1 execute tasklist_db --remote --file=drizzle/0000_initial.sql
+npx wrangler d1 execute tasklist_db --remote --file=drizzle/0001_task_images.sql
+npx wrangler d1 execute tasklist_db --remote --file=drizzle/0002_last_login_at.sql
+npx wrangler d1 execute tasklist_db --remote --file=drizzle/0002_secure_notes_description.sql
 
 # 查询数据
 npx wrangler d1 execute tasklist_db --remote --command="SELECT * FROM users"
