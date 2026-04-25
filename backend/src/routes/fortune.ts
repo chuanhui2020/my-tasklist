@@ -3,7 +3,7 @@ import { eq, and, sql, desc } from 'drizzle-orm'
 import { fortuneRecords } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
 import { callAI } from '../lib/ai'
-import { createDB, beijingDate, beijingNow } from '../lib/db'
+import { createDB, beijingDate, beijingNow, beijingDayUtcRange } from '../lib/db'
 import type { Env } from '../types'
 
 export const fortuneRoutes = new Hono<Env>()
@@ -151,14 +151,14 @@ fortuneRoutes.post('/generate', async (c) => {
   const user = c.get('user')
   const { query } = createDB(c.env.DB, 'fortune')
 
-  const today = beijingDate()
+  const { start: dayStart, end: dayEnd } = beijingDayUtcRange()
 
   const [existing] = await query('check daily limit', (db) =>
     db.select().from(fortuneRecords)
       .where(and(
         eq(fortuneRecords.user_id, user.id),
-        sql`${fortuneRecords.created_at} >= ${today + ' 00:00:00'}`,
-        sql`${fortuneRecords.created_at} <= ${today + ' 23:59:59'}`,
+        sql`${fortuneRecords.created_at} >= ${dayStart}`,
+        sql`${fortuneRecords.created_at} <= ${dayEnd}`,
       ))
       .limit(1)
   )
@@ -222,14 +222,14 @@ fortuneRoutes.get('/today', async (c) => {
   const user = c.get('user')
   const { query } = createDB(c.env.DB, 'fortune')
 
-  const today = beijingDate()
+  const { start: dayStart, end: dayEnd } = beijingDayUtcRange()
 
   const [record] = await query('get today fortune', (db) =>
     db.select().from(fortuneRecords)
       .where(and(
         eq(fortuneRecords.user_id, user.id),
-        sql`${fortuneRecords.created_at} >= ${today + ' 00:00:00'}`,
-        sql`${fortuneRecords.created_at} <= ${today + ' 23:59:59'}`,
+        sql`${fortuneRecords.created_at} >= ${dayStart}`,
+        sql`${fortuneRecords.created_at} <= ${dayEnd}`,
       ))
       .limit(1)
   )

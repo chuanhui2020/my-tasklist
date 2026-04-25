@@ -13,6 +13,13 @@ export function beijingDatetime(): string {
   return beijingNow().toISOString().replace('T', ' ').slice(0, 19)
 }
 
+export function beijingDayUtcRange(): { start: string; end: string } {
+  const today = beijingDate()
+  const startUtc = new Date(today + 'T00:00:00+08:00').toISOString().replace('T', ' ').slice(0, 19)
+  const endUtc = new Date(today + 'T23:59:59+08:00').toISOString().replace('T', ' ').slice(0, 19)
+  return { start: startUtc, end: endUtc }
+}
+
 export type DrizzleDB = ReturnType<typeof drizzle>
 
 export class D1Error extends Error {
