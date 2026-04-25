@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, sql, asc } from 'drizzle-orm'
 import { bmiProfiles, weightRecords } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
 import { callAI } from '../lib/ai'
+import { createDB, beijingDate, beijingDatetime } from '../lib/db'
 import type { Env } from '../types'
 
 export const bmiRoutes = new Hono<Env>()
@@ -47,7 +47,6 @@ function extractAdvice(content: string | null, fallback: string[]): string[] {
     if (Array.isArray(advice)) {
       const items = advice.map((a: unknown) => String(a).trim()).filter(Boolean).map(s => s.slice(0, MAX_ITEM_CHARS))
       if (items.length >= 3) return items.slice(0, 3)
-      // Pad with fallback
       for (const f of fallback) {
         if (items.length >= 3) break
         if (!items.includes(f)) items.push(f.slice(0, MAX_ITEM_CHARS))
@@ -103,8 +102,10 @@ bmiRoutes.post('/advice', async (c) => {
 // GET /profile
 bmiRoutes.get('/profile', authMiddleware, async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
-  const [profile] = await db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
+  const { query } = createDB(c.env.DB, 'bmi')
+  const [profile] = await query('get profile', (db) =>
+    db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
+  )
   if (!profile) {
     return c.json({ success: true, data: null })
   }
@@ -114,7 +115,7 @@ bmiRoutes.get('/profile', authMiddleware, async (c) => {
 // PUT /profile
 bmiRoutes.put('/profile', authMiddleware, async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'bmi')
   const body = await c.req.json<{ gender?: string; age?: number; height?: number; weight?: number }>()
 
   const gender = body.gender || 'male'
@@ -122,14 +123,20 @@ bmiRoutes.put('/profile', authMiddleware, async (c) => {
   const height = Number(body.height ?? 170)
   const weight = Number(body.weight ?? 65)
 
-  const [existing] = await db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
+  const [existing] = await query('check profile exists', (db) =>
+    db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
+  )
   if (existing) {
-    await db.update(bmiProfiles).set({
-      gender, age, height, weight,
-      updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
-    }).where(eq(bmiProfiles.user_id, user.id))
+    await query('update profile', (db) =>
+      db.update(bmiProfiles).set({
+        gender, age, height, weight,
+        updated_at: beijingDatetime(),
+      }).where(eq(bmiProfiles.user_id, user.id))
+    )
   } else {
-    await db.insert(bmiProfiles).values({ user_id: user.id, gender, age, height, weight })
+    await query('create profile', (db) =>
+      db.insert(bmiProfiles).values({ user_id: user.id, gender, age, height, weight })
+    )
   }
 
   return c.json({ success: true, data: { gender, age, height, weight } })
@@ -138,7 +145,7 @@ bmiRoutes.put('/profile', authMiddleware, async (c) => {
 // POST /weight
 bmiRoutes.post('/weight', authMiddleware, async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'bmi')
   const body = await c.req.json<{ weight?: number; date?: string }>()
 
   const weight = Number(body.weight || 0)
@@ -146,7 +153,7 @@ bmiRoutes.post('/weight', authMiddleware, async (c) => {
     return c.json({ error: '体重数据无效，请输入30-300kg之间的值' }, 400)
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = beijingDate()
   let recordDate = today
   if (body.date) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
@@ -156,30 +163,39 @@ bmiRoutes.post('/weight', authMiddleware, async (c) => {
     if (recordDate > today) {
       return c.json({ error: '不能记录未来日期的体重' }, 400)
     }
-    // 90 days ago
-    const earliest = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const earliest = new Date(beijingNow().getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     if (recordDate < earliest) {
       return c.json({ error: '只能补录最近三个月的体重数据' }, 400)
     }
   }
 
-  // Check duplicate
-  const [existing] = await db.select().from(weightRecords)
-    .where(and(eq(weightRecords.user_id, user.id), eq(weightRecords.date, recordDate)))
-    .limit(1)
+  const [existing] = await query('check duplicate weight', (db) =>
+    db.select().from(weightRecords)
+      .where(and(eq(weightRecords.user_id, user.id), eq(weightRecords.date, recordDate)))
+      .limit(1)
+  )
   if (existing) {
     return c.json({ error: `${recordDate} 的体重已记录，无法修改` }, 409)
   }
 
-  const [record] = await db.insert(weightRecords).values({
-    user_id: user.id, weight, date: recordDate,
-  }).returning()
+  const [record] = await query('insert weight', (db) =>
+    db.insert(weightRecords).values({
+      user_id: user.id, weight, date: recordDate,
+    }).returning()
+  )
 
-  // Sync profile weight if recording today
   if (recordDate === today) {
-    const [profile] = await db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
-    if (profile) {
-      await db.update(bmiProfiles).set({ weight }).where(eq(bmiProfiles.user_id, user.id))
+    try {
+      const [profile] = await query('get profile for sync', (db) =>
+        db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
+      )
+      if (profile) {
+        await query('sync profile weight', (db) =>
+          db.update(bmiProfiles).set({ weight }).where(eq(bmiProfiles.user_id, user.id))
+        )
+      }
+    } catch (e) {
+      console.error(`[bmi] profile sync failed: user=${user.id} weight=${weight}`, e)
     }
   }
 
@@ -189,12 +205,14 @@ bmiRoutes.post('/weight', authMiddleware, async (c) => {
 // GET /weight/today
 bmiRoutes.get('/weight/today', authMiddleware, async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
-  const today = new Date().toISOString().slice(0, 10)
+  const { query } = createDB(c.env.DB, 'bmi')
+  const today = beijingDate()
 
-  const [record] = await db.select().from(weightRecords)
-    .where(and(eq(weightRecords.user_id, user.id), eq(weightRecords.date, today)))
-    .limit(1)
+  const [record] = await query('get today weight', (db) =>
+    db.select().from(weightRecords)
+      .where(and(eq(weightRecords.user_id, user.id), eq(weightRecords.date, today)))
+      .limit(1)
+  )
 
   if (record) {
     return c.json({ recorded: true, data: { id: record.id, weight: record.weight, date: record.date, created_at: record.created_at } })
@@ -205,13 +223,15 @@ bmiRoutes.get('/weight/today', authMiddleware, async (c) => {
 // GET /weight/history
 bmiRoutes.get('/weight/history', authMiddleware, async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'bmi')
   let days = Math.min(Math.max(parseInt(c.req.query('days') || '90', 10), 7), 365)
-  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const startDate = new Date(beijingNow().getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-  const records = await db.select().from(weightRecords)
-    .where(and(eq(weightRecords.user_id, user.id), sql`${weightRecords.date} >= ${startDate}`))
-    .orderBy(asc(weightRecords.date))
+  const records = await query('get weight history', (db) =>
+    db.select().from(weightRecords)
+      .where(and(eq(weightRecords.user_id, user.id), sql`${weightRecords.date} >= ${startDate}`))
+      .orderBy(asc(weightRecords.date))
+  )
 
   return c.json({
     success: true,
@@ -222,18 +242,22 @@ bmiRoutes.get('/weight/history', authMiddleware, async (c) => {
 // POST /weight/analysis
 bmiRoutes.post('/weight/analysis', authMiddleware, async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
-  const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const { query } = createDB(c.env.DB, 'bmi')
+  const startDate = new Date(beijingNow().getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-  const records = await db.select().from(weightRecords)
-    .where(and(eq(weightRecords.user_id, user.id), sql`${weightRecords.date} >= ${startDate}`))
-    .orderBy(asc(weightRecords.date))
+  const records = await query('get records for analysis', (db) =>
+    db.select().from(weightRecords)
+      .where(and(eq(weightRecords.user_id, user.id), sql`${weightRecords.date} >= ${startDate}`))
+      .orderBy(asc(weightRecords.date))
+  )
 
   if (records.length < 3) {
     return c.json({ error: '体重记录不足，至少需要3条记录才能进行分析' }, 400)
   }
 
-  const [profile] = await db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
+  const [profile] = await query('get profile for analysis', (db) =>
+    db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
+  )
   const heightM = profile ? profile.height / 100 : 1.70
   const latest = records[records.length - 1]
   const earliest = records[0]
@@ -268,7 +292,6 @@ ${dataLines}
 - 输出 4 到 5 个自然段，每段单独换行
 - 不要输出 JSON、Markdown 标题、项目符号或代码块`
 
-  // Fallback
   const weeklyChange = Math.round(weightChange / Math.max(daySpan, 1) * 7 * 10) / 10
   let fallback = ''
   if (Math.abs(weightChange) < 1) fallback = '近阶段体重整体较平稳，波动幅度不大。'
@@ -285,7 +308,6 @@ ${dataLines}
       { role: 'user', content: prompt },
     ], { temperature: 0.5, max_tokens: 800 })
 
-    // Strip code fences if AI returns them
     analysis = stripCodeFences(content) || fallback
   } catch {
     analysis = fallback

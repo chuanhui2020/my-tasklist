@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Env } from './types'
+import { D1Error } from './lib/db'
 import { authRoutes } from './routes/auth'
 import { taskRoutes } from './routes/tasks'
 import { fortuneRoutes } from './routes/fortune'
@@ -44,6 +45,9 @@ app.get('/api/health', (c) => {
 
 // Global error handler
 app.onError((err, c) => {
+  if (err instanceof D1Error) {
+    return c.json({ error: '数据库操作失败', detail: err.message }, 500)
+  }
   console.error('Unhandled error:', err)
   const detail = String(err.message || err).slice(0, 200)
   return c.json({ error: '服务器内部错误', detail }, 500)

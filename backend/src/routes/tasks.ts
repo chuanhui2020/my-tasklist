@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm'
 import { tasks, taskImages } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
 import { verifyToken } from '../lib/token'
+import { createDB } from '../lib/db'
 import type { Env } from '../types'
 
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -39,21 +39,25 @@ taskRoutes.get('/:id/images/:imageId/file', async (c) => {
     return c.json({ error: '未登录或凭证无效' }, 401)
   }
 
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
   const imageId = parseInt(c.req.param('imageId'), 10)
 
-  const [task] = await db.select({ id: tasks.id }).from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.user_id, userId)))
-    .limit(1)
+  const [task] = await query('get task for image', (db) =>
+    db.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, userId!)))
+      .limit(1)
+  )
 
   if (!task) {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const [image] = await db.select().from(taskImages)
-    .where(and(eq(taskImages.id, imageId), eq(taskImages.task_id, taskId)))
-    .limit(1)
+  const [image] = await query('get image record', (db) =>
+    db.select().from(taskImages)
+      .where(and(eq(taskImages.id, imageId), eq(taskImages.task_id, taskId)))
+      .limit(1)
+  )
 
   if (!image) {
     return c.json({ error: '图片不存在' }, 404)
@@ -78,7 +82,7 @@ taskRoutes.use('*', authMiddleware)
 // GET /
 taskRoutes.get('/', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
 
   const status = c.req.query('status')
   const sort = c.req.query('sort') || 'due_date'
@@ -91,35 +95,43 @@ taskRoutes.get('/', async (c) => {
   }
   const where = and(...conditions)
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(tasks).where(where)
-
-  let query
-  if (sort === 'created_at') {
-    query = db.select().from(tasks).where(where)
-      .orderBy(desc(tasks.created_at))
-  } else {
-    query = db.select().from(tasks).where(where)
-      .orderBy(
-        sql`CASE WHEN ${tasks.due_date} IS NULL THEN 1 ELSE 0 END`,
-        asc(tasks.due_date),
-        desc(tasks.created_at),
-      )
-  }
+  const [{ count }] = await query('count tasks', (db) =>
+    db.select({ count: sql<number>`count(*)` }).from(tasks).where(where)
+  )
 
   const offset = (page - 1) * pageSize
-  const items = await query.limit(pageSize).offset(offset)
+  let items: (typeof tasks.$inferSelect)[]
+  if (sort === 'created_at') {
+    items = await query('list tasks by created_at', (db) =>
+      db.select().from(tasks).where(where)
+        .orderBy(desc(tasks.created_at))
+        .limit(pageSize).offset(offset)
+    )
+  } else {
+    items = await query('list tasks by due_date', (db) =>
+      db.select().from(tasks).where(where)
+        .orderBy(
+          sql`CASE WHEN ${tasks.due_date} IS NULL THEN 1 ELSE 0 END`,
+          asc(tasks.due_date),
+          desc(tasks.created_at),
+        )
+        .limit(pageSize).offset(offset)
+    )
+  }
 
   const taskIds = items.map(t => t.id)
   let imagesMap: Record<number, { id: number; filename: string; sort_order: number }[]> = {}
   if (taskIds.length > 0) {
-    const allImages = await db.select({
-      id: taskImages.id,
-      task_id: taskImages.task_id,
-      filename: taskImages.filename,
-      sort_order: taskImages.sort_order,
-    }).from(taskImages)
-      .where(inArray(taskImages.task_id, taskIds))
-      .orderBy(asc(taskImages.sort_order))
+    const allImages = await query('get task images', (db) =>
+      db.select({
+        id: taskImages.id,
+        task_id: taskImages.task_id,
+        filename: taskImages.filename,
+        sort_order: taskImages.sort_order,
+      }).from(taskImages)
+        .where(inArray(taskImages.task_id, taskIds))
+        .orderBy(asc(taskImages.sort_order))
+    )
 
     for (const img of allImages) {
       if (!imagesMap[img.task_id]) imagesMap[img.task_id] = []
@@ -138,26 +150,30 @@ taskRoutes.get('/', async (c) => {
 // GET /:id
 taskRoutes.get('/:id', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
 
-  const [task] = await db.select().from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
-    .limit(1)
+  const [task] = await query('get task', (db) =>
+    db.select().from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
+      .limit(1)
+  )
 
   if (!task) {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const images = await db.select({
-    id: taskImages.id,
-    filename: taskImages.filename,
-    mime_type: taskImages.mime_type,
-    size: taskImages.size,
-    sort_order: taskImages.sort_order,
-  }).from(taskImages)
-    .where(eq(taskImages.task_id, taskId))
-    .orderBy(asc(taskImages.sort_order))
+  const images = await query('get task images', (db) =>
+    db.select({
+      id: taskImages.id,
+      filename: taskImages.filename,
+      mime_type: taskImages.mime_type,
+      size: taskImages.size,
+      sort_order: taskImages.sort_order,
+    }).from(taskImages)
+      .where(eq(taskImages.task_id, taskId))
+      .orderBy(asc(taskImages.sort_order))
+  )
 
   return c.json({ ...taskToDict(task), images })
 })
@@ -165,7 +181,7 @@ taskRoutes.get('/:id', async (c) => {
 // POST /
 taskRoutes.post('/', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const body = await c.req.json<{ title?: string; description?: string; due_date?: string | null }>()
 
   const title = (body.title || '').trim()
@@ -181,12 +197,14 @@ taskRoutes.post('/', async (c) => {
     due_date = body.due_date
   }
 
-  const [task] = await db.insert(tasks).values({
-    title,
-    description: body.description || '',
-    due_date,
-    user_id: user.id,
-  }).returning()
+  const [task] = await query('create task', (db) =>
+    db.insert(tasks).values({
+      title,
+      description: body.description || '',
+      due_date,
+      user_id: user.id,
+    }).returning()
+  )
 
   return c.json(taskToDict(task), 201)
 })
@@ -194,13 +212,15 @@ taskRoutes.post('/', async (c) => {
 // PUT /:id
 taskRoutes.put('/:id', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
   const body = await c.req.json<{ title?: string; description?: string; due_date?: string | null }>()
 
-  const [existing] = await db.select().from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
-    .limit(1)
+  const [existing] = await query('get task for update', (db) =>
+    db.select().from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
+      .limit(1)
+  )
 
   if (!existing) {
     return c.json({ error: '任务不存在' }, 404)
@@ -219,11 +239,13 @@ taskRoutes.put('/:id', async (c) => {
     due_date = body.due_date
   }
 
-  const [updated] = await db.update(tasks).set({
-    title,
-    description: body.description || '',
-    due_date,
-  }).where(eq(tasks.id, taskId)).returning()
+  const [updated] = await query('update task', (db) =>
+    db.update(tasks).set({
+      title,
+      description: body.description || '',
+      due_date,
+    }).where(eq(tasks.id, taskId)).returning()
+  )
 
   return c.json(taskToDict(updated))
 })
@@ -231,7 +253,7 @@ taskRoutes.put('/:id', async (c) => {
 // PATCH /:id/status
 taskRoutes.patch('/:id/status', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
   const body = await c.req.json<{ status?: string }>()
 
@@ -239,17 +261,21 @@ taskRoutes.patch('/:id/status', async (c) => {
     return c.json({ error: '无效的状态值' }, 400)
   }
 
-  const [existing] = await db.select().from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
-    .limit(1)
+  const [existing] = await query('get task for status update', (db) =>
+    db.select().from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
+      .limit(1)
+  )
 
   if (!existing) {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const [updated] = await db.update(tasks).set({
-    status: body.status as 'pending' | 'done',
-  }).where(eq(tasks.id, taskId)).returning()
+  const [updated] = await query('update task status', (db) =>
+    db.update(tasks).set({
+      status: body.status as 'pending' | 'done',
+    }).where(eq(tasks.id, taskId)).returning()
+  )
 
   return c.json(taskToDict(updated))
 })
@@ -257,45 +283,57 @@ taskRoutes.patch('/:id/status', async (c) => {
 // DELETE /:id
 taskRoutes.delete('/:id', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
 
-  const [existing] = await db.select().from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
-    .limit(1)
+  const [existing] = await query('get task for delete', (db) =>
+    db.select().from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
+      .limit(1)
+  )
 
   if (!existing) {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const images = await db.select().from(taskImages)
-    .where(eq(taskImages.task_id, taskId))
+  const images = await query('get images for delete', (db) =>
+    db.select().from(taskImages)
+      .where(eq(taskImages.task_id, taskId))
+  )
 
   if (images.length > 0) {
     await Promise.all(images.map(img => c.env.IMAGES_BUCKET.delete(img.r2_key)))
-    await db.delete(taskImages).where(eq(taskImages.task_id, taskId))
+    await query('delete task images', (db) =>
+      db.delete(taskImages).where(eq(taskImages.task_id, taskId))
+    )
   }
 
-  await db.delete(tasks).where(eq(tasks.id, taskId))
+  await query('delete task', (db) =>
+    db.delete(tasks).where(eq(tasks.id, taskId))
+  )
   return c.json({ message: '任务已删除' })
 })
 
 // POST /:id/images - upload images
 taskRoutes.post('/:id/images', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
 
-  const [task] = await db.select({ id: tasks.id }).from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
-    .limit(1)
+  const [task] = await query('get task for image upload', (db) =>
+    db.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
+      .limit(1)
+  )
 
   if (!task) {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const existing = await db.select({ id: taskImages.id }).from(taskImages)
-    .where(eq(taskImages.task_id, taskId))
+  const existing = await query('count existing images', (db) =>
+    db.select({ id: taskImages.id }).from(taskImages)
+      .where(eq(taskImages.task_id, taskId))
+  )
 
   const existingCount = existing.length
 
@@ -337,15 +375,17 @@ taskRoutes.post('/:id/images', async (c) => {
       httpMetadata: { contentType: file.type },
     })
 
-    const [record] = await db.insert(taskImages).values({
-      task_id: taskId,
-      user_id: user.id,
-      r2_key: r2Key,
-      filename: file.name,
-      mime_type: file.type,
-      size: file.size,
-      sort_order: existingCount + i,
-    }).returning()
+    const [record] = await query(`upload image ${i}`, (db) =>
+      db.insert(taskImages).values({
+        task_id: taskId,
+        user_id: user.id,
+        r2_key: r2Key,
+        filename: file.name,
+        mime_type: file.type,
+        size: file.size,
+        sort_order: existingCount + i,
+      }).returning()
+    )
 
     results.push({
       id: record.id,
@@ -362,28 +402,34 @@ taskRoutes.post('/:id/images', async (c) => {
 // DELETE /:id/images/:imageId
 taskRoutes.delete('/:id/images/:imageId', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
   const imageId = parseInt(c.req.param('imageId'), 10)
 
-  const [task] = await db.select({ id: tasks.id }).from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
-    .limit(1)
+  const [task] = await query('get task for image delete', (db) =>
+    db.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id)))
+      .limit(1)
+  )
 
   if (!task) {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const [image] = await db.select().from(taskImages)
-    .where(and(eq(taskImages.id, imageId), eq(taskImages.task_id, taskId)))
-    .limit(1)
+  const [image] = await query('get image for delete', (db) =>
+    db.select().from(taskImages)
+      .where(and(eq(taskImages.id, imageId), eq(taskImages.task_id, taskId)))
+      .limit(1)
+  )
 
   if (!image) {
     return c.json({ error: '图片不存在' }, 404)
   }
 
   await c.env.IMAGES_BUCKET.delete(image.r2_key)
-  await db.delete(taskImages).where(eq(taskImages.id, imageId))
+  await query('delete image record', (db) =>
+    db.delete(taskImages).where(eq(taskImages.id, imageId))
+  )
 
   return c.json({ message: '图片已删除' })
 })
