@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { fortuneRecords } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
 import { callAI } from '../lib/ai'
+import { createDB, beijingDate, beijingNow, beijingDayUtcRange } from '../lib/db'
 import type { Env } from '../types'
 
 export const fortuneRoutes = new Hono<Env>()
@@ -32,7 +32,7 @@ function getFortuneTypeText(type: string): string {
 }
 
 function getCurrentSeason(): string {
-  const month = new Date().getMonth() + 1
+  const month = beijingNow().getMonth() + 1
   if (month >= 3 && month <= 5) return '春'
   if (month >= 6 && month <= 8) return '夏'
   if (month >= 9 && month <= 11) return '秋'
@@ -48,8 +48,8 @@ function buildFortunePrompt(fortuneNumber: number, fortuneType: string): string 
   const season = getCurrentSeason()
   const element = elements[Math.floor(Math.random() * elements.length)]
   const imagery = imageryStyles[Math.floor(Math.random() * imageryStyles.length)]
-  const now = new Date()
-  const today = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, '0')}月${String(now.getDate()).padStart(2, '0')}日`
+  const now = beijingNow()
+  const today = `${now.getUTCFullYear()}年${String(now.getUTCMonth() + 1).padStart(2, '0')}月${String(now.getUTCDate()).padStart(2, '0')}日`
   const typeText = getFortuneTypeText(fortuneType)
 
   return `现在是${today}，${season}季，五行属${element}。
@@ -149,18 +149,19 @@ function fortuneToDict(r: typeof fortuneRecords.$inferSelect) {
 // POST /generate
 fortuneRoutes.post('/generate', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'fortune')
 
-  // Check daily limit - use date prefix match (created_at format: "YYYY-MM-DD HH:MM:SS")
-  const today = new Date().toISOString().slice(0, 10)
+  const { start: dayStart, end: dayEnd } = beijingDayUtcRange()
 
-  const [existing] = await db.select().from(fortuneRecords)
-    .where(and(
-      eq(fortuneRecords.user_id, user.id),
-      sql`${fortuneRecords.created_at} >= ${today + ' 00:00:00'}`,
-      sql`${fortuneRecords.created_at} <= ${today + ' 23:59:59'}`,
-    ))
-    .limit(1)
+  const [existing] = await query('check daily limit', (db) =>
+    db.select().from(fortuneRecords)
+      .where(and(
+        eq(fortuneRecords.user_id, user.id),
+        sql`${fortuneRecords.created_at} >= ${dayStart}`,
+        sql`${fortuneRecords.created_at} <= ${dayEnd}`,
+      ))
+      .limit(1)
+  )
 
   if (existing) {
     return c.json({
@@ -193,7 +194,6 @@ fortuneRoutes.post('/generate', async (c) => {
     fortuneData = generateFallbackFortune(fortuneNumber, fortuneType)
   }
 
-  // Enforce pre-determined type
   fortuneData.type = fortuneType
   fortuneData.typeText = getFortuneTypeText(fortuneType)
 
@@ -201,16 +201,18 @@ fortuneRoutes.post('/generate', async (c) => {
     ? fortuneData.advice
     : JSON.stringify(fortuneData.advice)
 
-  const [record] = await db.insert(fortuneRecords).values({
-    user_id: user.id,
-    fortune_number: fortuneNumber,
-    fortune_type: fortuneData.type as string,
-    type_text: fortuneData.typeText as string,
-    poem: (fortuneData.poem as string) || '',
-    interpretation: (fortuneData.interpretation as string) || '',
-    advice: adviceStr,
-    work_fortune: (fortuneData.work_fortune as string) || '',
-  }).returning()
+  const [record] = await query('insert fortune record', (db) =>
+    db.insert(fortuneRecords).values({
+      user_id: user.id,
+      fortune_number: fortuneNumber,
+      fortune_type: fortuneData.type as string,
+      type_text: fortuneData.typeText as string,
+      poem: (fortuneData.poem as string) || '',
+      interpretation: (fortuneData.interpretation as string) || '',
+      advice: adviceStr,
+      work_fortune: (fortuneData.work_fortune as string) || '',
+    }).returning()
+  )
 
   return c.json({ success: true, data: fortuneToDict(record) })
 })
@@ -218,17 +220,19 @@ fortuneRoutes.post('/generate', async (c) => {
 // GET /today
 fortuneRoutes.get('/today', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'fortune')
 
-  const today = new Date().toISOString().slice(0, 10)
+  const { start: dayStart, end: dayEnd } = beijingDayUtcRange()
 
-  const [record] = await db.select().from(fortuneRecords)
-    .where(and(
-      eq(fortuneRecords.user_id, user.id),
-      sql`${fortuneRecords.created_at} >= ${today + ' 00:00:00'}`,
-      sql`${fortuneRecords.created_at} <= ${today + ' 23:59:59'}`,
-    ))
-    .limit(1)
+  const [record] = await query('get today fortune', (db) =>
+    db.select().from(fortuneRecords)
+      .where(and(
+        eq(fortuneRecords.user_id, user.id),
+        sql`${fortuneRecords.created_at} >= ${dayStart}`,
+        sql`${fortuneRecords.created_at} <= ${dayEnd}`,
+      ))
+      .limit(1)
+  )
 
   if (record) {
     return c.json({ drawn: true, data: fortuneToDict(record) })
@@ -239,12 +243,14 @@ fortuneRoutes.get('/today', async (c) => {
 // GET /history
 fortuneRoutes.get('/history', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'fortune')
 
-  const records = await db.select().from(fortuneRecords)
-    .where(eq(fortuneRecords.user_id, user.id))
-    .orderBy(desc(fortuneRecords.created_at))
-    .limit(10)
+  const records = await query('get fortune history', (db) =>
+    db.select().from(fortuneRecords)
+      .where(eq(fortuneRecords.user_id, user.id))
+      .orderBy(desc(fortuneRecords.created_at))
+      .limit(10)
+  )
 
   return c.json({ records: records.map(fortuneToDict) })
 })

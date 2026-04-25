@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { eq, and, desc } from 'drizzle-orm'
 import { secureNotes } from '../db/schema'
 import { hashPassword, verifyPassword, encryptContent, decryptContent } from '../lib/crypto'
 import { authMiddleware } from '../middleware/auth'
+import { createDB, beijingDatetime } from '../lib/db'
 import type { Env } from '../types'
 
 export const secureNotesRoutes = new Hono<Env>()
@@ -16,17 +16,19 @@ function noteToDict(n: typeof secureNotes.$inferSelect) {
 // GET /
 secureNotesRoutes.get('/', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
-  const notes = await db.select().from(secureNotes)
-    .where(eq(secureNotes.user_id, user.id))
-    .orderBy(desc(secureNotes.created_at))
+  const { query } = createDB(c.env.DB, 'secure-notes')
+  const notes = await query('list notes', (db) =>
+    db.select().from(secureNotes)
+      .where(eq(secureNotes.user_id, user.id))
+      .orderBy(desc(secureNotes.created_at))
+  )
   return c.json(notes.map(noteToDict))
 })
 
 // POST /
 secureNotesRoutes.post('/', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'secure-notes')
   const body = await c.req.json<{ title?: string; description?: string; content?: string; password?: string }>()
 
   if (!body.title?.trim()) return c.json({ error: '标题不能为空' }, 400)
@@ -36,14 +38,16 @@ secureNotesRoutes.post('/', async (c) => {
   const { encrypted, salt } = await encryptContent(body.content, body.password)
   const pwd_hash = await hashPassword(body.password)
 
-  const [note] = await db.insert(secureNotes).values({
-    user_id: user.id,
-    title: body.title.trim(),
-    description: (body.description || '').trim(),
-    encrypted_content: encrypted,
-    salt,
-    password_hash: pwd_hash,
-  }).returning()
+  const [note] = await query('create note', (db) =>
+    db.insert(secureNotes).values({
+      user_id: user.id,
+      title: body.title!.trim(),
+      description: (body.description || '').trim(),
+      encrypted_content: encrypted,
+      salt,
+      password_hash: pwd_hash,
+    }).returning()
+  )
 
   return c.json(noteToDict(note), 201)
 })
@@ -51,13 +55,15 @@ secureNotesRoutes.post('/', async (c) => {
 // POST /:id/unlock
 secureNotesRoutes.post('/:id/unlock', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'secure-notes')
   const noteId = parseInt(c.req.param('id'), 10)
   const body = await c.req.json<{ password?: string }>()
 
-  const [note] = await db.select().from(secureNotes)
-    .where(and(eq(secureNotes.id, noteId), eq(secureNotes.user_id, user.id)))
-    .limit(1)
+  const [note] = await query('get note for unlock', (db) =>
+    db.select().from(secureNotes)
+      .where(and(eq(secureNotes.id, noteId), eq(secureNotes.user_id, user.id)))
+      .limit(1)
+  )
   if (!note) return c.json({ error: '笔记不存在' }, 404)
 
   if (!(await verifyPassword(body.password || '', note.password_hash))) {
@@ -71,13 +77,15 @@ secureNotesRoutes.post('/:id/unlock', async (c) => {
 // PUT /:id
 secureNotesRoutes.put('/:id', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'secure-notes')
   const noteId = parseInt(c.req.param('id'), 10)
   const body = await c.req.json<{ title?: string; description?: string; content?: string; password?: string; new_password?: string }>()
 
-  const [note] = await db.select().from(secureNotes)
-    .where(and(eq(secureNotes.id, noteId), eq(secureNotes.user_id, user.id)))
-    .limit(1)
+  const [note] = await query('get note for update', (db) =>
+    db.select().from(secureNotes)
+      .where(and(eq(secureNotes.id, noteId), eq(secureNotes.user_id, user.id)))
+      .limit(1)
+  )
   if (!note) return c.json({ error: '笔记不存在' }, 404)
 
   if (!(await verifyPassword(body.password || '', note.password_hash))) {
@@ -94,28 +102,36 @@ secureNotesRoutes.put('/:id', async (c) => {
     description: (body.description || '').trim(),
     encrypted_content: encrypted,
     salt,
-    updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    updated_at: beijingDatetime(),
   }
   if (body.new_password && body.new_password.length >= 4) {
     updates.password_hash = await hashPassword(body.new_password)
   }
 
-  await db.update(secureNotes).set(updates).where(eq(secureNotes.id, noteId))
-  const [updated] = await db.select().from(secureNotes).where(eq(secureNotes.id, noteId)).limit(1)
+  await query('update note', (db) =>
+    db.update(secureNotes).set(updates).where(eq(secureNotes.id, noteId))
+  )
+  const [updated] = await query('get updated note', (db) =>
+    db.select().from(secureNotes).where(eq(secureNotes.id, noteId)).limit(1)
+  )
   return c.json(noteToDict(updated))
 })
 
 // DELETE /:id
 secureNotesRoutes.delete('/:id', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'secure-notes')
   const noteId = parseInt(c.req.param('id'), 10)
 
-  const [note] = await db.select().from(secureNotes)
-    .where(and(eq(secureNotes.id, noteId), eq(secureNotes.user_id, user.id)))
-    .limit(1)
+  const [note] = await query('get note for delete', (db) =>
+    db.select().from(secureNotes)
+      .where(and(eq(secureNotes.id, noteId), eq(secureNotes.user_id, user.id)))
+      .limit(1)
+  )
   if (!note) return c.json({ error: '笔记不存在' }, 404)
 
-  await db.delete(secureNotes).where(eq(secureNotes.id, noteId))
+  await query('delete note', (db) =>
+    db.delete(secureNotes).where(eq(secureNotes.id, noteId))
+  )
   return c.json({ message: '已删除' })
 })

@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { eq, desc } from 'drizzle-orm'
 import { weeklyMenus } from '../db/schema'
 import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import { callAI } from '../lib/ai'
+import { createDB, beijingNow } from '../lib/db'
 import type { Env } from '../types'
 
 export const menuRoutes = new Hono<Env>()
@@ -38,11 +38,11 @@ const MENU_USER_PROMPT = `请识别这张公司每周菜单图片，并返回严
 }`
 
 function getWeekStart(target?: Date): string {
-  const d = target || new Date()
-  const day = d.getDay() // 0=Sun
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1) // Monday
+  const d = target || beijingNow()
+  const day = d.getUTCDay()
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1)
   const monday = new Date(d)
-  monday.setDate(diff)
+  monday.setUTCDate(diff)
   return monday.toISOString().slice(0, 10)
 }
 
@@ -92,8 +92,8 @@ function normalizeMenuPayload(payload: Record<string, unknown>) {
 }
 
 function getTodayMenuEntry(menuData: Record<string, Record<string, unknown>>) {
-  const now = new Date()
-  const dayIndex = (now.getDay() + 6) % 7 // Monday=0
+  const now = beijingNow()
+  const dayIndex = (now.getUTCDay() + 6) % 7
   const weekdayKey = WEEKDAYS[dayIndex]
   return {
     weekday: weekdayKey,
@@ -110,20 +110,24 @@ function menuToDict(m: typeof weeklyMenus.$inferSelect) {
 
 // GET /list
 menuRoutes.get('/list', async (c) => {
-  const db = drizzle(c.env.DB)
-  const menus = await db.select().from(weeklyMenus).orderBy(desc(weeklyMenus.week_start)).limit(20)
+  const { query } = createDB(c.env.DB, 'menu')
+  const menus = await query('list menus', (db) =>
+    db.select().from(weeklyMenus).orderBy(desc(weeklyMenus.week_start)).limit(20)
+  )
   return c.json({ items: menus.map(menuToDict) })
 })
 
 // GET /today
 menuRoutes.get('/today', async (c) => {
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'menu')
   const weekStart = getWeekStart()
-  const now = new Date()
-  const dayIndex = (now.getDay() + 6) % 7
+  const now = beijingNow()
+  const dayIndex = (now.getUTCDay() + 6) % 7
   const weekdayKey = WEEKDAYS[dayIndex]
 
-  const [menu] = await db.select().from(weeklyMenus).where(eq(weeklyMenus.week_start, weekStart)).limit(1)
+  const [menu] = await query('get this week menu', (db) =>
+    db.select().from(weeklyMenus).where(eq(weeklyMenus.week_start, weekStart)).limit(1)
+  )
 
   if (!menu) {
     return c.json({
@@ -179,7 +183,6 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
     return c.json({ error: '图片大小不能超过 10MB' }, 400)
   }
 
-  // Base64 encode for vision API
   const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBytes)))
   const dataUrl = `data:${image.type};base64,${base64}`
 
@@ -212,27 +215,35 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
     return c.json({ error: '菜单识别结果格式无效，请重新上传更清晰的图片' }, 422)
   }
 
-  const db = drizzle(c.env.DB)
+  const { query } = createDB(c.env.DB, 'menu')
   const admin = c.get('user')
   const menuJson = JSON.stringify(menuPayload)
-  const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  const nowStr = beijingNow().toISOString().replace('T', ' ').slice(0, 19)
 
-  const [existing] = await db.select().from(weeklyMenus).where(eq(weeklyMenus.week_start, normalizedWeekStart)).limit(1)
+  const [existing] = await query('check existing menu', (db) =>
+    db.select().from(weeklyMenus).where(eq(weeklyMenus.week_start, normalizedWeekStart)).limit(1)
+  )
 
   let record: typeof weeklyMenus.$inferSelect
   if (existing) {
-    await db.update(weeklyMenus).set({
-      menu_json: menuJson,
-      uploaded_by: admin.id,
-      updated_at: nowStr,
-    }).where(eq(weeklyMenus.id, existing.id))
-    ;[record] = await db.select().from(weeklyMenus).where(eq(weeklyMenus.id, existing.id)).limit(1)
+    await query('update menu', (db) =>
+      db.update(weeklyMenus).set({
+        menu_json: menuJson,
+        uploaded_by: admin.id,
+        updated_at: nowStr,
+      }).where(eq(weeklyMenus.id, existing.id))
+    )
+    ;[record] = await query('get updated menu', (db) =>
+      db.select().from(weeklyMenus).where(eq(weeklyMenus.id, existing.id)).limit(1)
+    )
   } else {
-    ;[record] = await db.insert(weeklyMenus).values({
-      week_start: normalizedWeekStart,
-      menu_json: menuJson,
-      uploaded_by: admin.id,
-    }).returning()
+    ;[record] = await query('create menu', (db) =>
+      db.insert(weeklyMenus).values({
+        week_start: normalizedWeekStart,
+        menu_json: menuJson,
+        uploaded_by: admin.id,
+      }).returning()
+    )
   }
 
   return c.json({

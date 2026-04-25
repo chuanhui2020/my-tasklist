@@ -1,8 +1,8 @@
 import type { Context, Next } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { eq } from 'drizzle-orm'
 import { verifyToken } from '../lib/token'
 import { users } from '../db/schema'
+import { createDB } from '../lib/db'
 import type { Env } from '../types'
 
 type UserPayload = {
@@ -30,8 +30,10 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
     return c.json({ error: '登录状态无效，请重新登录' }, 401)
   }
 
-  const db = drizzle(c.env.DB)
-  const [user] = await db.select().from(users).where(eq(users.id, payload.user_id)).limit(1)
+  const { query } = createDB(c.env.DB, 'auth-middleware')
+  const [user] = await query('get user by id', (db) =>
+    db.select().from(users).where(eq(users.id, payload.user_id)).limit(1)
+  )
   if (!user) {
     return c.json({ error: '登录状态无效，请重新登录' }, 401)
   }

@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { eq, sql } from 'drizzle-orm'
 import { users } from '../db/schema'
 import { hashPassword, verifyPassword } from '../lib/crypto'
 import { generateToken } from '../lib/token'
+import { createDB } from '../lib/db'
 import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import type { Env } from '../types'
 
@@ -19,14 +19,18 @@ authRoutes.post('/login', async (c) => {
     return c.json({ error: '请输入用户名和密码' }, 400)
   }
 
-  const db = drizzle(c.env.DB)
-  const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1)
+  const { query } = createDB(c.env.DB, 'auth')
+  const [user] = await query('login lookup', (db) =>
+    db.select().from(users).where(eq(users.username, username)).limit(1)
+  )
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return c.json({ error: '用户名或密码错误' }, 401)
   }
 
   const token = await generateToken({ user_id: user.id, role: user.role }, c.env.SECRET_KEY)
-  const [updated] = await db.update(users).set({ last_login_at: sql`(datetime('now'))` }).where(eq(users.id, user.id)).returning({ last_login_at: users.last_login_at })
+  const [updated] = await query('update last_login_at', (db) =>
+    db.update(users).set({ last_login_at: sql`(datetime('now'))` }).where(eq(users.id, user.id)).returning({ last_login_at: users.last_login_at })
+  )
   return c.json({
     token,
     user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at, last_login_at: updated.last_login_at },
@@ -36,8 +40,10 @@ authRoutes.post('/login', async (c) => {
 // GET /me
 authRoutes.get('/me', authMiddleware, async (c) => {
   const u = c.get('user')
-  const db = drizzle(c.env.DB)
-  const [user] = await db.select().from(users).where(eq(users.id, u.id)).limit(1)
+  const { query } = createDB(c.env.DB, 'auth')
+  const [user] = await query('get profile', (db) =>
+    db.select().from(users).where(eq(users.id, u.id)).limit(1)
+  )
   return c.json({
     user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at, last_login_at: user.last_login_at },
   })
@@ -45,8 +51,10 @@ authRoutes.get('/me', authMiddleware, async (c) => {
 
 // GET /users (admin)
 authRoutes.get('/users', authMiddleware, adminMiddleware, async (c) => {
-  const db = drizzle(c.env.DB)
-  const allUsers = await db.select().from(users).orderBy(users.id)
+  const { query } = createDB(c.env.DB, 'auth')
+  const allUsers = await query('list users', (db) =>
+    db.select().from(users).orderBy(users.id)
+  )
   return c.json({
     users: allUsers.map(u => ({ id: u.id, username: u.username, role: u.role, created_at: u.created_at, last_login_at: u.last_login_at })),
   })
@@ -66,14 +74,18 @@ authRoutes.post('/users', authMiddleware, adminMiddleware, async (c) => {
     return c.json({ error: '角色无效' }, 400)
   }
 
-  const db = drizzle(c.env.DB)
-  const [existing] = await db.select().from(users).where(eq(users.username, username)).limit(1)
+  const { query } = createDB(c.env.DB, 'auth')
+  const [existing] = await query('check username exists', (db) =>
+    db.select().from(users).where(eq(users.username, username)).limit(1)
+  )
   if (existing) {
     return c.json({ error: '用户名已存在' }, 400)
   }
 
   const password_hash = await hashPassword(password)
-  const [user] = await db.insert(users).values({ username, password_hash, role }).returning()
+  const [user] = await query('create user', (db) =>
+    db.insert(users).values({ username, password_hash, role }).returning()
+  )
 
   return c.json({
     user: { id: user.id, username: user.username, role: user.role, created_at: user.created_at },
@@ -94,15 +106,19 @@ authRoutes.post('/change-password', authMiddleware, async (c) => {
   }
 
   const u = c.get('user')
-  const db = drizzle(c.env.DB)
-  const [user] = await db.select().from(users).where(eq(users.id, u.id)).limit(1)
+  const { query } = createDB(c.env.DB, 'auth')
+  const [user] = await query('get user for password change', (db) =>
+    db.select().from(users).where(eq(users.id, u.id)).limit(1)
+  )
 
   if (!(await verifyPassword(old_password, user.password_hash))) {
     return c.json({ error: '原密码错误' }, 400)
   }
 
   const password_hash = await hashPassword(new_password)
-  await db.update(users).set({ password_hash }).where(eq(users.id, u.id))
+  await query('update password', (db) =>
+    db.update(users).set({ password_hash }).where(eq(users.id, u.id))
+  )
 
   return c.json({ message: '密码修改成功' })
 })
