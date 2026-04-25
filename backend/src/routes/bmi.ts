@@ -3,7 +3,7 @@ import { eq, and, sql, asc } from 'drizzle-orm'
 import { bmiProfiles, weightRecords } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
 import { callAI } from '../lib/ai'
-import { createDB, beijingDate, beijingDatetime } from '../lib/db'
+import { createDB, beijingDate, beijingDatetime, beijingNow } from '../lib/db'
 import type { Env } from '../types'
 
 export const bmiRoutes = new Hono<Env>()
