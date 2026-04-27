@@ -183,7 +183,12 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
     return c.json({ error: '图片大小不能超过 10MB' }, 400)
   }
 
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBytes)))
+  const bytes = new Uint8Array(imageBytes)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+  }
+  const base64 = btoa(binary)
   const dataUrl = `data:${image.type};base64,${base64}`
 
   let content: string
