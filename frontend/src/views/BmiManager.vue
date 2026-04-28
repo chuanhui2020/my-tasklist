@@ -213,7 +213,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { DataLine } from '@element-plus/icons-vue'
 import api from '@/api'
@@ -525,7 +525,7 @@ const confirmBackfillWeight = async () => {
     ElMessage.success(`${backfillDate.value} 体重已补录`)
     weightChartRef.value?.reload()
     loadAnalysisHistory()
-  } catch (e) {
+  } catch (_e) {
     // 409 already handled by global interceptor
   } finally {
     recordingBackfill.value = false

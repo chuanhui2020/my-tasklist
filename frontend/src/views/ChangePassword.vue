@@ -153,7 +153,7 @@ const handleSubmit = () => {
         router.replace('/login')
       }, 1500)
 
-    } catch (error) {
+    } catch (_error) {
       // Error message is handled by interceptor
     } finally {
       loading.value = false

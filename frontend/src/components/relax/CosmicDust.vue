@@ -34,7 +34,7 @@ const init = () => {
   const geo = new THREE.BufferGeometry()
   const pos = new Float32Array(COUNT * 3)
   const col = new Float32Array(COUNT * 3)
-  const sizes = new Float32Array(COUNT)
+  const _sizes = new Float32Array(COUNT)
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
 

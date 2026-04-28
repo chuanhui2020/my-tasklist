@@ -147,7 +147,7 @@
 <script>
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch, markRaw, defineAsyncComponent, h } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, Odometer, Timer } from '@element-plus/icons-vue'
+import { Plus, MagicStick, Odometer } from '@element-plus/icons-vue'
 import api from '@/api'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
@@ -487,7 +487,7 @@ export default {
           console.error('删除任务失败:', error)
           ElMessage.error('删除任务失败，请稍后重试')
         }
-      } catch (error) {
+      } catch (_error) {
         // user cancelled
       }
     }

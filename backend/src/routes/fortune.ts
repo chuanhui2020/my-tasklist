@@ -3,7 +3,7 @@ import { eq, and, sql, desc } from 'drizzle-orm'
 import { fortuneRecords } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
 import { callAI } from '../lib/ai'
-import { createDB, beijingDate, beijingNow, beijingDayUtcRange } from '../lib/db'
+import { createDB, beijingNow, beijingDayUtcRange } from '../lib/db'
 import type { Env } from '../types'
 
 export const fortuneRoutes = new Hono<Env>()

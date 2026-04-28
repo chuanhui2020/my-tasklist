@@ -48,7 +48,7 @@
   </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useCountdownAlert } from '@/composables/useCountdownAlert'

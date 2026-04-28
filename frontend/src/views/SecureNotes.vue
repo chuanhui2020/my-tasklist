@@ -173,7 +173,7 @@ async function handleUnlock() {
       viewerContent.value = data.content
       viewerVisible.value = true
     }
-  } catch (e) {
+  } catch (_e) {
     // error handled by interceptor
   } finally {
     unlocking.value = false
@@ -218,7 +218,7 @@ async function handleSubmit() {
     }
     formVisible.value = false
     fetchNotes()
-  } catch (e) {
+  } catch (_e) {
     // handled by interceptor
   } finally {
     submitting.value = false
@@ -230,7 +230,7 @@ async function handleDelete(id) {
     await api.deleteSecureNote(id)
     ElMessage.success('已删除')
     fetchNotes()
-  } catch (e) {
+  } catch (_e) {
     // handled by interceptor
   }
 }
