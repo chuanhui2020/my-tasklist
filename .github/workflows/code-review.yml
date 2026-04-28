@@ -95,7 +95,7 @@ jobs:
           supports_websockets = false
           TOML
 
-          PROMPT='You are a code reviewer for a personal project. Your task is READ-ONLY review. IMPORTANT: Do NOT modify any files, do NOT create commits, do NOT push code. Only read and analyze. Run git diff master...HEAD to see the changes. You may read source files to understand context, but NEVER write or edit any file. Context: This is a personal single-repo project running on Cloudflare Workers. Review standards:
+          PROMPT='You are a code reviewer for a personal project. Your task is READ-ONLY review. IMPORTANT: Do NOT modify any files, do NOT create commits, do NOT push code. Only read and analyze. Run git diff origin/master...HEAD to see the changes. You may read source files to understand context, but NEVER write or edit any file. Context: This is a personal single-repo project running on Cloudflare Workers. Review standards:
           - Critical: ONLY real bugs that will cause runtime errors, data loss, or broken functionality
           - Warning: Performance issues, code quality concerns worth noting
           - Info: Style suggestions, potential improvements, architectural trade-offs
@@ -113,7 +113,7 @@ jobs:
         env:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
         run: |
-          COMMITS=$(git log master..HEAD --pretty=format:"%h %s")
+          COMMITS=$(git log origin/master..HEAD --pretty=format:"%h %s")
 
           PAYLOAD=$(jq -n \
             --arg model "$AI_MODEL" \
@@ -126,7 +126,7 @@ jobs:
             -d "$PAYLOAD" | jq -r '.choices[0].message.content // empty') || true
 
           if [ -z "$CHANGELOG" ]; then
-            CHANGELOG=$(git log master..HEAD --pretty=format:"- %h %s")
+            CHANGELOG=$(git log origin/master..HEAD --pretty=format:"- %h %s")
           fi
 
           {
