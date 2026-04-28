@@ -150,6 +150,7 @@ const editingId = ref(null)
 const remaining = reactive({})
 const formRef = ref(null)
 const showExpired = ref(false)
+const now = ref(Date.now())
 
 const activeCountdowns = computed(() => countdowns.value.filter(c => !isExpired(c)))
 const expiredCountdowns = computed(() => countdowns.value.filter(c => isExpired(c)))
@@ -177,19 +178,19 @@ function statusLabel(status) {
 }
 
 function isExpired(item) {
-  return new Date(item.target_time).getTime() < Date.now() || item.status !== 'active'
+  return new Date(item.target_time).getTime() < now.value || item.status !== 'active'
 }
 
 function isApproaching(item) {
   if (item.status !== 'active') return false
-  const diff = new Date(item.target_time).getTime() - Date.now()
+  const diff = new Date(item.target_time).getTime() - now.value
   return diff > 0 && diff <= item.remind_before * 60000
 }
 
 function updateRemaining() {
-  const now = Date.now()
+  now.value = Date.now()
   for (const item of countdowns.value) {
-    const diff = new Date(item.target_time).getTime() - now
+    const diff = new Date(item.target_time).getTime() - now.value
     if (diff <= 0) {
       remaining[item.id] = '已到期！'
       continue

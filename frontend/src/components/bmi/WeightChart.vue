@@ -28,15 +28,24 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import * as echarts from 'echarts/core'
-import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, DataZoomComponent, MarkLineComponent } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
 import api from '@/api'
 
-echarts.use([LineChart, GridComponent, TooltipComponent, DataZoomComponent, MarkLineComponent, CanvasRenderer])
-
 const emit = defineEmits(['record'])
+
+let echarts = null
+const loadEcharts = async () => {
+  if (!echarts) {
+    const [core, charts, components, renderers] = await Promise.all([
+      import('echarts/core'),
+      import('echarts/charts'),
+      import('echarts/components'),
+      import('echarts/renderers')
+    ])
+    core.use([charts.LineChart, components.GridComponent, components.TooltipComponent, components.DataZoomComponent, components.MarkLineComponent, renderers.CanvasRenderer])
+    echarts = core
+  }
+  return echarts
+}
 
 const chartRef = ref(null)
 const chartRange = ref(90)
@@ -49,7 +58,7 @@ const loadWeightHistory = async () => {
     const res = await api.getWeightHistory(chartRange.value)
     weightHistory.value = res?.data?.data || []
     await nextTick()
-    renderChart()
+    await renderChart()
   } catch (e) {
     console.error('加载体重历史失败:', e)
   }
@@ -59,8 +68,9 @@ const renderChart = async () => {
   if (!chartRef.value || !weightHistory.value.length) return
   if (chartInstance) chartInstance.dispose()
 
-  const ec = echarts
-  chartInstance = echarts.init(chartRef.value)
+  const ec = await loadEcharts()
+  if (!chartRef.value) return
+  chartInstance = ec.init(chartRef.value)
 
   const dates = weightHistory.value.map(r => r.date)
   const weights = weightHistory.value.map(r => r.weight)
@@ -112,7 +122,7 @@ const renderChart = async () => {
       lineStyle: { color: '#06b6d4', width: 2, shadowColor: 'rgba(6,182,212,0.5)', shadowBlur: 10 },
       itemStyle: { color: '#06b6d4', borderColor: '#0b1121', borderWidth: 2 },
       areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        color: new ec.graphic.LinearGradient(0, 0, 0, 1, [
           { offset: 0, color: 'rgba(6,182,212,0.25)' },
           { offset: 1, color: 'rgba(6,182,212,0.02)' }
         ])
