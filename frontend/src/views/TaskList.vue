@@ -102,7 +102,12 @@
           </div>
 
           <div v-else-if="tasks.length === 0" class="task-empty">
-            <el-empty description="暂无任务" />
+            <el-empty description="还没有任务">
+              <el-button type="primary" @click="showCreateForm">
+                <el-icon><Plus /></el-icon>
+                创建第一个任务
+              </el-button>
+            </el-empty>
           </div>
 
           <div v-else class="task-grid">

@@ -25,7 +25,9 @@
         </div>
       </div>
     </div>
-    <el-empty v-else description="还没有存储任何密钥" />
+    <el-empty v-else description="还没有存储任何密钥">
+      <el-button type="primary" @click="openCreateDialog">创建第一个密钥</el-button>
+    </el-empty>
 
     <!-- Unlock Dialog -->
     <el-dialog v-model="unlockVisible" title="输入密码查看" width="400px" :close-on-click-modal="false" @closed="resetUnlock">
@@ -50,23 +52,23 @@
 
     <!-- Create / Edit Dialog -->
     <el-dialog v-model="formVisible" :title="isEditing ? '编辑密钥' : '新建密钥'" width="560px" :close-on-click-modal="false" @closed="resetForm">
-      <el-form :model="form" label-position="top">
-        <el-form-item label="标题">
+      <el-form :model="form" :rules="formRules" ref="formRef" label-position="top">
+        <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" placeholder="密钥标题" maxlength="100" />
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" placeholder="可选，简要描述密钥用途" maxlength="200" />
         </el-form-item>
-        <el-form-item label="内容">
+        <el-form-item label="内容" prop="content">
           <el-input v-model="form.content" type="textarea" :rows="6" placeholder="输入要加密保存的内容" />
         </el-form-item>
-        <el-form-item v-if="isEditing" label="当前密码">
+        <el-form-item v-if="isEditing" label="当前密码" prop="password">
           <el-input v-model="form.password" type="password" show-password placeholder="输入当前密码以验证身份" />
         </el-form-item>
         <el-form-item v-if="isEditing" label="新密码（不修改留空）">
           <el-input v-model="form.new_password" type="password" show-password placeholder="留空则保持原密码" />
         </el-form-item>
-        <el-form-item v-if="!isEditing" label="设置密码">
+        <el-form-item v-if="!isEditing" label="设置密码" prop="password">
           <el-input v-model="form.password" type="password" show-password placeholder="至少4位" />
         </el-form-item>
       </el-form>
@@ -79,12 +81,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 
 const notes = ref([])
 const loading = ref(false)
+
+const formRef = ref(null)
 
 // Unlock state
 const unlockVisible = ref(false)
@@ -104,6 +108,14 @@ const isEditing = ref(false)
 const editingNoteId = ref(null)
 const submitting = ref(false)
 const form = ref({ title: '', description: '', content: '', password: '', new_password: '' })
+
+const formRules = computed(() => ({
+  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  content: [{ required: true, message: '请输入内容', trigger: 'blur' }],
+  password: isEditing.value
+    ? [{ required: true, message: '请输入当前密码', trigger: 'blur' }]
+    : [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 4, message: '密码至少4位', trigger: 'blur' }]
+}))
 
 async function fetchNotes() {
   loading.value = true
@@ -181,22 +193,9 @@ function resetForm() {
 }
 
 async function handleSubmit() {
-  if (!form.value.title.trim()) {
-    ElMessage.warning('请输入标题')
-    return
-  }
-  if (!form.value.content.trim()) {
-    ElMessage.warning('请输入内容')
-    return
-  }
-  if (!isEditing.value && (!form.value.password || form.value.password.length < 4)) {
-    ElMessage.warning('密码至少4位')
-    return
-  }
-  if (isEditing.value && !form.value.password) {
-    ElMessage.warning('请输入当前密码')
-    return
-  }
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
 
   submitting.value = true
   try {

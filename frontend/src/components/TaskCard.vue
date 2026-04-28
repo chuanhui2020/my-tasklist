@@ -64,7 +64,7 @@
         class="task-image-thumb"
         @click.stop="openImage(img)"
       >
-        <img :src="getImageUrl(img)" :alt="img.filename" />
+        <img :src="getImageUrl(img)" :alt="img.filename" loading="lazy" />
       </div>
       <div v-if="task.images.length > 3" class="task-image-more"
         @click.stop="showAllThumbs = true">
@@ -83,7 +83,7 @@
               class="thumbs-panel-item"
               @click="openImage(img)"
             >
-              <img :src="getImageUrl(img)" :alt="img.filename" />
+              <img :src="getImageUrl(img)" :alt="img.filename" loading="lazy" />
             </div>
           </div>
         </div>

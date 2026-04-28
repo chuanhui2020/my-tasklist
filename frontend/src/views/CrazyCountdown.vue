@@ -10,7 +10,9 @@
     </div>
 
     <div v-else-if="countdowns.length === 0" class="page-empty">
-      <el-empty description="暂无倒计时，创建一个吧" />
+      <el-empty description="还没有倒计时">
+        <el-button type="primary" @click="openCreate">创建第一个倒计时</el-button>
+      </el-empty>
     </div>
 
     <div v-else class="countdown-grid">
@@ -61,11 +63,11 @@
       :close-on-click-modal="false"
       @closed="resetForm"
     >
-      <el-form :model="form" label-position="top">
-        <el-form-item label="标题">
+      <el-form :model="form" :rules="formRules" ref="formRef" label-position="top">
+        <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" placeholder="倒计时名称" maxlength="100" />
         </el-form-item>
-        <el-form-item label="目标时间">
+        <el-form-item label="目标时间" prop="target_time">
           <el-date-picker
             v-model="form.target_time"
             type="datetime"
@@ -108,6 +110,12 @@ const dialogVisible = ref(false)
 const isEditing = ref(false)
 const editingId = ref(null)
 const remaining = reactive({})
+const formRef = ref(null)
+
+const formRules = {
+  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  target_time: [{ required: true, message: '请选择目标时间', trigger: 'change' }]
+}
 
 const form = reactive({
   title: '',
@@ -193,8 +201,9 @@ function resetForm() {
 }
 
 async function handleSubmit() {
-  if (!form.title) return ElMessage.warning('请输入标题')
-  if (!form.target_time) return ElMessage.warning('请选择目标时间')
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
 
   submitting.value = true
   try {
