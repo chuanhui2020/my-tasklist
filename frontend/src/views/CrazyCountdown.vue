@@ -150,9 +150,16 @@ const editingId = ref(null)
 const remaining = reactive({})
 const formRef = ref(null)
 const showExpired = ref(false)
+const now = ref(Date.now())
 
-const activeCountdowns = computed(() => countdowns.value.filter(c => !isExpired(c)))
-const expiredCountdowns = computed(() => countdowns.value.filter(c => isExpired(c)))
+const activeCountdowns = computed(() => {
+  void now.value
+  return countdowns.value.filter(c => !isExpired(c))
+})
+const expiredCountdowns = computed(() => {
+  void now.value
+  return countdowns.value.filter(c => isExpired(c))
+})
 
 const formRules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur', whitespace: true }],
@@ -187,9 +194,9 @@ function isApproaching(item) {
 }
 
 function updateRemaining() {
-  const now = Date.now()
+  now.value = Date.now()
   for (const item of countdowns.value) {
-    const diff = new Date(item.target_time).getTime() - now
+    const diff = new Date(item.target_time).getTime() - now.value
     if (diff <= 0) {
       remaining[item.id] = '已到期！'
       continue
