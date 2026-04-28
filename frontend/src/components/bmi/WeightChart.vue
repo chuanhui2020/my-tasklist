@@ -30,7 +30,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import api from '@/api'
 
-const emit = defineEmits(['record', 'loaded'])
+const emit = defineEmits(['record'])
 
 let echarts = null
 const loadEcharts = async () => {
@@ -48,7 +48,6 @@ const loadWeightHistory = async () => {
   try {
     const res = await api.getWeightHistory(chartRange.value)
     weightHistory.value = res?.data?.data || []
-    emit('loaded', weightHistory.value)
     await nextTick()
     renderChart()
   } catch (e) {
