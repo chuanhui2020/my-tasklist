@@ -163,7 +163,7 @@
       </div>
     </el-card>
 
-    <WeightChart ref="weightChartRef" @record="showWeightDialog" @loaded="onChartLoaded" />
+    <WeightChart ref="weightChartRef" @record="showWeightDialog" />
 
     <WeightAnalysis :history="analysisHistory" :bmi-level="bmiLevel" />
 
@@ -271,7 +271,6 @@ const saveProfile = () => {
 onMounted(async () => {
   await loadProfile()
   checkTodayWeight()
-  weightChartRef.value?.reload()
   loadAnalysisHistory()
 })
 
@@ -540,10 +539,6 @@ const loadAnalysisHistory = async () => {
     console.error('加载分析体重历史失败:', e)
   }
 }
-
-const onChartLoaded = () => {}
-
-onBeforeUnmount(() => {})
 </script>
 
 <style scoped>

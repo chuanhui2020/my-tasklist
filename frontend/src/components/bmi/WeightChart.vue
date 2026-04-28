@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { ref, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import api from '@/api'
 
 const emit = defineEmits(['record', 'loaded'])
@@ -135,6 +135,8 @@ const renderChart = async () => {
 }
 
 const reload = () => loadWeightHistory()
+
+onMounted(() => loadWeightHistory())
 
 onBeforeUnmount(() => {
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
