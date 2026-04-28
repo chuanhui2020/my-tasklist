@@ -7,7 +7,7 @@
   --bg-glass-heavy: rgba(15, 23, 42, 0.8);
 
   --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
+  --text-secondary: #a8b8cc;
   --text-muted: #64748b;
 
   /* Neon Accents */
@@ -108,6 +108,11 @@ body {
 }
 
 /* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -124,6 +129,15 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.4);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Utility Classes */

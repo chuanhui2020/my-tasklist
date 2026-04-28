@@ -1,4 +1,4 @@
-﻿  <template>
+  <template>
     <div id="app">
       <div class="background-glow"></div>
       <el-container class="app-container">
@@ -8,22 +8,21 @@
             任务日程中心
           </div>
           <div v-if="isAuthenticated" class="nav-area">
-            <nav class="custom-nav">
-              <router-link to="/tasks" class="nav-link" active-class="active">任务列表</router-link>
-              <router-link to="/countdown" class="nav-link" active-class="active">疯狂倒计时</router-link>
-              <router-link to="/change-password" class="nav-link" active-class="active">修改密码</router-link>
-              <router-link to="/fortune" class="nav-link" active-class="active">灵签占卜</router-link>
-              <router-link to="/bmi" class="nav-link" active-class="active">BMI管理</router-link>
-              <router-link to="/secure-notes" class="nav-link" active-class="active">密钥盒子</router-link>
+            <nav class="custom-nav" :class="{ open: mobileMenuOpen }">
+              <router-link v-for="link in navLinks" :key="link.to" :to="link.to" class="nav-link" active-class="active" @click="mobileMenuOpen = false">{{ link.label }}</router-link>
               <template v-if="isAdmin">
                 <span class="nav-divider"></span>
-                <router-link to="/admin/users" class="nav-link admin-link" active-class="active"><span class="admin-icon">🛡️</span>用户管理</router-link>
-                <router-link to="/admin/menu" class="nav-link admin-link" active-class="active"><span class="admin-icon">🛡️</span>菜单管理</router-link>
+                <router-link v-for="link in adminLinks" :key="link.to" :to="link.to" class="nav-link admin-link" active-class="active" @click="mobileMenuOpen = false">
+                  <span class="admin-icon">🛡️</span>{{ link.label }}
+                </router-link>
               </template>
             </nav>
+            <button class="hamburger" :class="{ open: mobileMenuOpen }" @click="mobileMenuOpen = !mobileMenuOpen" aria-label="菜单">
+              <span></span><span></span><span></span>
+            </button>
+            <div v-if="mobileMenuOpen" class="mobile-backdrop" @click="mobileMenuOpen = false"></div>
             <div class="user-box">
               <span class="user-name">{{ authState.user?.username }}</span>
-
               <el-button type="primary" plain size="small" class="logout-btn" @click="handleLogout">退出</el-button>
             </div>
           </div>
@@ -34,7 +33,7 @@
         <el-main class="app-main">
           <router-view v-slot="{ Component, route }">
             <div class="route-stage">
-              <transition name="fade">
+              <transition :name="transitionName">
                 <component :is="Component" :key="route.fullPath" class="route-page" />
               </transition>
             </div>
@@ -46,7 +45,7 @@
   </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useCountdownAlert } from '@/composables/useCountdownAlert'
@@ -57,11 +56,47 @@ const route = useRoute()
 const { state: authState, isAuthenticated, isAdmin, clearAuth } = useAuth()
 const { alerts: countdownAlerts, dismiss: dismissCountdown, start: startCountdownPoll, stop: stopCountdownPoll } = useCountdownAlert()
 
-import { watch } from 'vue'
+const mobileMenuOpen = ref(false)
+
+const navLinks = [
+  { to: '/tasks', label: '任务列表' },
+  { to: '/countdown', label: '疯狂倒计时' },
+  { to: '/change-password', label: '修改密码' },
+  { to: '/fortune', label: '灵签占卜' },
+  { to: '/bmi', label: 'BMI管理' },
+  { to: '/secure-notes', label: '密钥盒子' },
+]
+
+const adminLinks = [
+  { to: '/admin/users', label: '用户管理' },
+  { to: '/admin/menu', label: '菜单管理' },
+]
+
+const routeOrder = ['/tasks', '/countdown', '/change-password', '/fortune', '/bmi', '/secure-notes', '/admin/users', '/admin/menu']
+const transitionName = ref('fade')
+
+router.afterEach((to, from) => {
+  if (!from.name) {
+    transitionName.value = 'fade'
+    return
+  }
+  const toIdx = routeOrder.indexOf(to.path)
+  const fromIdx = routeOrder.indexOf(from.path)
+  if (toIdx === -1 || fromIdx === -1) {
+    transitionName.value = 'fade'
+  } else {
+    transitionName.value = toIdx > fromIdx ? 'slide-left' : 'slide-right'
+  }
+})
+
 watch(isAuthenticated, (val) => {
   if (val) startCountdownPoll()
   else stopCountdownPoll()
 }, { immediate: true })
+
+watch(() => route.path, () => {
+  mobileMenuOpen.value = false
+})
 
 const goHome = () => {
   if (isAuthenticated.value) {
@@ -128,11 +163,12 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(to right, #fff, #94a3b8);
+  background: linear-gradient(to right, #fff, #a8b8cc);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.5px;
+  flex-shrink: 0;
 }
 
 .brand-icon {
@@ -163,6 +199,7 @@ const handleLogout = () => {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .nav-link:hover {
@@ -174,6 +211,19 @@ const handleLogout = () => {
   color: #fff;
   background: var(--primary-color);
   box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+}
+
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  background: var(--primary-color);
+  border-radius: 1px;
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.6);
 }
 
 .nav-divider {
@@ -219,6 +269,46 @@ const handleLogout = () => {
   color: var(--text-primary) !important;
 }
 
+/* Hamburger button */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 201;
+}
+
+.hamburger span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--text-secondary);
+  border-radius: 1px;
+  transition: all 0.25s ease;
+}
+
+.hamburger.open span:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger.open span:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -5px);
+}
+
+.mobile-backdrop {
+  display: none;
+}
 
 .app-main {
   padding: 24px;
@@ -236,7 +326,7 @@ const handleLogout = () => {
   z-index: 1;
 }
 
-/* Page Transitions */
+/* Page Transitions - Fade */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.18s ease;
@@ -252,5 +342,125 @@ const handleLogout = () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Page Transitions - Slide Left (forward) */
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.slide-left-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.slide-left-enter-from {
+  transform: translateX(40px);
+  opacity: 0;
+}
+
+.slide-left-leave-to {
+  transform: translateX(-40px);
+  opacity: 0;
+}
+
+/* Page Transitions - Slide Right (backward) */
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.slide-right-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.slide-right-enter-from {
+  transform: translateX(-40px);
+  opacity: 0;
+}
+
+.slide-right-leave-to {
+  transform: translateX(40px);
+  opacity: 0;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0 16px;
+  }
+
+  .hamburger {
+    display: flex;
+  }
+
+  .custom-nav {
+    position: fixed;
+    top: 64px;
+    right: 0;
+    bottom: 0;
+    width: 260px;
+    flex-direction: column;
+    background: rgba(15, 23, 42, 0.97);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid var(--glass-border);
+    border-radius: 0;
+    border-top: none;
+    padding: 16px 12px;
+    gap: 4px;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 200;
+    overflow-y: auto;
+  }
+
+  .custom-nav.open {
+    transform: translateX(0);
+  }
+
+  .mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    top: 64px;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 199;
+  }
+
+  .nav-link {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 15px;
+  }
+
+  .nav-link.active::after {
+    display: none;
+  }
+
+  .nav-divider {
+    width: 100%;
+    height: 1px;
+    margin: 8px 0;
+  }
+
+  .user-box {
+    padding-left: 0;
+    border-left: none;
+    gap: 12px;
+  }
+
+  .user-name {
+    display: none;
+  }
+
+  .app-main {
+    padding: 16px;
+  }
 }
 </style>

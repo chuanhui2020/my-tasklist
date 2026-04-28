@@ -311,8 +311,18 @@ onBeforeUnmount(() => {
 }
 
 @keyframes crazyFlash {
-  0%, 100% { opacity: 0.85; }
+  0%, 100% { opacity: 0.88; }
   50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crazy-bg,
+  .crazy-icon-ring,
+  .crazy-icon,
+  .crazy-time,
+  .shaking {
+    animation: none !important;
+  }
 }
 
 .crazy-center {
