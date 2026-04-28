@@ -58,7 +58,7 @@ const loadWeightHistory = async () => {
     const res = await api.getWeightHistory(chartRange.value)
     weightHistory.value = res?.data?.data || []
     await nextTick()
-    renderChart()
+    await renderChart()
   } catch (e) {
     console.error('加载体重历史失败:', e)
   }
@@ -69,6 +69,7 @@ const renderChart = async () => {
   if (chartInstance) chartInstance.dispose()
 
   const ec = await loadEcharts()
+  if (!chartRef.value) return
   chartInstance = ec.init(chartRef.value)
 
   const dates = weightHistory.value.map(r => r.date)

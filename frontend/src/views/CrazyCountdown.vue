@@ -152,14 +152,8 @@ const formRef = ref(null)
 const showExpired = ref(false)
 const now = ref(Date.now())
 
-const activeCountdowns = computed(() => {
-  void now.value
-  return countdowns.value.filter(c => !isExpired(c))
-})
-const expiredCountdowns = computed(() => {
-  void now.value
-  return countdowns.value.filter(c => isExpired(c))
-})
+const activeCountdowns = computed(() => countdowns.value.filter(c => !isExpired(c)))
+const expiredCountdowns = computed(() => countdowns.value.filter(c => isExpired(c)))
 
 const formRules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur', whitespace: true }],
@@ -184,12 +178,12 @@ function statusLabel(status) {
 }
 
 function isExpired(item) {
-  return new Date(item.target_time).getTime() < Date.now() || item.status !== 'active'
+  return new Date(item.target_time).getTime() < now.value || item.status !== 'active'
 }
 
 function isApproaching(item) {
   if (item.status !== 'active') return false
-  const diff = new Date(item.target_time).getTime() - Date.now()
+  const diff = new Date(item.target_time).getTime() - now.value
   return diff > 0 && diff <= item.remind_before * 60000
 }
 
