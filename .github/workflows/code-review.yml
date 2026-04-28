@@ -147,7 +147,8 @@ jobs:
         run: |
           CODEX_OUTPUT=$(cat /tmp/codex_output.txt)
 
-          COMMENT="## 🔍 Codex AI Review 报告
+          cat > /tmp/comment.md << COMMENT_EOF
+          ## 🔍 Codex AI Review 报告
 
           ### Code Review
           ${CODEX_OUTPUT}
@@ -158,9 +159,10 @@ jobs:
           ${CHANGELOG}
 
           ---
-          *自动生成 by GitHub Actions + Codex Code Review*"
+          *自动生成 by GitHub Actions + Codex Code Review*
+          COMMENT_EOF
 
-          gh issue comment "$PR_NUMBER" --body "$COMMENT"
+          gh issue comment "$PR_NUMBER" --body-file /tmp/comment.md
 
       - name: Auto-merge or label
         env:
