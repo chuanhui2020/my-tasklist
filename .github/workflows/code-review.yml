@@ -82,15 +82,17 @@ jobs:
         timeout-minutes: 10
         env:
           OPENAI_API_KEY: ${{ secrets.AI_API_KEY }}
+          CODEX_SANDBOX_TYPE: danger-full-access
         run: |
           mkdir -p ~/.codex
-          cat > ~/.codex/config.toml << TOML
-          model = "${AI_MODEL}"
+          cat > ~/.codex/config.toml << 'TOML'
+          model = "${{ env.AI_MODEL }}"
           model_provider = "proxy"
+          sandbox = "danger-full-access"
 
           [model_providers.proxy]
           name = "Custom Proxy"
-          base_url = "${AI_BASE_URL}/v1"
+          base_url = "${{ env.AI_BASE_URL }}/v1"
           env_key = "OPENAI_API_KEY"
           supports_websockets = false
           TOML
