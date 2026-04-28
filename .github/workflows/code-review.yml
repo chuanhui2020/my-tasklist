@@ -90,7 +90,7 @@ jobs:
 
           [model_providers.proxy]
           name = "Custom Proxy"
-          base_url = "${AI_BASE_URL}"
+          base_url = "${AI_BASE_URL}/v1"
           env_key = "OPENAI_API_KEY"
           supports_websockets = false
           TOML
