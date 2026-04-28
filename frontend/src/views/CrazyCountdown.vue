@@ -113,7 +113,7 @@ const remaining = reactive({})
 const formRef = ref(null)
 
 const formRules = {
-  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  title: [{ required: true, message: '请输入标题', trigger: 'blur', whitespace: true }],
   target_time: [{ required: true, message: '请选择目标时间', trigger: 'change' }]
 }
 
