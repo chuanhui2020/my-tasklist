@@ -1,59 +1,96 @@
 <template>
   <div class="countdown-page">
     <div class="page-header">
-      <h2 class="page-title">🔥 疯狂倒计时</h2>
+      <h2 class="page-title"><el-icon class="title-icon"><AlarmClock /></el-icon> 疯狂倒计时</h2>
       <el-button type="primary" @click="openCreate">新建倒计时</el-button>
     </div>
 
-    <div v-if="loading" class="page-loading">
-      <div class="loading-spinner"></div>
+    <div v-if="loading" class="skeleton-grid">
+      <div v-for="i in 3" :key="i" class="skeleton skeleton-card"></div>
     </div>
 
-    <div v-else-if="countdowns.length === 0" class="page-empty">
+    <div v-else-if="activeCountdowns.length === 0 && expiredCountdowns.length === 0" class="page-empty">
       <el-empty description="还没有倒计时">
         <el-button type="primary" @click="openCreate">创建第一个倒计时</el-button>
       </el-empty>
     </div>
 
-    <div v-else class="countdown-grid">
-      <div
-        v-for="item in countdowns"
-        :key="item.id"
-        class="countdown-card"
-        :class="[
-          `level-${item.remind_level}`,
-          { expired: isExpired(item), approaching: isApproaching(item) }
-        ]"
-      >
-        <div class="card-header">
-          <span class="level-badge" :class="item.remind_level">
-            {{ levelLabel(item.remind_level) }}
-          </span>
-          <span class="card-status" :class="item.status">
-            {{ statusLabel(item.status) }}
-          </span>
-        </div>
-        <div class="card-title">{{ item.title }}</div>
-        <div class="card-time" :class="{ urgent: isApproaching(item) }">
-          {{ remaining[item.id] || '计算中...' }}
-        </div>
-        <div class="card-target">
-          <span class="target-label">目标时间</span>
-          {{ item.target_time }}
-        </div>
-        <div class="card-meta">
-          提前 {{ item.remind_before }} 分钟提醒
-        </div>
-        <div class="card-actions">
-          <el-button size="small" text @click="openEdit(item)">编辑</el-button>
-          <el-popconfirm title="确定删除？" @confirm="handleDelete(item.id)">
-            <template #reference>
-              <el-button size="small" text type="danger">删除</el-button>
-            </template>
-          </el-popconfirm>
+    <template v-else>
+      <div v-if="activeCountdowns.length" class="countdown-section">
+        <div class="countdown-grid">
+          <div
+            v-for="item in activeCountdowns"
+            :key="item.id"
+            class="countdown-card"
+            :class="[
+              `level-${item.remind_level}`,
+              { approaching: isApproaching(item) }
+            ]"
+          >
+            <div class="card-header">
+              <span class="level-badge" :class="item.remind_level">
+                {{ levelLabel(item.remind_level) }}
+              </span>
+              <span class="card-status active">进行中</span>
+            </div>
+            <div class="card-title">{{ item.title }}</div>
+            <div class="card-time" :class="{ urgent: isApproaching(item) }">
+              {{ remaining[item.id] || '计算中...' }}
+            </div>
+            <div class="card-target">
+              <span class="target-label">目标时间</span>
+              {{ item.target_time }}
+            </div>
+            <div class="card-meta">
+              提前 {{ item.remind_before }} 分钟提醒
+            </div>
+            <div class="card-actions">
+              <el-button size="small" text @click="openEdit(item)">编辑</el-button>
+              <el-popconfirm title="确定删除？" @confirm="handleDelete(item.id)">
+                <template #reference>
+                  <el-button size="small" text type="danger">删除</el-button>
+                </template>
+              </el-popconfirm>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+
+      <div v-if="expiredCountdowns.length" class="countdown-section expired-section">
+        <div class="section-header" @click="showExpired = !showExpired">
+          <span class="section-label">已过期 ({{ expiredCountdowns.length }})</span>
+          <span class="section-arrow" :class="{ open: showExpired }">▾</span>
+        </div>
+        <div v-if="showExpired" class="countdown-grid">
+          <div
+            v-for="item in expiredCountdowns"
+            :key="item.id"
+            class="countdown-card expired"
+          >
+            <div class="card-header">
+              <span class="level-badge" :class="item.remind_level">
+                {{ levelLabel(item.remind_level) }}
+              </span>
+              <span class="card-status expired">{{ statusLabel(item.status) }}</span>
+            </div>
+            <div class="card-title">{{ item.title }}</div>
+            <div class="card-time">已到期</div>
+            <div class="card-target">
+              <span class="target-label">目标时间</span>
+              {{ item.target_time }}
+            </div>
+            <div class="card-actions">
+              <el-button size="small" text @click="openEdit(item)">编辑</el-button>
+              <el-popconfirm title="确定删除？" @confirm="handleDelete(item.id)">
+                <template #reference>
+                  <el-button size="small" text type="danger">删除</el-button>
+                </template>
+              </el-popconfirm>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- 新建/编辑弹窗 -->
     <el-dialog
@@ -99,8 +136,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import { AlarmClock } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const countdowns = ref([])
@@ -111,6 +149,10 @@ const isEditing = ref(false)
 const editingId = ref(null)
 const remaining = reactive({})
 const formRef = ref(null)
+const showExpired = ref(false)
+
+const activeCountdowns = computed(() => countdowns.value.filter(c => !isExpired(c)))
+const expiredCountdowns = computed(() => countdowns.value.filter(c => isExpired(c)))
 
 const formRules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur', whitespace: true }],
@@ -262,6 +304,14 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-icon {
+  color: var(--accent-danger);
+  font-size: 24px;
 }
 
 .page-loading {
@@ -418,5 +468,46 @@ onBeforeUnmount(() => {
   margin-top: auto;
   padding-top: 6px;
   border-top: 1px solid var(--glass-border);
+}
+
+.countdown-section {
+  margin-bottom: 24px;
+}
+
+.expired-section {
+  margin-top: 8px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: background 0.2s;
+}
+
+.section-header:hover {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.section-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.section-arrow {
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.section-arrow.open {
+  transform: rotate(180deg);
 }
 </style>

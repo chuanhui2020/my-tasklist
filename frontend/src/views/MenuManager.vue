@@ -20,7 +20,7 @@
 
       <!-- 上传区域 -->
       <div class="section-title">
-        <span class="section-icon">📤</span>
+        <el-icon class="section-icon"><Upload /></el-icon>
         <span>上传菜单</span>
       </div>
       <div class="upload-area">
@@ -38,7 +38,7 @@
 
       <!-- 历史菜单列表 -->
       <div class="section-title">
-        <span class="section-icon">📅</span>
+        <el-icon class="section-icon"><Calendar /></el-icon>
         <span>历史菜单</span>
         <span class="user-count" v-if="menuList.length">{{ menuList.length }} 周</span>
       </div>
@@ -109,7 +109,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Dish } from '@element-plus/icons-vue'
+import { Dish, Upload, Calendar } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
@@ -287,7 +287,7 @@ onMounted(loadMenuList)
 .admin-title {
   font-size: 22px;
   font-weight: 700;
-  background: linear-gradient(to right, #fff, #94a3b8);
+  background: linear-gradient(to right, #fff, var(--text-secondary));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

@@ -1,19 +1,22 @@
   <template>
     <div id="app">
+      <a href="#main-content" class="skip-link">跳到主内容</a>
       <div class="background-glow"></div>
       <el-container class="app-container">
         <el-header class="app-header">
           <div class="brand" @click="goHome">
-            <span class="brand-icon">⚡</span>
+            <el-icon class="brand-icon"><Promotion /></el-icon>
             任务日程中心
           </div>
           <div v-if="isAuthenticated" class="nav-area">
             <nav class="custom-nav" :class="{ open: mobileMenuOpen }">
-              <router-link v-for="link in navLinks" :key="link.to" :to="link.to" class="nav-link" active-class="active" @click="mobileMenuOpen = false">{{ link.label }}</router-link>
+              <router-link v-for="link in navLinks" :key="link.to" :to="link.to" class="nav-link" active-class="active" @click="mobileMenuOpen = false">
+                <el-icon class="nav-icon"><component :is="link.icon" /></el-icon>{{ link.label }}
+              </router-link>
               <template v-if="isAdmin">
                 <span class="nav-divider"></span>
                 <router-link v-for="link in adminLinks" :key="link.to" :to="link.to" class="nav-link admin-link" active-class="active" @click="mobileMenuOpen = false">
-                  <span class="admin-icon">🛡️</span>{{ link.label }}
+                  <el-icon class="nav-icon"><component :is="link.icon" /></el-icon>{{ link.label }}
                 </router-link>
               </template>
             </nav>
@@ -30,7 +33,7 @@
             <el-button type="primary" size="small" @click="goLogin">登录</el-button>
           </div>
         </el-header>
-        <el-main class="app-main">
+        <el-main id="main-content" class="app-main">
           <router-view v-slot="{ Component, route }">
             <div class="route-stage">
               <transition :name="transitionName">
@@ -50,6 +53,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useCountdownAlert } from '@/composables/useCountdownAlert'
 import CountdownOverlay from '@/components/CountdownOverlay.vue'
+import { Promotion, List, AlarmClock, Lock, MagicStick, DataLine, Key, UserFilled, Dish } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -59,17 +63,17 @@ const { alerts: countdownAlerts, dismiss: dismissCountdown, start: startCountdow
 const mobileMenuOpen = ref(false)
 
 const navLinks = [
-  { to: '/tasks', label: '任务列表' },
-  { to: '/countdown', label: '疯狂倒计时' },
-  { to: '/change-password', label: '修改密码' },
-  { to: '/fortune', label: '灵签占卜' },
-  { to: '/bmi', label: 'BMI管理' },
-  { to: '/secure-notes', label: '密钥盒子' },
+  { to: '/tasks', label: '任务列表', icon: List },
+  { to: '/countdown', label: '疯狂倒计时', icon: AlarmClock },
+  { to: '/change-password', label: '修改密码', icon: Lock },
+  { to: '/fortune', label: '灵签占卜', icon: MagicStick },
+  { to: '/bmi', label: 'BMI管理', icon: DataLine },
+  { to: '/secure-notes', label: '密钥盒子', icon: Key },
 ]
 
 const adminLinks = [
-  { to: '/admin/users', label: '用户管理' },
-  { to: '/admin/menu', label: '菜单管理' },
+  { to: '/admin/users', label: '用户管理', icon: UserFilled },
+  { to: '/admin/menu', label: '菜单管理', icon: Dish },
 ]
 
 const routeOrder = ['/tasks', '/countdown', '/change-password', '/fortune', '/bmi', '/secure-notes', '/admin/users', '/admin/menu']
@@ -124,6 +128,24 @@ const handleLogout = () => {
   background: var(--bg-primary);
 }
 
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  background: var(--primary-color);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 0 0 8px 8px;
+  z-index: 9999;
+  font-size: 14px;
+  text-decoration: none;
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
 .app-container {
   min-height: 100vh;
   position: relative;
@@ -173,7 +195,8 @@ const handleLogout = () => {
 
 .brand-icon {
   -webkit-text-fill-color: initial;
-  font-size: 24px;
+  color: var(--primary-color);
+  font-size: 22px;
 }
 
 .nav-area {
@@ -200,6 +223,14 @@ const handleLogout = () => {
   font-weight: 500;
   transition: all 0.2s ease;
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-icon {
+  font-size: 15px;
+  flex-shrink: 0;
 }
 
 .nav-link:hover {

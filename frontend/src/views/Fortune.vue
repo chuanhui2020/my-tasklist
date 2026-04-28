@@ -9,7 +9,7 @@
         <el-card class="fortune-card">
             <template #header>
                 <div class="fortune-header">
-                    <div class="header-icon">🎋</div>
+                    <div class="header-icon"><el-icon><MagicStick /></el-icon></div>
                     <div>
                         <h2 class="fortune-title">灵签占卜</h2>
                         <p class="fortune-subtitle">诚心祈愿，静待天机</p>
@@ -161,7 +161,7 @@
         <el-card v-if="historyRecords.length > 0" class="fortune-card history-card">
             <template #header>
                 <div class="fortune-header">
-                    <div class="header-icon">📜</div>
+                    <div class="header-icon"><el-icon><Document /></el-icon></div>
                     <div>
                         <h2 class="fortune-title">求签记录</h2>
                         <p class="fortune-subtitle">最近十次灵签记录</p>
@@ -213,6 +213,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { MagicStick, Document } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const pageLoading = ref(true)
@@ -505,7 +506,8 @@ const reset = () => {
 }
 
 .header-icon {
-    font-size: 48px;
+    font-size: 42px;
+    color: #FFD700;
     filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5));
 }
 

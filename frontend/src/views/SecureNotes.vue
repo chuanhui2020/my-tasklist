@@ -5,10 +5,13 @@
       <el-button type="primary" @click="openCreateDialog">新建密钥</el-button>
     </div>
 
-    <div v-if="notes.length" class="notes-grid">
+    <div v-if="loading" class="skeleton-grid">
+      <div v-for="i in 4" :key="i" class="skeleton skeleton-card"></div>
+    </div>
+    <div v-else-if="notes.length" class="notes-grid">
       <div v-for="note in notes" :key="note.id" class="note-card" @click="openUnlockDialog(note)">
         <div class="note-card-header">
-          <span class="lock-icon">🔒</span>
+          <el-icon class="lock-icon"><Lock /></el-icon>
           <span class="note-title">{{ note.title }}</span>
         </div>
         <div v-if="note.description" class="note-description">{{ note.description }}</div>
@@ -83,6 +86,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Lock } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const notes = ref([])
@@ -250,7 +254,7 @@ onMounted(fetchNotes)
 .page-title {
   font-size: 22px;
   font-weight: 700;
-  background: linear-gradient(to right, #fff, #94a3b8);
+  background: linear-gradient(to right, #fff, var(--text-secondary));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -291,6 +295,7 @@ onMounted(fetchNotes)
 .lock-icon {
   font-size: 18px;
   flex-shrink: 0;
+  color: var(--primary-color);
 }
 
 .note-title {

@@ -24,7 +24,7 @@
     >
       <div class="urgent-pulse"></div>
       <div class="urgent-content">
-        <span class="urgent-icon">⚠️</span>
+        <span class="urgent-icon"><el-icon><Warning /></el-icon></span>
         <span class="urgent-title">{{ item.title }}</span>
         <span class="urgent-time">{{ formatRemaining(item) }}</span>
       </div>
@@ -38,7 +38,7 @@
       <div class="crazy-bg"></div>
       <div class="crazy-center">
         <div class="crazy-icon-ring">
-          <span class="crazy-icon">🔔</span>
+          <span class="crazy-icon"><el-icon><Bell /></el-icon></span>
         </div>
         <div class="crazy-title">{{ crazyAlert.title }}</div>
         <div class="crazy-time">{{ formatRemaining(crazyAlert) }}</div>
@@ -50,6 +50,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { Warning, Bell } from '@element-plus/icons-vue'
 
 const props = defineProps({
   alerts: { type: Array, default: () => [] }
