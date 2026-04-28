@@ -198,6 +198,7 @@ function resetForm() {
   form.remind_before = 5
   form.remind_level = 'urgent'
   editingId.value = null
+  formRef.value?.clearValidate()
 }
 
 async function handleSubmit() {

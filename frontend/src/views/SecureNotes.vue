@@ -110,8 +110,8 @@ const submitting = ref(false)
 const form = ref({ title: '', description: '', content: '', password: '', new_password: '' })
 
 const formRules = computed(() => ({
-  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
-  content: [{ required: true, message: '请输入内容', trigger: 'blur' }],
+  title: [{ required: true, message: '请输入标题', trigger: 'blur', whitespace: true }],
+  content: [{ required: true, message: '请输入内容', trigger: 'blur', whitespace: true }],
   password: isEditing.value
     ? [{ required: true, message: '请输入当前密码', trigger: 'blur' }]
     : [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 4, message: '密码至少4位', trigger: 'blur' }]
@@ -190,6 +190,7 @@ function openCreateDialog() {
 
 function resetForm() {
   form.value = { title: '', description: '', content: '', password: '', new_password: '' }
+  formRef.value?.clearValidate()
 }
 
 async function handleSubmit() {
