@@ -23,6 +23,16 @@
   "routes": [
     { "pattern": "api-tasklist.ch-tools.org/*", "zone_name": "ch-tools.org" },
   ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CodeReviewContainer"],
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": ["CodeReviewContainer"],
+    },
+  ],
   "vars": {
     "CORS_ORIGINS": "https://tasklist.ch-tools.org",
     "AI_BASE_URL": "https://api.ch-tools.org",
