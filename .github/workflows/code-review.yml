@@ -11,6 +11,10 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: code-review-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   AI_BASE_URL: https://api.ch-tools.org
   AI_MODEL: gpt-5.4
@@ -175,6 +179,6 @@ jobs:
             gh pr merge "$PR_NUMBER" --merge --delete-branch=false || \
               gh issue comment "$PR_NUMBER" --body "⚠️ 自动合并失败，请手动处理。"
           else
-            gh issue label create "needs-fix" --color "d73a4a" --description "Review failed" 2>/dev/null || true
+            gh label create "needs-fix" --color "d73a4a" --description "Review failed" 2>/dev/null || true
             gh issue edit "$PR_NUMBER" --add-label "needs-fix"
           fi
