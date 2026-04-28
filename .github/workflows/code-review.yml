@@ -62,7 +62,9 @@ jobs:
           node-version: 20
 
       - name: Install Codex CLI
-        run: npm install -g @openai/codex
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          npm install -g @openai/codex
 
       - name: Find or create PR
         id: pr
@@ -108,7 +110,7 @@ jobs:
           VERDICT: FAIL
           Use FAIL only if there are real bugs that will cause runtime errors or data loss. PASS for everything else including warnings and suggestions.'
 
-          codex exec --approval-mode full-auto --sandbox danger-full-access "$PROMPT" > /tmp/codex_output.txt 2>&1 || true
+          codex exec --full-auto "$PROMPT" > /tmp/codex_output.txt 2>&1 || true
 
       - name: Generate changelog
         id: changelog
