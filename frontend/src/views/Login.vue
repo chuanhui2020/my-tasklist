@@ -75,7 +75,7 @@ const handleSubmit = () => {
       ElMessage.success('登录成功')
       const redirect = route.query.redirect || '/'
       router.replace(redirect)
-    } catch (error) {
+    } catch (_error) {
       // 错误处理交给拦截器
     } finally {
       loading.value = false

@@ -1,0 +1,180 @@
+name: Code Review
+
+on:
+  push:
+    branches-ignore:
+      - master
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  AI_BASE_URL: https://api.ch-tools.org
+  AI_MODEL: gpt-5.4
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lint frontend
+        run: cd frontend && npm ci && npm run lint
+
+      - name: Lint backend
+        run: cd backend && npm ci && npm run lint
+
+  build-check:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build
+
+      - name: Typecheck backend
+        run: cd backend && npm ci && npm run typecheck
+
+  code-review:
+    needs: build-check
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Codex CLI
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          npm install -g @openai/codex
+
+      - name: Find or create PR
+        id: pr
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+
+          PR_NUMBER=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ]; then
+            PR_URL=$(gh pr create --head "$BRANCH" --base master --title "Auto PR: $BRANCH" --body "Auto-created by CI")
+            PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+          fi
+
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Run Codex review
+        timeout-minutes: 10
+        env:
+          OPENAI_API_KEY: ${{ secrets.AI_API_KEY }}
+          CODEX_SANDBOX_TYPE: danger-full-access
+        run: |
+          mkdir -p ~/.codex
+          cat > ~/.codex/config.toml << 'TOML'
+          model = "${{ env.AI_MODEL }}"
+          model_provider = "proxy"
+          sandbox = "danger-full-access"
+
+          [model_providers.proxy]
+          name = "Custom Proxy"
+          base_url = "${{ env.AI_BASE_URL }}/v1"
+          env_key = "OPENAI_API_KEY"
+          supports_websockets = false
+          TOML
+
+          PROMPT='You are a code reviewer for a personal project. Your task is READ-ONLY review. IMPORTANT: Do NOT modify any files, do NOT create commits, do NOT push code. Only read and analyze. Run git diff origin/master...HEAD to see the changes. You may read source files to understand context, but NEVER write or edit any file. Context: This is a personal single-repo project running on Cloudflare Workers. Review standards:
+          - Critical: ONLY real bugs that will cause runtime errors, data loss, or broken functionality
+          - Warning: Performance issues, code quality concerns worth noting
+          - Info: Style suggestions, potential improvements, architectural trade-offs
+          - Do NOT mark security hardening suggestions as critical in this internal/personal context
+          - Do NOT mark design trade-offs or single-use-case limitations as critical
+          Provide a structured review: 1) Summary, 2) Critical issues, 3) Warnings, 4) Suggestions. Write in Chinese. Format as Markdown. At the very end, output exactly one verdict on its own line:
+          VERDICT: PASS
+          VERDICT: FAIL
+          Use FAIL only if there are real bugs that will cause runtime errors or data loss. PASS for everything else including warnings and suggestions.'
+
+          codex exec --full-auto "$PROMPT" > /tmp/codex_output.txt 2>&1 || true
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+        run: |
+          COMMITS=$(git log origin/master..HEAD --pretty=format:"%h %s")
+
+          PAYLOAD=$(jq -n \
+            --arg model "$AI_MODEL" \
+            --arg content "Based on these git commit messages, generate a changelog in Chinese using Keep a Changelog format (Added/Fixed/Changed sections). Only include relevant sections.\n\nCommit messages:\n$COMMITS\n\nReturn ONLY the changelog content in Markdown." \
+            '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.3, max_tokens: 4000}')
+
+          CHANGELOG=$(curl -s "${AI_BASE_URL}/v1/chat/completions" \
+            -H "Authorization: Bearer $AI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | jq -r '.choices[0].message.content // empty') || true
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG=$(git log origin/master..HEAD --pretty=format:"- %h %s")
+          fi
+
+          {
+            echo 'content<<CHANGELOG_EOF'
+            echo "$CHANGELOG"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post review comment
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          CHANGELOG: ${{ steps.changelog.outputs.content }}
+        run: |
+          CODEX_OUTPUT=$(cat /tmp/codex_output.txt)
+
+          cat > /tmp/comment.md << COMMENT_EOF
+          ## 🔍 Codex AI Review 报告
+
+          ### Code Review
+          ${CODEX_OUTPUT}
+
+          ---
+
+          ### 📋 Changelog
+          ${CHANGELOG}
+
+          ---
+          *自动生成 by GitHub Actions + Codex Code Review*
+          COMMENT_EOF
+
+          gh issue comment "$PR_NUMBER" --body-file /tmp/comment.md
+
+      - name: Auto-merge or label
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          CODEX_OUTPUT=$(cat /tmp/codex_output.txt)
+          VERDICT=$(echo "$CODEX_OUTPUT" | grep -oE 'VERDICT: (PASS|FAIL)' | tail -1 || true)
+
+          if [ "$VERDICT" = "VERDICT: PASS" ]; then
+            gh pr merge "$PR_NUMBER" --merge --delete-branch=false || \
+              gh issue comment "$PR_NUMBER" --body "⚠️ 自动合并失败，请手动处理。"
+          else
+            gh issue label create "needs-fix" --color "d73a4a" --description "Review failed" 2>/dev/null || true
+            gh issue edit "$PR_NUMBER" --add-label "needs-fix"
+          fi

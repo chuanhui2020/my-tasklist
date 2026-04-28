@@ -224,7 +224,7 @@ bmiRoutes.get('/weight/today', authMiddleware, async (c) => {
 bmiRoutes.get('/weight/history', authMiddleware, async (c) => {
   const user = c.get('user')
   const { query } = createDB(c.env.DB, 'bmi')
-  let days = Math.min(Math.max(parseInt(c.req.query('days') || '90', 10), 7), 365)
+  const days = Math.min(Math.max(parseInt(c.req.query('days') || '90', 10), 7), 365)
   const startDate = new Date(beijingNow().getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const records = await query('get weight history', (db) =>

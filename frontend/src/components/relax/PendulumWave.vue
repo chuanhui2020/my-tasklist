@@ -55,7 +55,7 @@ const init = () => {
   const trailGeo = new THREE.BufferGeometry()
   const trailPos = new Float32Array(trailCount * 3)
   const trailCol = new Float32Array(trailCount * 3)
-  const trailAlpha = new Float32Array(trailCount)
+  const _trailAlpha = new Float32Array(trailCount)
   trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3))
   trailGeo.setAttribute('color', new THREE.BufferAttribute(trailCol, 3))
 

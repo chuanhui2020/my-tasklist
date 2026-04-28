@@ -120,7 +120,7 @@ taskRoutes.get('/', async (c) => {
   }
 
   const taskIds = items.map(t => t.id)
-  let imagesMap: Record<number, { id: number; filename: string; sort_order: number }[]> = {}
+  const imagesMap: Record<number, { id: number; filename: string; sort_order: number }[]> = {}
   if (taskIds.length > 0) {
     const allImages = await query('get task images', (db) =>
       db.select({

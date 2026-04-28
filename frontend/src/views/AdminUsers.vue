@@ -128,7 +128,7 @@ const handleSubmit = () => {
       ElMessage.success('用户创建成功')
       handleReset()
       loadUsers()
-    } catch (error) {
+    } catch (_error) {
       // 错误提示由拦截器处理
     } finally {
       loading.value = false

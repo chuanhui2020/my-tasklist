@@ -7,10 +7,11 @@
     "deploy": "wrangler deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply tasklist_db --local",
-    "db:migrate:prod": "wrangler d1 migrations apply tasklist_db --remote"
+    "db:migrate:prod": "wrangler d1 migrations apply tasklist_db --remote",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cloudflare/containers": "^0.3.0",
     "drizzle-orm": "^0.39.0",
     "hono": "^4.7.0",
     "jose": "^6.0.0"
@@ -18,7 +19,9 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250327.0",
     "drizzle-kit": "^0.30.0",
+    "eslint": "^10.2.1",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.59.1",
     "wrangler": "^4.82.2"
   }
 }

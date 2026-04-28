@@ -140,7 +140,7 @@ export default {
       }
     }
 
-    watch(() => props.task.description, () => nextTick(checkTruncation))
+    watch(() => props.task.description, async () => { await nextTick(); checkTruncation() })
     onMounted(() => {
       nextTick(checkTruncation)
       window.addEventListener('resize', onResize)

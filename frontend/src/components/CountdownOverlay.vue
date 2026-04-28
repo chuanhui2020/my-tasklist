@@ -109,7 +109,7 @@ function playAlarmSound() {
     playBeep(880, t, 0.15)
     playBeep(880, t + 0.2, 0.15)
     playBeep(1100, t + 0.5, 0.3)
-  } catch (e) {
+  } catch (_e) {
     // Audio not supported
   }
 }

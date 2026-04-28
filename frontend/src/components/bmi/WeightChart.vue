@@ -30,7 +30,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import api from '@/api'
 
-const emit = defineEmits(['record'])
+const _emit = defineEmits(['record'])
 
 let echarts = null
 const loadEcharts = async () => {
