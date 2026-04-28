@@ -8,7 +8,7 @@
 
     <div class="bmi-header">
       <div class="title-block">
-        <div class="title-icon">📊</div>
+        <div class="title-icon"><el-icon><DataLine /></el-icon></div>
         <div>
           <h2 class="bmi-title">BMI管理</h2>
           <p class="bmi-subtitle">输入基础信息，实时测算体重指数与健康区间</p>
@@ -215,6 +215,7 @@
 <script setup>
 import { computed, reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import { DataLine } from '@element-plus/icons-vue'
 import api from '@/api'
 import WeightChart from '@/components/bmi/WeightChart.vue'
 import WeightAnalysis from '@/components/bmi/WeightAnalysis.vue'
@@ -616,6 +617,7 @@ const loadAnalysisHistory = async () => {
 
 .title-icon {
   font-size: 42px;
+  color: var(--primary-color);
   filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.4));
 }
 

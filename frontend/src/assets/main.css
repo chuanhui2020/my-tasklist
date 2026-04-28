@@ -142,7 +142,7 @@ body {
 
 /* Utility Classes */
 .text-gradient {
-  background: linear-gradient(to right, #fff, #94a3b8);
+  background: linear-gradient(to right, #fff, var(--text-secondary));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -150,4 +150,33 @@ body {
 
 .text-glow {
   text-shadow: var(--glow-text);
+}
+
+/* Skeleton Loading */
+.skeleton {
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.5), rgba(30, 41, 59, 0.82), rgba(15, 23, 42, 0.5));
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.skeleton-card {
+  height: 140px;
+}
+
+.skeleton-row {
+  height: 56px;
+  border-radius: 12px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

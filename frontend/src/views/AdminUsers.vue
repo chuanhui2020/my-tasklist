@@ -23,11 +23,13 @@
       <!-- 用户列表 -->
       <div class="user-list-section">
         <div class="section-title">
-          <span class="section-icon">👥</span>
+          <el-icon class="section-icon"><UserFilled /></el-icon>
           <span>现有用户</span>
           <span class="user-count">{{ users.length }} 人</span>
         </div>
-        <div v-if="listLoading" class="list-loading">加载中...</div>
+        <div v-if="listLoading" class="user-list-skeleton">
+          <div v-for="i in 3" :key="i" class="skeleton skeleton-row"></div>
+        </div>
         <div v-else class="user-list">
           <div v-for="u in users" :key="u.id" class="user-item">
             <div class="user-avatar" :class="u.role">
@@ -47,7 +49,7 @@
 
       <!-- 创建用户表单 -->
       <div class="section-title">
-        <span class="section-icon">➕</span>
+        <el-icon class="section-icon"><Plus /></el-icon>
         <span>创建新用户</span>
       </div>
 
@@ -84,7 +86,7 @@
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { UserFilled, User, Lock } from '@element-plus/icons-vue'
+import { UserFilled, User, Lock, Plus } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const formRef = ref(null)
@@ -244,7 +246,7 @@ const formatTime = (t) => {
   font-size: 22px;
   font-weight: 700;
   margin: 0;
-  background: linear-gradient(to right, #fff, #94a3b8);
+  background: linear-gradient(to right, #fff, var(--text-secondary));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -368,6 +370,12 @@ const formatTime = (t) => {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--glass-border), transparent);
   margin: 24px 0;
+}
+
+.user-list-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* 表单 */

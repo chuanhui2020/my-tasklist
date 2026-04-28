@@ -15,7 +15,7 @@
           circle
           plain
           @click="$emit('toggle-status', task)"
-          :title="task.status === 'done' ? '标记未完成' : '标记完成'"
+          :aria-label="task.status === 'done' ? '标记未完成' : '标记完成'"
         >
           <el-icon>
             <Check v-if="task.status === 'pending'" />
@@ -28,7 +28,7 @@
           circle
           plain
           @click="$emit('edit', task)"
-          title="编辑"
+          aria-label="编辑"
         >
           <el-icon><Edit /></el-icon>
         </el-button>
@@ -38,7 +38,7 @@
           circle
           plain
           @click="$emit('delete', task)"
-          title="删除"
+          aria-label="删除"
         >
           <el-icon><Delete /></el-icon>
         </el-button>
@@ -64,7 +64,7 @@
         class="task-image-thumb"
         @click.stop="openImage(img)"
       >
-        <img :src="getImageUrl(img)" :alt="img.filename" loading="lazy" />
+        <img :src="getImageUrl(img)" :alt="img.filename" loading="lazy" width="48" height="48" />
       </div>
       <div v-if="task.images.length > 3" class="task-image-more"
         @click.stop="showAllThumbs = true">
@@ -83,13 +83,14 @@
               class="thumbs-panel-item"
               @click="openImage(img)"
             >
-              <img :src="getImageUrl(img)" :alt="img.filename" loading="lazy" />
+              <img :src="getImageUrl(img)" :alt="img.filename" loading="lazy" width="48" height="48" />
             </div>
           </div>
         </div>
       </div>
 
-      <div v-if="showViewer" class="image-overlay" @click="showViewer = false">
+      <div v-if="showViewer" class="image-overlay" @click="showViewer = false" @keydown.esc="showViewer = false" tabindex="0" ref="viewerRef">
+        <button class="overlay-close" aria-label="关闭" @click="showViewer = false">&times;</button>
         <img :src="viewerUrl" class="image-overlay-img" @click.stop />
       </div>
     </Teleport>
@@ -129,6 +130,7 @@ export default {
     const showAllThumbs = ref(false)
     const showViewer = ref(false)
     const viewerUrl = ref('')
+    const viewerRef = ref(null)
     const descRef = ref(null)
     const isTruncated = ref(false)
 
@@ -164,12 +166,14 @@ export default {
       viewerUrl.value = getImageUrl(img)
       showAllThumbs.value = false
       showViewer.value = true
+      nextTick(() => viewerRef.value?.focus())
     }
 
     return {
       showAllThumbs,
       showViewer,
       viewerUrl,
+      viewerRef,
       descRef,
       isTruncated,
       placeholder,
@@ -244,12 +248,25 @@ export default {
   opacity: 1;
 }
 
+@media (hover: none) {
+  .header-actions {
+    opacity: 1;
+  }
+}
+
 :deep(.el-button.is-circle) {
   background: transparent;
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  position: relative;
+}
+
+:deep(.el-button.is-circle)::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 
 :deep(.el-button.is-circle:hover) {
@@ -416,6 +433,30 @@ export default {
   justify-content: center;
   z-index: 10000;
   cursor: pointer;
+  outline: none;
+}
+
+.overlay-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 1;
+}
+
+.overlay-close:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .image-overlay-img {

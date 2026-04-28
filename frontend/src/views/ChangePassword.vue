@@ -252,7 +252,7 @@ const handleReset = () => {
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 4px 0;
-  background: linear-gradient(to right, #fff, #94a3b8);
+  background: linear-gradient(to right, #fff, var(--text-secondary));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
