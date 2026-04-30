@@ -143,6 +143,7 @@ npx wrangler d1 execute tasklist_db --remote --command="SELECT * FROM users"
 | Auth | GET | /api/auth/me | 当前用户 |
 | Auth | GET | /api/auth/users | 用户列表 (admin) |
 | Auth | POST | /api/auth/users | 创建用户 (admin) |
+| Auth | PUT | /api/auth/users/:id/reset-password | 重置密码 (admin) |
 | Auth | POST | /api/auth/change-password | 修改密码 |
 | Tasks | GET | /api/tasks | 任务列表 (分页) |
 | Tasks | POST | /api/tasks | 创建任务 |

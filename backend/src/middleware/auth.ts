@@ -38,6 +38,13 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
     return c.json({ error: '登录状态无效，请重新登录' }, 401)
   }
 
+  if (user.token_invalid_before && payload.iat) {
+    const invalidBefore = Math.floor(new Date(user.token_invalid_before + 'Z').getTime() / 1000)
+    if (payload.iat < invalidBefore) {
+      return c.json({ error: '登录状态无效，请重新登录' }, 401)
+    }
+  }
+
   c.set('user', { id: user.id, username: user.username, role: user.role })
   await next()
 }

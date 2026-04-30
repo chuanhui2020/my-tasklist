@@ -95,6 +95,9 @@ authRoutes.post('/users', authMiddleware, adminMiddleware, async (c) => {
 // PUT /users/:id/reset-password (admin)
 authRoutes.put('/users/:id/reset-password', authMiddleware, adminMiddleware, async (c) => {
   const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ error: '无效的用户 ID' }, 400)
+  }
   const { query } = createDB(c.env.DB, 'auth')
   const [user] = await query('get user for reset', (db) =>
     db.select().from(users).where(eq(users.id, id)).limit(1)
@@ -105,7 +108,7 @@ authRoutes.put('/users/:id/reset-password', authMiddleware, adminMiddleware, asy
 
   const password_hash = await hashPassword('123456')
   await query('reset password', (db) =>
-    db.update(users).set({ password_hash }).where(eq(users.id, id))
+    db.update(users).set({ password_hash, token_invalid_before: sql`(datetime('now'))` }).where(eq(users.id, id))
   )
 
   return c.json({ message: `用户 ${user.username} 的密码已重置` })

@@ -8,6 +8,7 @@ export const users = sqliteTable('users', {
   role: text('role', { enum: ['admin', 'user'] }).notNull().default('user'),
   created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
   last_login_at: text('last_login_at'),
+  token_invalid_before: text('token_invalid_before'),
 })
 
 export const tasks = sqliteTable('tasks', {

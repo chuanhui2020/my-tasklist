@@ -40,6 +40,15 @@
               <span class="user-role-tag" :class="u.role">{{ u.role === 'admin' ? '管理员' : '普通用户' }}</span>
               <span class="user-login-time">最近登录: {{ formatTime(u.last_login_at) }}</span>
             </div>
+            <el-button
+              v-if="u.role !== 'admin'"
+              size="small"
+              type="warning"
+              plain
+              :loading="resettingId === u.id"
+              class="reset-pwd-btn"
+              @click="handleResetPassword(u)"
+            >重置密码</el-button>
           </div>
         </div>
       </div>
@@ -85,7 +94,7 @@
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { UserFilled, User, Lock, Plus } from '@element-plus/icons-vue'
 import api from '@/api'
 
@@ -93,6 +102,7 @@ const formRef = ref(null)
 const loading = ref(false)
 const users = ref([])
 const listLoading = ref(false)
+const resettingId = ref(null)
 
 const form = reactive({
   username: '',
@@ -141,6 +151,27 @@ const handleReset = () => {
   form.password = ''
   form.role = 'user'
   formRef.value?.clearValidate()
+}
+
+const handleResetPassword = async (u) => {
+  try {
+    await ElMessageBox.confirm(`确定要重置用户 "${u.username}" 的密码为默认密码 123456 吗？`, '重置密码', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  resettingId.value = u.id
+  try {
+    const res = await api.resetUserPassword(u.id)
+    ElMessage.success(res.data.message || '密码已重置')
+  } catch (_error) {
+    // 错误提示由拦截器处理
+  } finally {
+    resettingId.value = null
+  }
 }
 
 const formatTime = (t) => {
@@ -364,6 +395,12 @@ const formatTime = (t) => {
 .user-login-time {
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.reset-pwd-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  border-radius: 8px;
 }
 
 .section-divider {
