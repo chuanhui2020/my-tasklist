@@ -15,7 +15,7 @@ export async function generateToken(payload: { user_id: number; role: string }, 
     .sign(getSecretKey(secret))
 }
 
-export async function verifyToken(token: string, secret: string): Promise<{ user_id: number; role: string } | null> {
+export async function verifyToken(token: string, secret: string): Promise<{ user_id: number; role: string; iat?: number } | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey(secret))
     return payload as unknown as { user_id: number; role: string }

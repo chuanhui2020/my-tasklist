@@ -87,6 +87,10 @@ export default {
     return api.post('/auth/change-password', data)
   },
 
+  resetUserPassword(id) {
+    return api.put(`/auth/users/${id}/reset-password`)
+  },
+
   getTasks(params = {}, { signal } = {}) {
     return api.get('/tasks', { params, signal })
   },
