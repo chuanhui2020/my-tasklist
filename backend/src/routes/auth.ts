@@ -92,6 +92,25 @@ authRoutes.post('/users', authMiddleware, adminMiddleware, async (c) => {
   }, 201)
 })
 
+// PUT /users/:id/reset-password (admin)
+authRoutes.put('/users/:id/reset-password', authMiddleware, adminMiddleware, async (c) => {
+  const id = Number(c.req.param('id'))
+  const { query } = createDB(c.env.DB, 'auth')
+  const [user] = await query('get user for reset', (db) =>
+    db.select().from(users).where(eq(users.id, id)).limit(1)
+  )
+  if (!user) {
+    return c.json({ error: '用户不存在' }, 404)
+  }
+
+  const password_hash = await hashPassword('123456')
+  await query('reset password', (db) =>
+    db.update(users).set({ password_hash }).where(eq(users.id, id))
+  )
+
+  return c.json({ message: `用户 ${user.username} 的密码已重置` })
+})
+
 // POST /change-password
 authRoutes.post('/change-password', authMiddleware, async (c) => {
   const body = await c.req.json<{ old_password?: string; new_password?: string }>()
