@@ -122,9 +122,9 @@ jobs:
 
           codex exec --full-auto "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
 
-          # Extract content between markers
+          # Extract content between markers (take the LAST block only)
           if grep -q "===REVIEW_START===" /tmp/codex_raw.txt; then
-            sed -n '/===REVIEW_START===/,/===REVIEW_END===/p' /tmp/codex_raw.txt | grep -v "===REVIEW" > /tmp/codex_output.txt
+            awk '/===REVIEW_START===/{buf=""; capture=1; next} /===REVIEW_END===/{capture=0} capture{buf=buf $0 "\n"} END{printf "%s", buf}' /tmp/codex_raw.txt > /tmp/codex_output.txt
           elif grep -q "VERDICT" /tmp/codex_raw.txt; then
             grep -B50 "VERDICT" /tmp/codex_raw.txt | grep -v "^exec\|^codex\|^ succeeded\|^--------\|^workdir\|^model\|^provider\|^approval\|^sandbox\|^reasoning\|^session\|^user" | tail -20 > /tmp/codex_output.txt
           else
