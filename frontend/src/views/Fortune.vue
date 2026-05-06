@@ -126,6 +126,23 @@
                                     <div class="poem-text" v-html="formatPoem(fortuneData.poem)"></div>
                                 </div>
 
+                                <!-- 签图 -->
+                                <div class="result-illustration" v-if="fortuneImageUrl || imageLoading">
+                                    <div class="illustration-title">【签图】</div>
+                                    <div v-if="imageLoading && !fortuneImageUrl" class="illustration-loading">
+                                        <div class="illustration-placeholder">
+                                            <div class="loading-dots">
+                                                <span class="dot" v-for="i in 3" :key="i" :style="{ animationDelay: (i - 1) * 0.3 + 's' }"></span>
+                                            </div>
+                                            <span class="loading-hint">画师正在绘制签图...</span>
+                                        </div>
+                                    </div>
+                                    <div v-if="fortuneImageUrl" class="illustration-image" @click="overlayImageUrl = fortuneImageUrl; showImageOverlay = true">
+                                        <img :src="fortuneImageUrl" alt="签诗水墨画插图" />
+                                        <div class="image-hint">点击查看大图</div>
+                                    </div>
+                                </div>
+
                                 <div class="result-interpretation">
                                     <div class="interpretation-title">【解签】</div>
                                     <div class="interpretation-text">{{ fortuneData.interpretation }}</div>
@@ -185,6 +202,12 @@
                                 <div class="poem-title">【签诗】</div>
                                 <div class="poem-text" v-html="formatPoem(record.poem)"></div>
                             </div>
+                            <div v-if="record.hasImage" class="result-illustration history-illustration">
+                                <div class="illustration-title">【签图】</div>
+                                <div class="illustration-image" @click.stop="openHistoryImage(record.id)">
+                                    <img :src="getHistoryImageUrl(record.id)" alt="签诗水墨画插图" />
+                                </div>
+                            </div>
                             <div class="result-interpretation">
                                 <div class="interpretation-title">【解签】</div>
                                 <div class="interpretation-text">{{ record.interpretation }}</div>
@@ -207,6 +230,13 @@
                 </div>
             </div>
         </el-card>
+
+        <!-- 图片全屏预览 -->
+        <Teleport to="body">
+            <div v-if="showImageOverlay" class="image-overlay" @click="showImageOverlay = false">
+                <img :src="overlayImageUrl" alt="签诗水墨画大图" />
+            </div>
+        </Teleport>
     </div>
 </template>
 
@@ -231,6 +261,13 @@ const fallingStickY = ref(220)
 const fallingStickRotation = ref(0)
 const expandedId = ref(null)
 const historyRecords = ref([])
+
+// Image state
+const fortuneImageUrl = ref(null)
+const imageLoading = ref(false)
+const showImageOverlay = ref(false)
+const overlayImageUrl = ref('')
+let imagePollingTimer = null
 
 const waitingHints = [
     '📿 灵签感应中...',
@@ -261,7 +298,50 @@ const stopHintRotation = () => {
     }
 }
 
-onUnmounted(stopHintRotation)
+const stopImagePolling = () => {
+    if (imagePollingTimer) {
+        clearInterval(imagePollingTimer)
+        imagePollingTimer = null
+    }
+}
+
+const pollForImage = (fortuneId) => {
+    imageLoading.value = true
+    fortuneImageUrl.value = null
+    let attempts = 0
+
+    imagePollingTimer = setInterval(() => {
+        attempts++
+        const url = api.getFortuneImageUrl(fortuneId)
+        const img = new Image()
+        img.onload = () => {
+            fortuneImageUrl.value = url
+            imageLoading.value = false
+            stopImagePolling()
+        }
+        img.onerror = () => {
+            if (attempts >= 20) {
+                imageLoading.value = false
+                stopImagePolling()
+            }
+        }
+        img.src = url
+    }, 2000)
+}
+
+const getHistoryImageUrl = (fortuneId) => {
+    return api.getFortuneImageUrl(fortuneId)
+}
+
+const openHistoryImage = (fortuneId) => {
+    overlayImageUrl.value = api.getFortuneImageUrl(fortuneId)
+    showImageOverlay.value = true
+}
+
+onUnmounted(() => {
+    stopHintRotation()
+    stopImagePolling()
+})
 const fortuneData = ref({
     type: 'great',
     typeText: '上上签',
@@ -294,6 +374,11 @@ const loadData = async () => {
             fortuneData.value = todayRes.data.data
             fortuneNumber.value = todayRes.data.data.fortuneNumber
             showResult.value = true
+            if (todayRes.data.data.hasImage) {
+                fortuneImageUrl.value = api.getFortuneImageUrl(todayRes.data.data.id)
+            } else {
+                pollForImage(todayRes.data.data.id)
+            }
         }
     } catch (e) {
         console.error('加载今日签文失败:', e)
@@ -330,6 +415,7 @@ const generateFortune = async (number) => {
         if (response.data.success) {
             fortuneData.value = response.data.data
             alreadyDrawn.value = true
+            pollForImage(response.data.data.id)
             // Refresh history
             const historyRes = await api.getFortuneHistory()
             historyRecords.value = historyRes.data.records || []
@@ -433,6 +519,9 @@ const reset = () => {
     fallingStickX.value = 195
     fallingStickY.value = 220
     fallingStickRotation.value = 0
+    fortuneImageUrl.value = null
+    imageLoading.value = false
+    stopImagePolling()
 }
 </script>
 
@@ -861,6 +950,126 @@ const reset = () => {
 /* History card */
 .history-card {
     margin-top: 24px;
+}
+
+/* Illustration */
+.result-illustration {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 215, 0, 0.1);
+    text-align: center;
+}
+
+.illustration-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #FFD700;
+    margin-bottom: 16px;
+    font-family: 'KaiTi', serif;
+}
+
+.illustration-loading {
+    padding: 20px;
+}
+
+.illustration-placeholder {
+    aspect-ratio: 1;
+    max-width: 300px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(139, 69, 19, 0.05);
+    border-radius: 12px;
+    border: 1px dashed rgba(255, 215, 0, 0.2);
+}
+
+.loading-dots {
+    display: flex;
+    gap: 8px;
+}
+
+.loading-hint {
+    color: #FFD700;
+    font-family: 'KaiTi', serif;
+    font-size: 16px;
+    opacity: 0.8;
+}
+
+.illustration-image {
+    cursor: pointer;
+    position: relative;
+}
+
+.illustration-image img {
+    max-width: 100%;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    animation: imageReveal 0.3s ease-out;
+}
+
+.illustration-image:hover img {
+    border-color: rgba(255, 215, 0, 0.6);
+    box-shadow: 0 12px 40px rgba(255, 215, 0, 0.2);
+}
+
+.image-hint {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: 'KaiTi', serif;
+    opacity: 0.6;
+}
+
+@keyframes imageReveal {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .illustration-image img {
+        animation: none;
+    }
+}
+
+.history-illustration {
+    padding: 12px;
+}
+
+.history-illustration .illustration-image img {
+    max-width: 200px;
+}
+
+/* Image overlay */
+.image-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    cursor: pointer;
+}
+
+.image-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 8px;
 }
 
 .history-list {

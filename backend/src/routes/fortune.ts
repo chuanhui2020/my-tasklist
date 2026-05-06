@@ -2,11 +2,62 @@ import { Hono } from 'hono'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { fortuneRecords } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
-import { callAI } from '../lib/ai'
+import { callAI, generateImage } from '../lib/ai'
+import { verifyToken } from '../lib/token'
 import { createDB, beijingNow, beijingDayUtcRange } from '../lib/db'
 import type { Env } from '../types'
 
 export const fortuneRoutes = new Hono<Env>()
+
+// Image serving - BEFORE auth middleware (uses custom auth with ?token= for <img src>)
+fortuneRoutes.get('/:id/image', async (c) => {
+  let userId: number | null = null
+
+  const authHeader = c.req.header('Authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    const payload = await verifyToken(authHeader.substring(7), c.env.SECRET_KEY)
+    if (payload) userId = payload.user_id
+  }
+
+  if (!userId) {
+    const tokenParam = c.req.query('token')
+    if (tokenParam) {
+      const payload = await verifyToken(tokenParam, c.env.SECRET_KEY)
+      if (payload) userId = payload.user_id
+    }
+  }
+
+  if (!userId) {
+    return c.json({ error: '未登录或凭证无效' }, 401)
+  }
+
+  const id = parseInt(c.req.param('id'), 10)
+  const { query } = createDB(c.env.DB, 'fortune')
+
+  const [record] = await query('get fortune for image', (db) =>
+    db.select({ user_id: fortuneRecords.user_id, image_r2_key: fortuneRecords.image_r2_key })
+      .from(fortuneRecords)
+      .where(and(eq(fortuneRecords.id, id), eq(fortuneRecords.user_id, userId!)))
+      .limit(1)
+  )
+
+  if (!record || !record.image_r2_key) {
+    return c.json({ error: '图片未生成' }, 404)
+  }
+
+  const object = await c.env.IMAGES_BUCKET.get(record.image_r2_key)
+  if (!object) {
+    return c.json({ error: '图片文件不存在' }, 404)
+  }
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=604800',
+    },
+  })
+})
+
 fortuneRoutes.use('*', authMiddleware)
 
 const FORTUNE_TYPES = [
@@ -37,6 +88,24 @@ function getCurrentSeason(): string {
   if (month >= 6 && month <= 8) return '夏'
   if (month >= 9 && month <= 11) return '秋'
   return '冬'
+}
+
+function buildImagePrompt(poem: string, fortuneType: string): string {
+  const mood = fortuneType === 'great' || fortuneType === 'good'
+    ? 'auspicious and warm, with subtle golden light'
+    : fortuneType === 'poor'
+      ? 'contemplative and misty, with a melancholic atmosphere'
+      : 'balanced and serene, with a peaceful mood'
+
+  return `Create a traditional Chinese ink wash painting (水墨画) illustration inspired by this poem:
+
+"${poem}"
+
+Style: Traditional Chinese brush painting with elegant minimalist composition and generous white space.
+Color: Muted ink tones with subtle color accents (light gold, vermillion, or jade green).
+Mood: ${mood}.
+Composition: Square format, centered subject, natural imagery reflecting the poem's meaning.
+Important: Do NOT include any text, characters, or calligraphy in the image.`
 }
 
 function buildFortunePrompt(fortuneNumber: number, fortuneType: string): string {
@@ -142,6 +211,7 @@ function fortuneToDict(r: typeof fortuneRecords.$inferSelect) {
     interpretation: r.interpretation,
     advice,
     work_fortune: r.work_fortune,
+    hasImage: !!r.image_r2_key,
     created_at: r.created_at,
   }
 }
@@ -212,6 +282,32 @@ fortuneRoutes.post('/generate', async (c) => {
       advice: adviceStr,
       work_fortune: (fortuneData.work_fortune as string) || '',
     }).returning()
+  )
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        const poem = (fortuneData.poem as string) || ''
+        if (!poem) return
+        const imagePrompt = buildImagePrompt(poem, fortuneType)
+        const imageBytes = await generateImage(c.env, imagePrompt)
+        if (!imageBytes) return
+
+        const r2Key = `fortune/${user.id}/${record.id}.png`
+        await c.env.IMAGES_BUCKET.put(r2Key, imageBytes, {
+          httpMetadata: { contentType: 'image/png' },
+        })
+
+        const { query: bgQuery } = createDB(c.env.DB, 'fortune')
+        await bgQuery('update fortune image key', (db) =>
+          db.update(fortuneRecords)
+            .set({ image_r2_key: r2Key })
+            .where(eq(fortuneRecords.id, record.id))
+        )
+      } catch (e) {
+        console.error('Fortune image generation failed:', e)
+      }
+    })()
   )
 
   return c.json({ success: true, data: fortuneToDict(record) })

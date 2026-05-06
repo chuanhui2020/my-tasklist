@@ -36,7 +36,7 @@
   "vars": {
     "CORS_ORIGINS": "https://tasklist.ch-tools.org",
     "AI_BASE_URL": "https://api.ch-tools.org",
-    "AI_MODEL": "gpt-5.4",
+    "AI_MODEL": "gpt-5.5",
   },
   // SECRET_KEY, AI_API_KEY 通过 wrangler secret put 设置
 }
