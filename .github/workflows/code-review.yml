@@ -110,27 +110,25 @@ jobs:
           - Critical: real bugs causing runtime errors or data loss
           - Warning: performance or quality concerns
           - Suggestion: improvements (optional)
-          Output format (Chinese, concise):
-          ## Summary
-          一句话总结变更
-          ## Critical
-          (无则写"无")
-          ## Warnings
-          (无则写"无")
-          ## Suggestions
-          (可选，最多3条)
-          ---
-          VERDICT: PASS 或 VERDICT: FAIL
-          (FAIL仅用于确定会导致运行时错误或数据丢失的bug)'
+          Output your review in Chinese, concise. Use this EXACT format:
+          ===REVIEW_START===
+          **Summary:** 一句话总结变更
+          **Critical:** (无则写"无")
+          **Warnings:** (无则写"无")
+          **Suggestions:** (可选，最多3条，无则省略此段)
+          VERDICT: PASS
+          ===REVIEW_END===
+          Use VERDICT: FAIL only for confirmed runtime errors or data loss bugs.'
 
           codex exec --full-auto "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
 
-          # Extract only the review content (after the last "## Summary" heading)
-          if grep -q "## Summary" /tmp/codex_raw.txt; then
-            sed -n '/## Summary/,$p' /tmp/codex_raw.txt | head -100 > /tmp/codex_output.txt
+          # Extract content between markers
+          if grep -q "===REVIEW_START===" /tmp/codex_raw.txt; then
+            sed -n '/===REVIEW_START===/,/===REVIEW_END===/p' /tmp/codex_raw.txt | grep -v "===REVIEW" > /tmp/codex_output.txt
+          elif grep -q "VERDICT" /tmp/codex_raw.txt; then
+            grep -B50 "VERDICT" /tmp/codex_raw.txt | grep -v "^exec\|^codex\|^ succeeded\|^--------\|^workdir\|^model\|^provider\|^approval\|^sandbox\|^reasoning\|^session\|^user" | tail -20 > /tmp/codex_output.txt
           else
-            # Fallback: extract lines with VERDICT
-            grep -A2 "VERDICT" /tmp/codex_raw.txt > /tmp/codex_output.txt || cp /tmp/codex_raw.txt /tmp/codex_output.txt
+            echo "Review 未能生成有效输出" > /tmp/codex_output.txt
           fi
 
       - name: Generate changelog
