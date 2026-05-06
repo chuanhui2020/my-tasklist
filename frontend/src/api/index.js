@@ -145,6 +145,12 @@ export default {
     return api.get('/fortune/history')
   },
 
+  getFortuneImageUrl(fortuneId) {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const baseURL = api.defaults.baseURL
+    return `${baseURL}/fortune/${fortuneId}/image?token=${token}`
+  },
+
   generateBmiAdvice(payload) {
     return api.post('/bmi/advice', payload)
   },
