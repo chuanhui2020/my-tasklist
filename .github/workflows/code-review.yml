@@ -104,18 +104,34 @@ jobs:
           supports_websockets = false
           TOML
 
-          PROMPT='You are a code reviewer for a personal project. Your task is READ-ONLY review. IMPORTANT: Do NOT modify any files, do NOT create commits, do NOT push code. Only read and analyze. Run git diff origin/master...HEAD to see the changes. You may read source files to understand context, but NEVER write or edit any file. Context: This is a personal single-repo project running on Cloudflare Workers. Review standards:
-          - Critical: ONLY real bugs that will cause runtime errors, data loss, or broken functionality
-          - Warning: Performance issues, code quality concerns worth noting
-          - Info: Style suggestions, potential improvements, architectural trade-offs
-          - Do NOT mark security hardening suggestions as critical in this internal/personal context
-          - Do NOT mark design trade-offs or single-use-case limitations as critical
-          Provide a structured review: 1) Summary, 2) Critical issues, 3) Warnings, 4) Suggestions. Write in Chinese. Format as Markdown. At the very end, output exactly one verdict on its own line:
-          VERDICT: PASS
-          VERDICT: FAIL
-          Use FAIL only if there are real bugs that will cause runtime errors or data loss. PASS for everything else including warnings and suggestions.'
+          PROMPT='You are a code reviewer. Run git diff origin/master...HEAD to see changes. READ-ONLY, do NOT modify files.
+          Context: Personal project on Cloudflare Workers.
+          Review standards:
+          - Critical: real bugs causing runtime errors or data loss
+          - Warning: performance or quality concerns
+          - Suggestion: improvements (optional)
+          Output format (Chinese, concise):
+          ## Summary
+          一句话总结变更
+          ## Critical
+          (无则写"无")
+          ## Warnings
+          (无则写"无")
+          ## Suggestions
+          (可选，最多3条)
+          ---
+          VERDICT: PASS 或 VERDICT: FAIL
+          (FAIL仅用于确定会导致运行时错误或数据丢失的bug)'
 
-          codex exec --full-auto "$PROMPT" > /tmp/codex_output.txt 2>&1 || true
+          codex exec --full-auto "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
+
+          # Extract only the review content (after the last "## Summary" heading)
+          if grep -q "## Summary" /tmp/codex_raw.txt; then
+            sed -n '/## Summary/,$p' /tmp/codex_raw.txt | head -100 > /tmp/codex_output.txt
+          else
+            # Fallback: extract lines with VERDICT
+            grep -A2 "VERDICT" /tmp/codex_raw.txt > /tmp/codex_output.txt || cp /tmp/codex_raw.txt /tmp/codex_output.txt
+          fi
 
       - name: Generate changelog
         id: changelog
@@ -152,18 +168,13 @@ jobs:
           CODEX_OUTPUT=$(cat /tmp/codex_output.txt)
 
           cat > /tmp/comment.md << COMMENT_EOF
-          ## 🔍 Codex AI Review 报告
+          ## Code Review
 
-          ### Code Review
           ${CODEX_OUTPUT}
 
           ---
 
-          ### 📋 Changelog
-          ${CHANGELOG}
-
-          ---
-          *自动生成 by GitHub Actions + Codex Code Review*
+          **Changelog:** ${CHANGELOG}
           COMMENT_EOF
 
           gh issue comment "$PR_NUMBER" --body-file /tmp/comment.md
@@ -172,7 +183,7 @@ jobs:
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          CODEX_OUTPUT=$(cat /tmp/codex_output.txt)
+          CODEX_OUTPUT=$(cat /tmp/codex_raw.txt)
           VERDICT=$(echo "$CODEX_OUTPUT" | grep -oE 'VERDICT: (PASS|FAIL)' | tail -1 || true)
 
           if [ "$VERDICT" = "VERDICT: PASS" ]; then
