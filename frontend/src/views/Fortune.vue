@@ -308,25 +308,13 @@ const stopImagePolling = () => {
 const pollForImage = (fortuneId) => {
     imageLoading.value = true
     fortuneImageUrl.value = null
-    let attempts = 0
 
-    imagePollingTimer = setInterval(() => {
-        attempts++
-        const url = api.getFortuneImageUrl(fortuneId)
-        const img = new Image()
-        img.onload = () => {
-            fortuneImageUrl.value = url
-            imageLoading.value = false
-            stopImagePolling()
-        }
-        img.onerror = () => {
-            if (attempts >= 20) {
-                imageLoading.value = false
-                stopImagePolling()
-            }
-        }
-        img.src = url
-    }, 2000)
+    api.generateFortuneImage(fortuneId).then(() => {
+        fortuneImageUrl.value = api.getFortuneImageUrl(fortuneId)
+        imageLoading.value = false
+    }).catch(() => {
+        imageLoading.value = false
+    })
 }
 
 const getHistoryImageUrl = (fortuneId) => {
