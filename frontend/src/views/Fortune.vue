@@ -367,8 +367,13 @@ const toggleExpand = (id) => {
 
 // 加载今日签文和历史
 const loadData = async () => {
-    try {
-        const todayRes = await api.getTodayFortune()
+    const [todayResult, historyResult] = await Promise.allSettled([
+        api.getTodayFortune(),
+        api.getFortuneHistory(),
+    ])
+
+    if (todayResult.status === 'fulfilled') {
+        const todayRes = todayResult.value
         if (todayRes.data.drawn) {
             alreadyDrawn.value = true
             fortuneData.value = todayRes.data.data
@@ -380,18 +385,13 @@ const loadData = async () => {
                 pollForImage(todayRes.data.data.id)
             }
         }
-    } catch (e) {
-        console.error('加载今日签文失败:', e)
     }
 
-    try {
-        const historyRes = await api.getFortuneHistory()
-        historyRecords.value = historyRes.data.records || []
-    } catch (e) {
-        console.error('加载历史记录失败:', e)
-    } finally {
-        pageLoading.value = false
+    if (historyResult.status === 'fulfilled') {
+        historyRecords.value = historyResult.value.data.records || []
     }
+
+    pageLoading.value = false
 }
 
 onMounted(loadData)
