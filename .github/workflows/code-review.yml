@@ -96,6 +96,7 @@ jobs:
           model = "${{ env.AI_MODEL }}"
           model_provider = "proxy"
           sandbox = "danger-full-access"
+          reasoning_effort = "high"
 
           [model_providers.proxy]
           name = "Custom Proxy"
