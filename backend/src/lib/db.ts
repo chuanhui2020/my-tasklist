@@ -40,8 +40,13 @@ export function createDB(d1: D1Database, route: string) {
     try {
       return await fn(db)
     } catch (e) {
-      console.error(`[D1:${route}] ${label} failed:`, e)
-      throw new D1Error(route, label, e)
+      console.warn(`[D1:${route}] ${label} failed, retrying...`, e)
+      try {
+        return await fn(db)
+      } catch (e2) {
+        console.error(`[D1:${route}] ${label} retry failed:`, e2)
+        throw new D1Error(route, label, e2)
+      }
     }
   }
   return { db, query }
