@@ -152,7 +152,7 @@ export default {
   },
 
   generateFortuneImage(fortuneId) {
-    return api.post(`/fortune/${fortuneId}/generate-image`)
+    return api.post(`/fortune/${fortuneId}/generate-image`, null, { timeout: 120000 })
   },
 
   generateBmiAdvice(payload) {
