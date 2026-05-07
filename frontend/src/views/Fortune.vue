@@ -311,9 +311,21 @@ const pollForImage = (fortuneId) => {
 
     api.generateFortuneImage(fortuneId).then(() => {
         fortuneImageUrl.value = api.getFortuneImageUrl(fortuneId)
+        fortuneData.value.hasImage = true
         imageLoading.value = false
     }).catch(() => {
-        imageLoading.value = false
+        // Image may have been generated even if request errored
+        const url = api.getFortuneImageUrl(fortuneId)
+        const img = new Image()
+        img.onload = () => {
+            fortuneImageUrl.value = url
+            fortuneData.value.hasImage = true
+            imageLoading.value = false
+        }
+        img.onerror = () => {
+            imageLoading.value = false
+        }
+        img.src = url
     })
 }
 
