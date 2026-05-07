@@ -151,6 +151,10 @@ export default {
     return `${baseURL}/fortune/${fortuneId}/image?token=${token}`
   },
 
+  generateFortuneImage(fortuneId) {
+    return api.post(`/fortune/${fortuneId}/generate-image`)
+  },
+
   generateBmiAdvice(payload) {
     return api.post('/bmi/advice', payload)
   },

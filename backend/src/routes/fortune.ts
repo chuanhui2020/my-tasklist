@@ -284,32 +284,7 @@ fortuneRoutes.post('/generate', async (c) => {
     }).returning()
   )
 
-  c.executionCtx.waitUntil(
-    (async () => {
-      try {
-        const poem = (fortuneData.poem as string) || ''
-        if (!poem) return
-        const imagePrompt = buildImagePrompt(poem, fortuneType)
-        const imageBytes = await generateImage(c.env, imagePrompt)
-        if (!imageBytes) return
-
-        const r2Key = `fortune/${user.id}/${record.id}.png`
-        await c.env.IMAGES_BUCKET.put(r2Key, imageBytes, {
-          httpMetadata: { contentType: 'image/png' },
-        })
-
-        const { query: bgQuery } = createDB(c.env.DB, 'fortune')
-        await bgQuery('update fortune image key', (db) =>
-          db.update(fortuneRecords)
-            .set({ image_r2_key: r2Key })
-            .where(eq(fortuneRecords.id, record.id))
-        )
-      } catch (e) {
-        console.error('Fortune image generation failed:', e)
-      }
-    })()
-  )
-
+  // Image generation is handled by a separate endpoint
   return c.json({ success: true, data: fortuneToDict(record) })
 })
 
@@ -349,4 +324,49 @@ fortuneRoutes.get('/history', async (c) => {
   )
 
   return c.json({ records: records.map(fortuneToDict) })
+})
+
+// POST /:id/generate-image - trigger image generation separately
+fortuneRoutes.post('/:id/generate-image', async (c) => {
+  const user = c.get('user')
+  const id = parseInt(c.req.param('id'), 10)
+  const { query } = createDB(c.env.DB, 'fortune')
+
+  const [record] = await query('get fortune for image gen', (db) =>
+    db.select()
+      .from(fortuneRecords)
+      .where(and(eq(fortuneRecords.id, id), eq(fortuneRecords.user_id, user.id)))
+      .limit(1)
+  )
+
+  if (!record) {
+    return c.json({ error: '签文不存在' }, 404)
+  }
+
+  if (record.image_r2_key) {
+    return c.json({ success: true, hasImage: true })
+  }
+
+  if (!record.poem) {
+    return c.json({ error: '签诗为空' }, 400)
+  }
+
+  const imagePrompt = buildImagePrompt(record.poem, record.fortune_type)
+  const imageBytes = await generateImage(c.env, imagePrompt)
+  if (!imageBytes) {
+    return c.json({ error: '图片生成失败' }, 500)
+  }
+
+  const r2Key = `fortune/${user.id}/${record.id}.png`
+  await c.env.IMAGES_BUCKET.put(r2Key, imageBytes, {
+    httpMetadata: { contentType: 'image/png' },
+  })
+
+  await query('update fortune image key', (db) =>
+    db.update(fortuneRecords)
+      .set({ image_r2_key: r2Key })
+      .where(eq(fortuneRecords.id, record.id))
+  )
+
+  return c.json({ success: true, hasImage: true })
 })
