@@ -34,7 +34,7 @@ export async function generateImage(
   prompt: string,
   options: { size?: string; quality?: string } = {}
 ): Promise<Uint8Array | null> {
-  const { size = '1024x1024', quality = 'medium' } = options
+  const { size = '1024x1024', quality = 'low' } = options
 
   const response = await fetch(`${env.AI_BASE_URL}/v1/images/generations`, {
     method: 'POST',
