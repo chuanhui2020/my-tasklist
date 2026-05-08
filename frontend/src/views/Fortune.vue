@@ -457,7 +457,7 @@ const generateFortune = async (number) => {
 
 // 开始抽签
 const startFortune = async () => {
-    if (alreadyDrawn.value) return
+    if (alreadyDrawn.value || isShaking.value || isGenerating.value) return
 
     // 重置标志
     animationDone.value = false
