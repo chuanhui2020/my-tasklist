@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Env } from './types'
 import { D1Error } from './lib/db'
+import { drizzle } from 'drizzle-orm/d1'
+import { sql } from 'drizzle-orm'
 import { authRoutes } from './routes/auth'
 import { taskRoutes } from './routes/tasks'
 import { fortuneRoutes } from './routes/fortune'
@@ -54,4 +56,10 @@ app.notFound((c) => {
   return c.json({ error: 'Not Found' }, 404)
 })
 
-export default app
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: { DB: D1Database }) {
+    const db = drizzle(env.DB)
+    await db.run(sql`SELECT 1`)
+  },
+}

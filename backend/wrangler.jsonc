@@ -38,5 +38,8 @@
     "AI_BASE_URL": "https://api.ch-tools.org",
     "AI_MODEL": "gpt-5.5",
   },
+  "triggers": {
+    "crons": ["*/5 * * * *"],
+  },
   // SECRET_KEY, AI_API_KEY 通过 wrangler secret put 设置
 }
