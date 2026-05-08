@@ -1,5 +1,22 @@
 <template>
   <el-card class="tech-card life-progress-card" shadow="hover">
+    <!-- Weather Widget -->
+    <div v-if="weather" class="weather-widget">
+      <div class="weather-primary">
+        <span class="weather-icon" role="img" :aria-label="weather.desc">{{ weather.icon }}</span>
+        <span class="weather-temp">{{ weather.temp }}°C</span>
+        <span class="weather-desc">{{ weather.desc }}</span>
+        <span class="weather-city">{{ weather.city }}</span>
+      </div>
+      <div class="weather-secondary">
+        体感 {{ weather.feelsLike }}° · 湿度 {{ weather.humidity }}%
+      </div>
+    </div>
+    <div v-else-if="weatherLoading" class="weather-skeleton" aria-label="天气加载中">
+      <div class="skeleton-line skeleton-line-lg"></div>
+      <div class="skeleton-line skeleton-line-sm"></div>
+    </div>
+
     <div class="lp-header">
       <div class="lp-header-left">
         <div class="lp-title">
@@ -110,6 +127,71 @@ import { Odometer, Setting, MagicStick } from '@element-plus/icons-vue'
 import api from '@/api'
 
 const emit = defineEmits(['switch-mode'])
+
+// --- 天气 ---
+const weather = ref(null)
+const weatherLoading = ref(true)
+const WEATHER_CACHE_KEY = 'weather_cache'
+const WEATHER_CACHE_TTL = 30 * 60 * 1000
+
+const weatherIcons = {
+  113: '☀️', 116: '⛅', 119: '☁️', 122: '☁️',
+  143: '🌫️', 176: '🌦️', 200: '⛈️', 227: '❄️',
+  248: '🌫️', 260: '🌫️', 263: '🌦️', 266: '🌧️',
+  281: '🌧️', 284: '🌧️', 293: '🌧️', 296: '🌧️',
+  299: '🌧️', 302: '🌧️', 305: '🌧️', 308: '🌧️',
+  311: '🌧️', 314: '🌧️', 317: '🌧️', 320: '❄️',
+  323: '❄️', 326: '❄️', 329: '❄️', 332: '❄️',
+  335: '❄️', 338: '❄️', 350: '🌨️', 353: '🌦️',
+  356: '🌧️', 359: '🌧️', 362: '🌨️', 365: '🌨️',
+  368: '🌨️', 371: '❄️', 374: '🌨️', 377: '🌨️',
+  386: '⛈️', 389: '⛈️', 392: '⛈️', 395: '❄️',
+}
+
+async function loadWeather() {
+  const cached = localStorage.getItem(WEATHER_CACHE_KEY)
+  if (cached) {
+    try {
+      const { data, ts } = JSON.parse(cached)
+      if (Date.now() - ts < WEATHER_CACHE_TTL) {
+        weather.value = data
+        weatherLoading.value = false
+        return
+      }
+    } catch { /* invalid cache */ }
+  }
+
+  try {
+    let url = 'https://wttr.in/?format=j1'
+    if (navigator.geolocation) {
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+        })
+        url = `https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`
+      } catch { /* geolocation denied or timeout */ }
+    }
+
+    const res = await fetch(url)
+    const json = await res.json()
+    const current = json.current_condition[0]
+
+    weather.value = {
+      temp: current.temp_C,
+      desc: current.lang_zh?.[0]?.value || current.weatherDesc[0].value,
+      icon: weatherIcons[current.weatherCode] || '🌡️',
+      feelsLike: current.FeelsLikeC,
+      humidity: current.humidity,
+      city: json.nearest_area[0].areaName[0].value,
+    }
+
+    localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ data: weather.value, ts: Date.now() }))
+  } catch (e) {
+    console.error('Weather load failed:', e)
+  } finally {
+    weatherLoading.value = false
+  }
+}
 
 // --- 常量 ---
 const WORK_START = 9
@@ -590,6 +672,7 @@ function dismissAlert() {
 // --- 定时器 ---
 let timer = null
 onMounted(() => {
+  loadWeather()
   loadTodayMenu()
   timer = setInterval(() => {
     now.value = new Date()
@@ -643,6 +726,96 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Weather Widget */
+.weather-widget {
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: var(--bg-glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  min-height: 56px;
+}
+
+.weather-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.weather-temp {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.weather-city {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.weather-secondary {
+  margin-top: 4px;
+  padding-left: 32px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.weather-skeleton {
+  min-height: 56px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: var(--bg-glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+.skeleton-line {
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-line-lg {
+  height: 20px;
+  width: 60%;
+  margin-bottom: 6px;
+}
+
+.skeleton-line-sm {
+  height: 12px;
+  width: 45%;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
 .life-progress-card {
   border-radius: 24px !important;
   overflow: hidden;
