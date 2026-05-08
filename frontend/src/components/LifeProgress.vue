@@ -6,7 +6,7 @@
         <span class="weather-icon" role="img" :aria-label="weather.desc">{{ weather.icon }}</span>
         <span class="weather-temp">{{ weather.temp }}°C</span>
         <span class="weather-desc">{{ weather.desc }}</span>
-        <span class="weather-city">{{ weather.city }}</span>
+        <span class="weather-city" @click="showWeatherSetup = true" title="点击修改城市">{{ weather.city }}</span>
       </div>
       <div class="weather-secondary">
         体感 {{ weather.feelsLike }}° · 湿度 {{ weather.humidity }}%
@@ -16,6 +16,33 @@
       <div class="skeleton-line skeleton-line-lg"></div>
       <div class="skeleton-line skeleton-line-sm"></div>
     </div>
+    <div v-else-if="showWeatherSetup" class="weather-setup">
+      <div class="weather-setup-label">设置城市以显示天气</div>
+      <div class="weather-setup-row">
+        <input
+          v-model="weatherCityInput"
+          class="weather-city-input"
+          placeholder="输入城市名，如：深圳"
+          @keyup.enter="saveWeatherCity"
+        />
+        <button class="weather-city-btn" @click="saveWeatherCity">确定</button>
+      </div>
+    </div>
+
+    <Transition name="settings-slide">
+      <div v-if="showWeatherSetup && weather" class="weather-setup weather-setup-inline">
+        <div class="weather-setup-row">
+          <input
+            v-model="weatherCityInput"
+            class="weather-city-input"
+            placeholder="输入城市名，如：深圳"
+            @keyup.enter="saveWeatherCity"
+          />
+          <button class="weather-city-btn" @click="saveWeatherCity">确定</button>
+          <button class="weather-city-btn weather-city-cancel" @click="showWeatherSetup = false">取消</button>
+        </div>
+      </div>
+    </Transition>
 
     <div class="lp-header">
       <div class="lp-header-left">
@@ -131,6 +158,9 @@ const emit = defineEmits(['switch-mode'])
 // --- 天气 ---
 const weather = ref(null)
 const weatherLoading = ref(true)
+const weatherCity = ref(localStorage.getItem('weather_city') || '')
+const showWeatherSetup = ref(!weatherCity.value)
+const weatherCityInput = ref(weatherCity.value)
 const WEATHER_CACHE_KEY = 'weather_cache'
 const WEATHER_CACHE_TTL = 30 * 60 * 1000
 
@@ -148,7 +178,24 @@ const weatherIcons = {
   386: '⛈️', 389: '⛈️', 392: '⛈️', 395: '❄️',
 }
 
+function saveWeatherCity() {
+  const city = weatherCityInput.value.trim()
+  if (!city) return
+  weatherCity.value = city
+  localStorage.setItem('weather_city', city)
+  localStorage.removeItem(WEATHER_CACHE_KEY)
+  showWeatherSetup.value = false
+  weather.value = null
+  weatherLoading.value = true
+  loadWeather()
+}
+
 async function loadWeather() {
+  if (!weatherCity.value) {
+    weatherLoading.value = false
+    return
+  }
+
   const cached = localStorage.getItem(WEATHER_CACHE_KEY)
   if (cached) {
     try {
@@ -162,17 +209,7 @@ async function loadWeather() {
   }
 
   try {
-    let url = 'https://wttr.in/?format=j1'
-    if (navigator.geolocation) {
-      try {
-        const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
-        })
-        url = `https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`
-      } catch { /* geolocation denied or timeout */ }
-    }
-
-    const res = await fetch(url)
+    const res = await fetch(`https://wttr.in/${encodeURIComponent(weatherCity.value)}?format=j1`)
     const json = await res.json()
     const current = json.current_condition[0]
 
@@ -182,7 +219,7 @@ async function loadWeather() {
       icon: weatherIcons[current.weatherCode] || '🌡️',
       feelsLike: current.FeelsLikeC,
       humidity: current.humidity,
-      city: json.nearest_area[0].areaName[0].value,
+      city: weatherCity.value,
     }
 
     localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ data: weather.value, ts: Date.now() }))
@@ -764,6 +801,13 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--text-secondary);
   opacity: 0.7;
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 0.2s;
+}
+
+.weather-city:hover {
+  border-bottom-color: var(--text-secondary);
 }
 
 .weather-secondary {
@@ -814,6 +858,64 @@ onBeforeUnmount(() => {
     animation: none;
     background: rgba(255, 255, 255, 0.06);
   }
+}
+
+.weather-setup {
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: var(--bg-glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+.weather-setup-inline {
+  margin-top: -8px;
+}
+
+.weather-setup-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.weather-setup-row {
+  display: flex;
+  gap: 8px;
+}
+
+.weather-city-input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.weather-city-input:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.weather-city-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.weather-city-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.weather-city-cancel {
+  opacity: 0.6;
 }
 
 .life-progress-card {
