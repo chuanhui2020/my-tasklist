@@ -22,7 +22,7 @@
         <input
           v-model="weatherCityInput"
           class="weather-city-input"
-          placeholder="输入城市名，如：深圳"
+          placeholder="城市英文名，如：Shenzhen"
           @keyup.enter="saveWeatherCity"
         />
         <button class="weather-city-btn" @click="saveWeatherCity">确定</button>
@@ -35,7 +35,7 @@
           <input
             v-model="weatherCityInput"
             class="weather-city-input"
-            placeholder="输入城市名，如：深圳"
+            placeholder="城市英文名，如：Shenzhen"
             @keyup.enter="saveWeatherCity"
           />
           <button class="weather-city-btn" @click="saveWeatherCity">确定</button>
