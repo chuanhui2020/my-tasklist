@@ -19,11 +19,14 @@
     <div v-else-if="showWeatherSetup" class="weather-setup">
       <div class="weather-setup-label">设置城市以显示天气</div>
       <div class="weather-setup-row">
-        <input
+        <el-autocomplete
           v-model="weatherCityInput"
-          class="weather-city-input"
-          placeholder="城市英文名，如：Shenzhen"
+          :fetch-suggestions="searchCity"
+          placeholder="输入城市名搜索"
+          class="weather-city-autocomplete"
+          @select="handleCitySelect"
           @keyup.enter="saveWeatherCity"
+          :trigger-on-focus="false"
         />
         <button class="weather-city-btn" @click="saveWeatherCity">确定</button>
       </div>
@@ -32,11 +35,14 @@
     <Transition name="settings-slide">
       <div v-if="showWeatherSetup && weather" class="weather-setup weather-setup-inline">
         <div class="weather-setup-row">
-          <input
+          <el-autocomplete
             v-model="weatherCityInput"
-            class="weather-city-input"
-            placeholder="城市英文名，如：Shenzhen"
+            :fetch-suggestions="searchCity"
+            placeholder="输入城市名搜索"
+            class="weather-city-autocomplete"
+            @select="handleCitySelect"
             @keyup.enter="saveWeatherCity"
+            :trigger-on-focus="false"
           />
           <button class="weather-city-btn" @click="saveWeatherCity">确定</button>
           <button class="weather-city-btn weather-city-cancel" @click="showWeatherSetup = false">取消</button>
@@ -163,6 +169,53 @@ const showWeatherSetup = ref(!weatherCity.value)
 const weatherCityInput = ref(weatherCity.value)
 const WEATHER_CACHE_KEY = 'weather_cache'
 const WEATHER_CACHE_TTL = 30 * 60 * 1000
+
+const CITY_LIST = [
+  { en: 'Beijing', zh: '北京' }, { en: 'Shanghai', zh: '上海' },
+  { en: 'Guangzhou', zh: '广州' }, { en: 'Shenzhen', zh: '深圳' },
+  { en: 'Hangzhou', zh: '杭州' }, { en: 'Chengdu', zh: '成都' },
+  { en: 'Nanjing', zh: '南京' }, { en: 'Wuhan', zh: '武汉' },
+  { en: 'Chongqing', zh: '重庆' }, { en: 'Tianjin', zh: '天津' },
+  { en: 'Suzhou', zh: '苏州' }, { en: 'Xian', zh: '西安' },
+  { en: 'Zhengzhou', zh: '郑州' }, { en: 'Changsha', zh: '长沙' },
+  { en: 'Dongguan', zh: '东莞' }, { en: 'Foshan', zh: '佛山' },
+  { en: 'Xiamen', zh: '厦门' }, { en: 'Qingdao', zh: '青岛' },
+  { en: 'Dalian', zh: '大连' }, { en: 'Ningbo', zh: '宁波' },
+  { en: 'Hefei', zh: '合肥' }, { en: 'Fuzhou', zh: '福州' },
+  { en: 'Kunming', zh: '昆明' }, { en: 'Harbin', zh: '哈尔滨' },
+  { en: 'Jinan', zh: '济南' }, { en: 'Shenyang', zh: '沈阳' },
+  { en: 'Changchun', zh: '长春' }, { en: 'Guiyang', zh: '贵阳' },
+  { en: 'Nanning', zh: '南宁' }, { en: 'Lanzhou', zh: '兰州' },
+  { en: 'Haikou', zh: '海口' }, { en: 'Zhuhai', zh: '珠海' },
+  { en: 'Wuxi', zh: '无锡' }, { en: 'Wenzhou', zh: '温州' },
+  { en: 'Nanchang', zh: '南昌' }, { en: 'Shijiazhuang', zh: '石家庄' },
+  { en: 'Taiyuan', zh: '太原' }, { en: 'Urumqi', zh: '乌鲁木齐' },
+  { en: 'Hohhot', zh: '呼和浩特' }, { en: 'Lhasa', zh: '拉萨' },
+  { en: 'Hong Kong', zh: '香港' }, { en: 'Macau', zh: '澳门' },
+  { en: 'Taipei', zh: '台北' },
+  { en: 'Singapore', zh: '新加坡' }, { en: 'Tokyo', zh: '东京' },
+  { en: 'Seoul', zh: '首尔' }, { en: 'Bangkok', zh: '曼谷' },
+  { en: 'London', zh: '伦敦' }, { en: 'New York', zh: '纽约' },
+  { en: 'Sydney', zh: '悉尼' }, { en: 'Dubai', zh: '迪拜' },
+  { en: 'Paris', zh: '巴黎' }, { en: 'Los Angeles', zh: '洛杉矶' },
+  { en: 'San Francisco', zh: '旧金山' }, { en: 'Vancouver', zh: '温哥华' },
+  { en: 'Toronto', zh: '多伦多' }, { en: 'Melbourne', zh: '墨尔本' },
+  { en: 'Kuala Lumpur', zh: '吉隆坡' }, { en: 'Jakarta', zh: '雅加达' },
+]
+
+function searchCity(query, cb) {
+  const q = query.toLowerCase()
+  const results = q
+    ? CITY_LIST.filter(c => c.en.toLowerCase().includes(q) || c.zh.includes(q))
+        .map(c => ({ value: c.en, label: `${c.zh} (${c.en})` }))
+    : []
+  cb(results)
+}
+
+function handleCitySelect(item) {
+  weatherCityInput.value = item.value
+  saveWeatherCity()
+}
 
 const weatherIcons = {
   113: '☀️', 116: '⛅', 119: '☁️', 122: '☁️',
@@ -883,20 +936,8 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-.weather-city-input {
+.weather-city-autocomplete {
   flex: 1;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.weather-city-input:focus {
-  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .weather-city-btn {
