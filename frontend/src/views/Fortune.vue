@@ -313,14 +313,17 @@ const pollForImage = (fortuneId) => {
         fortuneImageUrl.value = api.getFortuneImageUrl(fortuneId)
         fortuneData.value.hasImage = true
         imageLoading.value = false
+        const historyRecord = historyRecords.value.find(r => r.id === fortuneId)
+        if (historyRecord) historyRecord.hasImage = true
     }).catch(() => {
-        // Image may have been generated even if request errored
         const url = api.getFortuneImageUrl(fortuneId)
         const img = new Image()
         img.onload = () => {
             fortuneImageUrl.value = url
             fortuneData.value.hasImage = true
             imageLoading.value = false
+            const historyRecord = historyRecords.value.find(r => r.id === fortuneId)
+            if (historyRecord) historyRecord.hasImage = true
         }
         img.onerror = () => {
             imageLoading.value = false
