@@ -53,7 +53,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useCountdownAlert } from '@/composables/useCountdownAlert'
 import CountdownOverlay from '@/components/CountdownOverlay.vue'
-import { Promotion, List, AlarmClock, Lock, MagicStick, DataLine, Key, UserFilled, Dish } from '@element-plus/icons-vue'
+import { Promotion, List, AlarmClock, Lock, MagicStick, DataLine, Key, UserFilled, Dish, Wallet } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -74,9 +74,10 @@ const navLinks = [
 const adminLinks = [
   { to: '/admin/users', label: '用户管理', icon: UserFilled },
   { to: '/admin/menu', label: '菜单管理', icon: Dish },
+  { to: '/admin/finance', label: '财务管理', icon: Wallet },
 ]
 
-const routeOrder = ['/tasks', '/countdown', '/change-password', '/fortune', '/bmi', '/secure-notes', '/admin/users', '/admin/menu']
+const routeOrder = ['/tasks', '/countdown', '/change-password', '/fortune', '/bmi', '/secure-notes', '/admin/users', '/admin/menu', '/admin/finance']
 const transitionName = ref('fade')
 
 router.afterEach((to, from) => {

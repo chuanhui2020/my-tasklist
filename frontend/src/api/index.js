@@ -246,5 +246,66 @@ export default {
 
   dismissCountdown(id) {
     return api.patch(`/countdowns/${id}/dismiss`)
+  },
+
+  // Finance
+  getFinancePasswordStatus() {
+    return api.get('/finance/password/status')
+  },
+
+  setFinancePassword(data) {
+    return api.post('/finance/password/set', data)
+  },
+
+  verifyFinancePassword(data) {
+    return api.post('/finance/password/verify', data)
+  },
+
+  changeFinancePassword(data) {
+    return api.put('/finance/password/change', data)
+  },
+
+  getLoans(params = {}) {
+    return api.get('/finance/loans', { params })
+  },
+
+  getLoan(id) {
+    return api.get(`/finance/loans/${id}`)
+  },
+
+  createLoan(data) {
+    return api.post('/finance/loans', data)
+  },
+
+  updateLoan(id, data) {
+    return api.put(`/finance/loans/${id}`, data)
+  },
+
+  deleteLoan(id) {
+    return api.delete(`/finance/loans/${id}`)
+  },
+
+  settleLoan(id) {
+    return api.patch(`/finance/loans/${id}/settle`)
+  },
+
+  payLoan(id) {
+    return api.patch(`/finance/loans/${id}/pay`)
+  },
+
+  getLoanSchedule(id) {
+    return api.get(`/finance/loans/${id}/schedule`)
+  },
+
+  simulatePrepay(id, data) {
+    return api.post(`/finance/loans/${id}/prepay-simulate`, data)
+  },
+
+  getFinanceSummary() {
+    return api.get('/finance/summary')
+  },
+
+  exportFinance(format = 'csv') {
+    return api.get('/finance/export', { params: { format }, responseType: 'blob' })
   }
 }
