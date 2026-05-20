@@ -66,14 +66,15 @@ function generateSchedule(
 
 function getLoanSummary(loan: typeof loans.$inferSelect) {
   const schedule = generateSchedule(loan.principal, loan.annual_rate, loan.total_months, loan.repayment_method)
-  const currentPayment = schedule[loan.paid_months] || schedule[schedule.length - 1]
+  const safePaidMonths = Math.min(Math.max(0, loan.paid_months), schedule.length)
+  const currentPayment = schedule[safePaidMonths] || schedule[schedule.length - 1]
   const totalPayment = schedule.reduce((sum, s) => sum + s.payment, 0)
   const totalInterest = totalPayment - loan.principal
-  const paidItems = schedule.slice(0, loan.paid_months)
+  const paidItems = schedule.slice(0, safePaidMonths)
   const paidTotal = paidItems.reduce((sum, s) => sum + s.payment, 0)
   const paidInterest = paidItems.reduce((sum, s) => sum + s.interest, 0)
-  const remainingPrincipal = loan.paid_months > 0
-    ? schedule[loan.paid_months - 1].remaining
+  const remainingPrincipal = safePaidMonths > 0
+    ? schedule[safePaidMonths - 1].remaining
     : loan.principal
 
   return {
@@ -178,6 +179,13 @@ financeRoutes.get('/loans', async (c) => {
   const loanType = c.req.query('loan_type')
   const status = c.req.query('status')
 
+  if (loanType && !['mortgage', 'bank_loan'].includes(loanType)) {
+    return c.json({ error: '贷款类型无效，可选值：mortgage, bank_loan' }, 400)
+  }
+  if (status && !['active', 'settled'].includes(status)) {
+    return c.json({ error: '状态无效，可选值：active, settled' }, 400)
+  }
+
   const conditions = [eq(loans.user_id, user.id)]
   if (loanType) conditions.push(eq(loans.loan_type, loanType as 'mortgage' | 'bank_loan'))
   if (status) conditions.push(eq(loans.status, status as 'active' | 'settled'))
@@ -235,6 +243,11 @@ financeRoutes.post('/loans', async (c) => {
   }
   if (!body.start_date) return c.json({ error: '首次还款日不能为空' }, 400)
 
+  const paidMonths = body.paid_months || 0
+  if (paidMonths < 0 || paidMonths > body.total_months!) {
+    return c.json({ error: '已还期数不能超过总期数' }, 400)
+  }
+
   const [loan] = await query('create loan', (db) =>
     db.insert(loans).values({
       user_id: user.id,
@@ -246,7 +259,7 @@ financeRoutes.post('/loans', async (c) => {
       total_months: body.total_months!,
       repayment_method: body.repayment_method as 'equal_installment' | 'equal_principal',
       start_date: body.start_date!,
-      paid_months: body.paid_months || 0,
+      paid_months: paidMonths,
       notes: body.notes || '',
     }).returning()
   )
@@ -287,7 +300,13 @@ financeRoutes.put('/loans/:id', async (c) => {
     updates.repayment_method = body.repayment_method
   }
   if (body.start_date) updates.start_date = body.start_date
-  if (body.paid_months != null && body.paid_months >= 0) updates.paid_months = body.paid_months
+  if (body.paid_months != null && body.paid_months >= 0) {
+    const totalMonths = (updates.total_months as number) || existing.total_months
+    if (body.paid_months > totalMonths) {
+      return c.json({ error: '已还期数不能超过总期数' }, 400)
+    }
+    updates.paid_months = body.paid_months
+  }
   if (body.prepayment_total != null && body.prepayment_total >= 0) updates.prepayment_total = body.prepayment_total
   if (body.notes != null) updates.notes = body.notes
 
