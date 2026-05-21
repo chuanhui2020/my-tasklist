@@ -293,12 +293,8 @@ export default {
     return api.patch(`/finance/loans/${id}/pay`)
   },
 
-  getLoanSchedule(id) {
-    return api.get(`/finance/loans/${id}/schedule`)
-  },
-
-  simulatePrepay(id, data) {
-    return api.post(`/finance/loans/${id}/prepay-simulate`, data)
+  getEliminationPlan(data) {
+    return api.post('/finance/elimination-plan', data)
   },
 
   getFinanceSummary() {

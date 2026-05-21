@@ -10,85 +10,6 @@ export const financeRoutes = new Hono<Env>()
 financeRoutes.use('*', authMiddleware)
 financeRoutes.use('*', adminMiddleware)
 
-// --- Loan calculation utilities ---
-
-interface ScheduleItem {
-  month: number
-  payment: number
-  principal: number
-  interest: number
-  remaining: number
-}
-
-function generateSchedule(
-  totalPrincipal: number,
-  annualRate: number,
-  totalMonths: number,
-  method: 'equal_installment' | 'equal_principal'
-): ScheduleItem[] {
-  const r = annualRate / 100 / 12
-  const schedule: ScheduleItem[] = []
-  let remaining = totalPrincipal
-
-  if (method === 'equal_installment') {
-    const payment = r > 0
-      ? totalPrincipal * r * Math.pow(1 + r, totalMonths) / (Math.pow(1 + r, totalMonths) - 1)
-      : totalPrincipal / totalMonths
-    for (let k = 1; k <= totalMonths; k++) {
-      const interest = remaining * r
-      const principal = payment - interest
-      remaining = Math.max(0, remaining - principal)
-      schedule.push({
-        month: k,
-        payment: Math.round(payment * 100) / 100,
-        principal: Math.round(principal * 100) / 100,
-        interest: Math.round(interest * 100) / 100,
-        remaining: Math.round(remaining * 100) / 100,
-      })
-    }
-  } else {
-    const monthlyPrincipal = totalPrincipal / totalMonths
-    for (let k = 1; k <= totalMonths; k++) {
-      const interest = remaining * r
-      const payment = monthlyPrincipal + interest
-      remaining = Math.max(0, remaining - monthlyPrincipal)
-      schedule.push({
-        month: k,
-        payment: Math.round(payment * 100) / 100,
-        principal: Math.round(monthlyPrincipal * 100) / 100,
-        interest: Math.round(interest * 100) / 100,
-        remaining: Math.round(remaining * 100) / 100,
-      })
-    }
-  }
-  return schedule
-}
-
-function getLoanSummary(loan: typeof loans.$inferSelect) {
-  const schedule = generateSchedule(loan.principal, loan.annual_rate, loan.total_months, loan.repayment_method)
-  const safePaidMonths = Math.min(Math.max(0, loan.paid_months), schedule.length)
-  const currentPayment = schedule[safePaidMonths] || schedule[schedule.length - 1]
-  const totalPayment = schedule.reduce((sum, s) => sum + s.payment, 0)
-  const totalInterest = totalPayment - loan.principal
-  const paidItems = schedule.slice(0, safePaidMonths)
-  const paidTotal = paidItems.reduce((sum, s) => sum + s.payment, 0)
-  const paidInterest = paidItems.reduce((sum, s) => sum + s.interest, 0)
-  const remainingPrincipal = safePaidMonths > 0
-    ? schedule[safePaidMonths - 1].remaining
-    : loan.principal
-
-  return {
-    monthly_payment: currentPayment.payment,
-    remaining_principal: Math.round(remainingPrincipal * 100) / 100,
-    remaining_months: loan.total_months - loan.paid_months,
-    total_payment: Math.round(totalPayment * 100) / 100,
-    total_interest: Math.round(totalInterest * 100) / 100,
-    paid_total: Math.round(paidTotal * 100) / 100,
-    paid_interest: Math.round(paidInterest * 100) / 100,
-    progress: Math.round((loan.paid_months / loan.total_months) * 1000) / 10,
-  }
-}
-
 // --- Finance password endpoints ---
 
 financeRoutes.get('/password/status', async (c) => {
@@ -193,12 +114,7 @@ financeRoutes.get('/loans', async (c) => {
   const results = await query('list loans', (db) =>
     db.select().from(loans).where(and(...conditions))
   )
-
-  const loansWithSummary = results.map(loan => ({
-    ...loan,
-    ...getLoanSummary(loan),
-  }))
-  return c.json(loansWithSummary)
+  return c.json(results)
 })
 
 financeRoutes.get('/loans/:id', async (c) => {
@@ -211,7 +127,7 @@ financeRoutes.get('/loans/:id', async (c) => {
   )
   if (!loan) return c.json({ error: '贷款不存在' }, 404)
 
-  return c.json({ ...loan, ...getLoanSummary(loan) })
+  return c.json(loan)
 })
 
 financeRoutes.post('/loans', async (c) => {
@@ -221,12 +137,10 @@ financeRoutes.post('/loans', async (c) => {
     name?: string
     bank?: string
     loan_type?: string
-    principal?: number
+    remaining_balance?: number
+    monthly_payment?: number
+    remaining_months?: number
     annual_rate?: number
-    total_months?: number
-    repayment_method?: string
-    start_date?: string
-    paid_months?: number
     notes?: string
   }>()
 
@@ -235,18 +149,9 @@ financeRoutes.post('/loans', async (c) => {
   if (!body.loan_type || !['mortgage', 'bank_loan'].includes(body.loan_type)) {
     return c.json({ error: '贷款类型无效' }, 400)
   }
-  if (!body.principal || body.principal <= 0) return c.json({ error: '贷款金额必须大于0' }, 400)
-  if (body.annual_rate == null || body.annual_rate < 0) return c.json({ error: '利率不能为负' }, 400)
-  if (!body.total_months || body.total_months <= 0) return c.json({ error: '贷款期限必须大于0' }, 400)
-  if (!body.repayment_method || !['equal_installment', 'equal_principal'].includes(body.repayment_method)) {
-    return c.json({ error: '还款方式无效' }, 400)
-  }
-  if (!body.start_date) return c.json({ error: '首次还款日不能为空' }, 400)
-
-  const paidMonths = body.paid_months || 0
-  if (paidMonths < 0 || paidMonths > body.total_months!) {
-    return c.json({ error: '已还期数不能超过总期数' }, 400)
-  }
+  if (!body.remaining_balance || body.remaining_balance <= 0) return c.json({ error: '剩余金额必须大于0' }, 400)
+  if (!body.monthly_payment || body.monthly_payment <= 0) return c.json({ error: '每月应还必须大于0' }, 400)
+  if (!body.remaining_months || body.remaining_months <= 0) return c.json({ error: '剩余月份必须大于0' }, 400)
 
   const [loan] = await query('create loan', (db) =>
     db.insert(loans).values({
@@ -254,16 +159,14 @@ financeRoutes.post('/loans', async (c) => {
       name: body.name!.trim(),
       bank: body.bank!.trim(),
       loan_type: body.loan_type as 'mortgage' | 'bank_loan',
-      principal: body.principal!,
-      annual_rate: body.annual_rate!,
-      total_months: body.total_months!,
-      repayment_method: body.repayment_method as 'equal_installment' | 'equal_principal',
-      start_date: body.start_date!,
-      paid_months: paidMonths,
+      remaining_balance: body.remaining_balance!,
+      monthly_payment: body.monthly_payment!,
+      remaining_months: body.remaining_months!,
+      annual_rate: body.annual_rate || 0,
       notes: body.notes || '',
     }).returning()
   )
-  return c.json({ ...loan, ...getLoanSummary(loan) }, 201)
+  return c.json(loan, 201)
 })
 
 financeRoutes.put('/loans/:id', async (c) => {
@@ -274,13 +177,10 @@ financeRoutes.put('/loans/:id', async (c) => {
     name?: string
     bank?: string
     loan_type?: string
-    principal?: number
+    remaining_balance?: number
+    monthly_payment?: number
+    remaining_months?: number
     annual_rate?: number
-    total_months?: number
-    repayment_method?: string
-    start_date?: string
-    paid_months?: number
-    prepayment_total?: number
     notes?: string
   }>()
 
@@ -293,21 +193,10 @@ financeRoutes.put('/loans/:id', async (c) => {
   if (body.name?.trim()) updates.name = body.name.trim()
   if (body.bank?.trim()) updates.bank = body.bank.trim()
   if (body.loan_type && ['mortgage', 'bank_loan'].includes(body.loan_type)) updates.loan_type = body.loan_type
-  if (body.principal && body.principal > 0) updates.principal = body.principal
+  if (body.remaining_balance != null && body.remaining_balance > 0) updates.remaining_balance = body.remaining_balance
+  if (body.monthly_payment != null && body.monthly_payment > 0) updates.monthly_payment = body.monthly_payment
+  if (body.remaining_months != null && body.remaining_months > 0) updates.remaining_months = body.remaining_months
   if (body.annual_rate != null && body.annual_rate >= 0) updates.annual_rate = body.annual_rate
-  if (body.total_months && body.total_months > 0) updates.total_months = body.total_months
-  if (body.repayment_method && ['equal_installment', 'equal_principal'].includes(body.repayment_method)) {
-    updates.repayment_method = body.repayment_method
-  }
-  if (body.start_date) updates.start_date = body.start_date
-  if (body.paid_months != null && body.paid_months >= 0) {
-    const totalMonths = (updates.total_months as number) || existing.total_months
-    if (body.paid_months > totalMonths) {
-      return c.json({ error: '已还期数不能超过总期数' }, 400)
-    }
-    updates.paid_months = body.paid_months
-  }
-  if (body.prepayment_total != null && body.prepayment_total >= 0) updates.prepayment_total = body.prepayment_total
   if (body.notes != null) updates.notes = body.notes
 
   await query('update loan', (db) =>
@@ -317,7 +206,7 @@ financeRoutes.put('/loans/:id', async (c) => {
   const [updated] = await query('get updated loan', (db) =>
     db.select().from(loans).where(eq(loans.id, id)).limit(1)
   )
-  return c.json({ ...updated, ...getLoanSummary(updated) })
+  return c.json(updated)
 })
 
 financeRoutes.delete('/loans/:id', async (c) => {
@@ -345,7 +234,12 @@ financeRoutes.patch('/loans/:id/settle', async (c) => {
   if (!existing) return c.json({ error: '贷款不存在' }, 404)
 
   await query('settle loan', (db) =>
-    db.update(loans).set({ status: 'settled', paid_months: existing.total_months, updated_at: beijingDatetime() }).where(eq(loans.id, id))
+    db.update(loans).set({
+      status: 'settled',
+      remaining_balance: 0,
+      remaining_months: 0,
+      updated_at: beijingDatetime(),
+    }).where(eq(loans.id, id))
   )
   return c.json({ success: true })
 })
@@ -359,169 +253,205 @@ financeRoutes.patch('/loans/:id/pay', async (c) => {
     db.select().from(loans).where(and(eq(loans.id, id), eq(loans.user_id, user.id))).limit(1)
   )
   if (!existing) return c.json({ error: '贷款不存在' }, 404)
-  if (existing.paid_months >= existing.total_months) {
+  if (existing.remaining_months <= 0) {
     return c.json({ error: '已还清所有期数' }, 400)
   }
 
-  const newPaid = existing.paid_months + 1
-  const updates: Record<string, unknown> = { paid_months: newPaid, updated_at: beijingDatetime() }
-  if (newPaid >= existing.total_months) updates.status = 'settled'
+  const newBalance = Math.max(0, existing.remaining_balance - existing.monthly_payment)
+  const newMonths = existing.remaining_months - 1
+  const updates: Record<string, unknown> = {
+    remaining_balance: newBalance,
+    remaining_months: newMonths,
+    updated_at: beijingDatetime(),
+  }
+  if (newMonths <= 0) updates.status = 'settled'
 
   await query('pay loan', (db) => db.update(loans).set(updates).where(eq(loans.id, id)))
 
   const [updated] = await query('get updated loan', (db) =>
     db.select().from(loans).where(eq(loans.id, id)).limit(1)
   )
-  return c.json({ ...updated, ...getLoanSummary(updated) })
+  return c.json(updated)
 })
 
-// --- Schedule & simulation ---
+// --- Elimination plan simulation ---
 
-financeRoutes.get('/loans/:id/schedule', async (c) => {
+interface LoanState {
+  id: number
+  name: string
+  balance: number
+  monthly: number
+  rate: number
+}
+
+interface TimelineEntry {
+  month: number
+  total_remaining: number
+  extra_target: string
+  cleared: string[]
+}
+
+financeRoutes.post('/elimination-plan', async (c) => {
   const user = c.get('user')
   const { query } = createDB(c.env.DB, 'finance')
-  const id = parseInt(c.req.param('id'), 10)
+  const body = await c.req.json<{ extra_monthly?: number; strategy?: string }>()
 
-  const [loan] = await query('get loan', (db) =>
-    db.select().from(loans).where(and(eq(loans.id, id), eq(loans.user_id, user.id))).limit(1)
+  if (!body.extra_monthly || body.extra_monthly <= 0) {
+    return c.json({ error: '每月额外还款金额必须大于0' }, 400)
+  }
+  if (!body.strategy || !['avalanche', 'snowball'].includes(body.strategy)) {
+    return c.json({ error: '策略无效，可选值：avalanche, snowball' }, 400)
+  }
+
+  const activeLoans = await query('get active loans', (db) =>
+    db.select().from(loans).where(and(eq(loans.user_id, user.id), eq(loans.status, 'active')))
   )
-  if (!loan) return c.json({ error: '贷款不存在' }, 404)
 
-  const schedule = generateSchedule(loan.principal, loan.annual_rate, loan.total_months, loan.repayment_method)
-  const totalPayment = schedule.reduce((sum, s) => sum + s.payment, 0)
-  const totalInterest = totalPayment - loan.principal
+  if (activeLoans.length === 0) {
+    return c.json({ error: '没有进行中的贷款' }, 400)
+  }
+
+  const strategy = body.strategy as 'avalanche' | 'snowball'
+  const extraMonthly = body.extra_monthly
+
+  // Simulate with extra payments
+  const withExtra = simulate(activeLoans, extraMonthly, strategy)
+  // Simulate without extra (baseline)
+  const baseline = simulate(activeLoans, 0, strategy)
+
+  const totalInterestSaved = baseline.totalInterest - withExtra.totalInterest
 
   return c.json({
-    loan_id: loan.id,
-    loan_name: loan.name,
-    principal: loan.principal,
-    annual_rate: loan.annual_rate,
-    total_months: loan.total_months,
-    repayment_method: loan.repayment_method,
-    paid_months: loan.paid_months,
-    schedule,
-    total_payment: Math.round(totalPayment * 100) / 100,
-    total_interest: Math.round(totalInterest * 100) / 100,
-    interest_ratio: Math.round((totalInterest / totalPayment) * 1000) / 10,
-  })
-})
-
-financeRoutes.post('/loans/:id/prepay-simulate', async (c) => {
-  const user = c.get('user')
-  const { query } = createDB(c.env.DB, 'finance')
-  const id = parseInt(c.req.param('id'), 10)
-  const body = await c.req.json<{ amount?: number; mode?: 'shorten' | 'reduce' }>()
-
-  if (!body.amount || body.amount <= 0) return c.json({ error: '提前还款金额必须大于0' }, 400)
-  if (!body.mode || !['shorten', 'reduce'].includes(body.mode)) {
-    return c.json({ error: '模式无效，请选择 shorten 或 reduce' }, 400)
-  }
-
-  const [loan] = await query('get loan', (db) =>
-    db.select().from(loans).where(and(eq(loans.id, id), eq(loans.user_id, user.id))).limit(1)
-  )
-  if (!loan) return c.json({ error: '贷款不存在' }, 404)
-
-  const originalSchedule = generateSchedule(loan.principal, loan.annual_rate, loan.total_months, loan.repayment_method)
-  const remainingPrincipal = loan.paid_months > 0
-    ? originalSchedule[loan.paid_months - 1].remaining
-    : loan.principal
-
-  if (body.amount >= remainingPrincipal) {
-    return c.json({ error: '提前还款金额不能超过剩余本金' }, 400)
-  }
-
-  const newPrincipal = remainingPrincipal - body.amount
-  const r = loan.annual_rate / 100 / 12
-  const remainingMonths = loan.total_months - loan.paid_months
-
-  const originalRemaining = originalSchedule.slice(loan.paid_months)
-  const originalTotalPayment = originalRemaining.reduce((sum, s) => sum + s.payment, 0)
-  const originalTotalInterest = originalRemaining.reduce((sum, s) => sum + s.interest, 0)
-
-  let newSchedule: ScheduleItem[]
-  let newMonthlyPayment: number
-  let newRemainingMonths: number
-
-  if (body.mode === 'reduce') {
-    newRemainingMonths = remainingMonths
-    newSchedule = generateSchedule(newPrincipal, loan.annual_rate, newRemainingMonths, loan.repayment_method)
-    newMonthlyPayment = newSchedule[0].payment
-  } else {
-    if (loan.repayment_method === 'equal_installment') {
-      const currentPayment = originalSchedule[loan.paid_months].payment
-      newMonthlyPayment = currentPayment
-      if (r > 0) {
-        newRemainingMonths = Math.ceil(
-          -Math.log(1 - (newPrincipal * r) / currentPayment) / Math.log(1 + r)
-        )
-      } else {
-        newRemainingMonths = Math.ceil(newPrincipal / currentPayment)
+    strategy,
+    extra_monthly: extraMonthly,
+    total_months_to_free: withExtra.totalMonths,
+    baseline_months_to_free: baseline.totalMonths,
+    total_interest_saved: Math.round(totalInterestSaved * 100) / 100,
+    loans: withExtra.loanResults.map((l) => {
+      const base = baseline.loanResults.find((b) => b.id === l.id)
+      return {
+        ...l,
+        baseline_cleared_at_month: base?.cleared_at_month || 0,
       }
-    } else {
-      const currentMonthlyPrincipal = loan.principal / loan.total_months
-      newMonthlyPayment = currentMonthlyPrincipal + newPrincipal * r
-      newRemainingMonths = Math.ceil(newPrincipal / currentMonthlyPrincipal)
-    }
-    newSchedule = generateSchedule(newPrincipal, loan.annual_rate, newRemainingMonths, loan.repayment_method)
-  }
-
-  const newTotalPayment = newSchedule.reduce((sum, s) => sum + s.payment, 0)
-  const newTotalInterest = newSchedule.reduce((sum, s) => sum + s.interest, 0)
-  const savedInterest = originalTotalInterest - newTotalInterest
-
-  return c.json({
-    prepay_amount: body.amount,
-    mode: body.mode,
-    original: {
-      monthly_payment: originalSchedule[loan.paid_months]?.payment || 0,
-      remaining_months: remainingMonths,
-      total_interest: Math.round(originalTotalInterest * 100) / 100,
-      total_payment: Math.round(originalTotalPayment * 100) / 100,
-    },
-    after_prepay: {
-      monthly_payment: Math.round(newMonthlyPayment * 100) / 100,
-      remaining_months: newRemainingMonths,
-      total_interest: Math.round(newTotalInterest * 100) / 100,
-      total_payment: Math.round((newTotalPayment + body.amount) * 100) / 100,
-    },
-    saved_interest: Math.round(savedInterest * 100) / 100,
+    }),
+    timeline: withExtra.timeline,
   })
 })
 
-// --- Summary & export ---
+function selectTarget(active: LoanState[], strategy: 'avalanche' | 'snowball'): LoanState {
+  if (strategy === 'avalanche') {
+    return active.reduce((a, b) => (b.rate > a.rate || (b.rate === a.rate && b.balance < a.balance)) ? b : a)
+  }
+  return active.reduce((a, b) => (b.balance < a.balance || (b.balance === a.balance && b.rate > a.rate)) ? b : a)
+}
+
+function simulate(
+  activeLoans: (typeof loans.$inferSelect)[],
+  extraMonthly: number,
+  strategy: 'avalanche' | 'snowball'
+) {
+  const interestMap = new Map<number, number>()
+  const states: LoanState[] = activeLoans.map((l) => {
+    interestMap.set(l.id, 0)
+    return { id: l.id, name: l.name, balance: l.remaining_balance, monthly: l.monthly_payment, rate: l.annual_rate }
+  })
+
+  const loanResults: { id: number; name: string; cleared_at_month: number; interest_paid: number }[] = []
+  const timeline: TimelineEntry[] = []
+  let totalInterest = 0
+  let month = 0
+  let freedPayments = 0
+  const maxMonths = 600
+
+  while (states.some((s) => s.balance > 0) && month < maxMonths) {
+    month++
+    const cleared: string[] = []
+
+    for (const s of states) {
+      if (s.balance <= 0) continue
+      const monthlyInterest = s.balance * (s.rate / 100 / 12)
+      totalInterest += monthlyInterest
+      interestMap.set(s.id, (interestMap.get(s.id) || 0) + monthlyInterest)
+      s.balance = s.balance + monthlyInterest - s.monthly
+      if (s.balance <= 0) {
+        freedPayments += s.monthly
+        s.balance = 0
+        cleared.push(s.name)
+        loanResults.push({ id: s.id, name: s.name, cleared_at_month: month, interest_paid: 0 })
+      }
+    }
+
+    let remaining_extra = extraMonthly + freedPayments
+    while (remaining_extra > 0) {
+      const active = states.filter((s) => s.balance > 0)
+      if (active.length === 0) break
+
+      const target = selectTarget(active, strategy)
+      const applied = Math.min(remaining_extra, target.balance)
+      target.balance -= applied
+      remaining_extra -= applied
+
+      if (target.balance <= 0) {
+        target.balance = 0
+        if (!cleared.includes(target.name)) {
+          freedPayments += target.monthly
+          cleared.push(target.name)
+          loanResults.push({ id: target.id, name: target.name, cleared_at_month: month, interest_paid: 0 })
+        }
+      }
+    }
+
+    const totalRemaining = states.reduce((sum, s) => sum + s.balance, 0)
+    const active = states.filter((s) => s.balance > 0)
+    const targetName = active.length > 0 ? selectTarget(active, strategy).name : ''
+
+    if (cleared.length > 0 || month % 3 === 0 || totalRemaining <= 0) {
+      timeline.push({
+        month,
+        total_remaining: Math.round(totalRemaining * 100) / 100,
+        extra_target: targetName,
+        cleared,
+      })
+    }
+  }
+
+  for (const r of loanResults) {
+    r.interest_paid = Math.round((interestMap.get(r.id) || 0) * 100) / 100
+  }
+
+  return {
+    totalMonths: month,
+    totalInterest: Math.round(totalInterest * 100) / 100,
+    loanResults,
+    timeline,
+  }
+}
+
+// --- Summary ---
 
 financeRoutes.get('/summary', async (c) => {
   const user = c.get('user')
   const { query } = createDB(c.env.DB, 'finance')
 
-  const allLoans = await query('get all loans', (db) =>
-    db.select().from(loans).where(eq(loans.user_id, user.id))
+  const activeLoans = await query('get active loans', (db) =>
+    db.select().from(loans).where(and(eq(loans.user_id, user.id), eq(loans.status, 'active')))
+  )
+  const settledCount = await query('count settled', (db) =>
+    db.select().from(loans).where(and(eq(loans.user_id, user.id), eq(loans.status, 'settled')))
   )
 
-  const activeLoans = allLoans.filter(l => l.status === 'active')
-  let totalRemaining = 0
-  let totalMonthlyPayment = 0
-  let totalPaidAmount = 0
-  let totalPaidInterest = 0
-
-  for (const loan of activeLoans) {
-    const summary = getLoanSummary(loan)
-    totalRemaining += summary.remaining_principal
-    totalMonthlyPayment += summary.monthly_payment
-    totalPaidAmount += summary.paid_total
-    totalPaidInterest += summary.paid_interest
-  }
+  const totalRemaining = activeLoans.reduce((sum, l) => sum + l.remaining_balance, 0)
+  const monthlyPayment = activeLoans.reduce((sum, l) => sum + l.monthly_payment, 0)
 
   return c.json({
     total_remaining: Math.round(totalRemaining * 100) / 100,
-    monthly_payment: Math.round(totalMonthlyPayment * 100) / 100,
-    total_paid: Math.round(totalPaidAmount * 100) / 100,
-    total_paid_interest: Math.round(totalPaidInterest * 100) / 100,
+    monthly_payment: Math.round(monthlyPayment * 100) / 100,
     active_count: activeLoans.length,
-    settled_count: allLoans.length - activeLoans.length,
+    settled_count: settledCount.length,
   })
 })
+
+// --- Export ---
 
 financeRoutes.get('/export', async (c) => {
   const user = c.get('user')
@@ -533,29 +463,22 @@ financeRoutes.get('/export', async (c) => {
   )
 
   if (format === 'json') {
-    const data = allLoans.map(loan => ({ ...loan, ...getLoanSummary(loan) }))
-    return c.json(data)
+    return c.json(allLoans)
   }
 
-  const headers = ['名称', '银行', '类型', '本金', '年利率(%)', '期限(月)', '还款方式', '首次还款日', '已还期数', '月供', '剩余本金', '剩余期数', '状态', '备注']
-  const rows = allLoans.map(loan => {
-    const summary = getLoanSummary(loan)
+  const headers = ['名称', '银行', '类型', '剩余金额', '每月应还', '剩余月份', '年利率(%)', '状态', '备注']
+  const rows = allLoans.map((loan) => {
     return [
       loan.name,
       loan.bank,
       loan.loan_type === 'mortgage' ? '房贷' : '银行贷款',
-      loan.principal.toString(),
+      loan.remaining_balance.toString(),
+      loan.monthly_payment.toString(),
+      loan.remaining_months.toString(),
       loan.annual_rate.toString(),
-      loan.total_months.toString(),
-      loan.repayment_method === 'equal_installment' ? '等额本息' : '等额本金',
-      loan.start_date,
-      loan.paid_months.toString(),
-      summary.monthly_payment.toString(),
-      summary.remaining_principal.toString(),
-      summary.remaining_months.toString(),
       loan.status === 'active' ? '进行中' : '已结清',
       loan.notes || '',
-    ].map(v => `"${v.replace(/"/g, '""')}"`).join(',')
+    ].map((v) => `"${v.replace(/"/g, '""')}"`).join(',')
   })
 
   const csv = '﻿' + headers.join(',') + '\n' + rows.join('\n')
