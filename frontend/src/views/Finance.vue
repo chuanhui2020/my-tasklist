@@ -11,7 +11,7 @@
           <div class="lock-icon" :class="{ unlocking: unlockingAnim }">
             <el-icon :size="60"><Lock v-if="!unlockingAnim" /><Unlock v-else /></el-icon>
           </div>
-          <h2 class="lock-title">贷款消除计划</h2>
+          <h2 class="lock-title">上岸计划</h2>
           <div v-if="!hasPassword" class="lock-form">
             <p class="lock-hint">首次使用，请设置财务密码</p>
             <el-input v-model="setForm.password" type="password" placeholder="设置密码（至少4位）" show-password size="large" class="lock-input" @keyup.enter="$refs.confirmInput?.focus()" />
@@ -34,7 +34,7 @@
 
     <div v-show="!locked" class="finance-main">
       <div class="finance-header">
-        <h1 class="finance-title">贷款消除计划</h1>
+        <h1 class="finance-title">上岸计划</h1>
         <div class="header-actions">
           <el-button plain size="small" @click="elimVisible = true">消除模拟</el-button>
           <el-button plain size="small" @click="handleExport">导出</el-button>
