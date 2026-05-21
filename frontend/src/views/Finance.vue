@@ -255,7 +255,7 @@ onMounted(async () => {
   try {
     const { data } = await api.getFinancePasswordStatus()
     hasPassword.value = data.hasPassword
-  } catch {}
+  } catch { /* ignored */ }
   await nextTick()
   passwordInput.value?.focus()
 })
@@ -278,7 +278,7 @@ async function handleSetPassword() {
     ElMessage.success('密码设置成功')
     verifyPwd.value = setForm.value.password
     await handleVerify()
-  } catch {}
+  } catch { /* ignored */ }
   finally { loading.value = false }
 }
 
@@ -303,7 +303,7 @@ async function handleChangePassword() {
     ElMessage.success('密码修改成功')
     changePwdVisible.value = false
     changePwdForm.value = { old_password: '', new_password: '' }
-  } catch {}
+  } catch { /* ignored */ }
   finally { changePwdLoading.value = false }
 }
 
@@ -312,7 +312,7 @@ async function fetchData() {
     const [loansRes, summaryRes] = await Promise.all([api.getLoans(), api.getFinanceSummary()])
     loanList.value = loansRes.data
     summary.value = summaryRes.data
-  } catch {}
+  } catch { /* ignored */ }
 }
 
 function openForm(loan = null) {
@@ -326,7 +326,7 @@ async function handlePay(loan) {
     await api.payLoan(loan.id)
     ElMessage.success('已记录')
     await fetchData()
-  } catch {}
+  } catch { /* ignored */ }
 }
 
 function handleMore(cmd, loan) {
@@ -341,7 +341,7 @@ async function handleSettle(loan) {
     await api.settleLoan(loan.id)
     ElMessage.success('已结清')
     await fetchData()
-  } catch {}
+  } catch { /* ignored */ }
 }
 
 async function handleDelete(loan) {
@@ -350,7 +350,7 @@ async function handleDelete(loan) {
     await api.deleteLoan(loan.id)
     ElMessage.success('已删除')
     await fetchData()
-  } catch {}
+  } catch { /* ignored */ }
 }
 
 async function handleExport() {
@@ -363,7 +363,7 @@ async function handleExport() {
     a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
-  } catch {}
+  } catch { /* ignored */ }
 }
 </script>
 
