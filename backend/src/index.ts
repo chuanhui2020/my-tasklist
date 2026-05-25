@@ -64,7 +64,7 @@ app.get('/api/debug/ai', authMiddleware, adminMiddleware, async (c) => {
       signal: controller.signal,
     })
     clearTimeout(timeout)
-    const data = await response.json<{ error?: { message?: string }; choices?: { message?: { content?: string } }[] }>()
+    const text = await response.text()
     const result: Record<string, unknown> = {
       ok: response.status === 200,
       status: response.status,
@@ -72,10 +72,15 @@ app.get('/api/debug/ai', authMiddleware, adminMiddleware, async (c) => {
       model: c.env.AI_MODEL,
       base_url: c.env.AI_BASE_URL,
     }
-    if (response.ok) {
-      result.reply = data.choices?.[0]?.message?.content ?? ''
-    } else {
-      result.error_message = data.error?.message ?? 'unknown error'
+    try {
+      const data = JSON.parse(text) as { error?: { message?: string }; choices?: { message?: { content?: string } }[] }
+      if (response.ok) {
+        result.reply = data.choices?.[0]?.message?.content ?? ''
+      } else {
+        result.error_message = data.error?.message ?? 'unknown error'
+      }
+    } catch {
+      result.error_message = text.slice(0, 200)
     }
     return c.json(result)
   } catch (e) {
