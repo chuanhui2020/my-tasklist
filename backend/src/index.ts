@@ -4,6 +4,7 @@ import type { Env } from './types'
 import { D1Error } from './lib/db'
 import { drizzle } from 'drizzle-orm/d1'
 import { sql } from 'drizzle-orm'
+import { authMiddleware, adminMiddleware } from './middleware/auth'
 import { authRoutes } from './routes/auth'
 import { taskRoutes } from './routes/tasks'
 import { fortuneRoutes } from './routes/fortune'
@@ -41,6 +42,42 @@ app.route('/api/finance', financeRoutes)
 // Health check
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', version: '1.2.0' })
+})
+
+// AI service diagnostic (admin only)
+app.get('/api/debug/ai', authMiddleware, adminMiddleware, async (c) => {
+  const start = Date.now()
+  try {
+    const response = await fetch(`${c.env.AI_BASE_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${c.env.AI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: c.env.AI_MODEL,
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 5,
+      }),
+    })
+    const text = await response.text()
+    return c.json({
+      ok: response.status === 200,
+      status: response.status,
+      latency_ms: Date.now() - start,
+      model: c.env.AI_MODEL,
+      base_url: c.env.AI_BASE_URL,
+      response: text.slice(0, 300),
+    })
+  } catch (e) {
+    return c.json({
+      ok: false,
+      latency_ms: Date.now() - start,
+      error: String(e),
+      model: c.env.AI_MODEL,
+      base_url: c.env.AI_BASE_URL,
+    }, 500)
+  }
 })
 
 // Global error handler
