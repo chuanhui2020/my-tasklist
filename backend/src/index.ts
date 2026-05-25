@@ -47,6 +47,8 @@ app.get('/api/health', (c) => {
 // AI service diagnostic (admin only)
 app.get('/api/debug/ai', authMiddleware, adminMiddleware, async (c) => {
   const start = Date.now()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10000)
   try {
     const response = await fetch(`${c.env.AI_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -59,21 +61,30 @@ app.get('/api/debug/ai', authMiddleware, adminMiddleware, async (c) => {
         messages: [{ role: 'user', content: 'hi' }],
         max_tokens: 5,
       }),
+      signal: controller.signal,
     })
-    const text = await response.text()
-    return c.json({
+    clearTimeout(timeout)
+    const data = await response.json<{ error?: { message?: string }; choices?: { message?: { content?: string } }[] }>()
+    const result: Record<string, unknown> = {
       ok: response.status === 200,
       status: response.status,
       latency_ms: Date.now() - start,
       model: c.env.AI_MODEL,
       base_url: c.env.AI_BASE_URL,
-      response: text.slice(0, 300),
-    })
+    }
+    if (response.ok) {
+      result.reply = data.choices?.[0]?.message?.content ?? ''
+    } else {
+      result.error_message = data.error?.message ?? 'unknown error'
+    }
+    return c.json(result)
   } catch (e) {
+    clearTimeout(timeout)
+    const msg = String(e).includes('abort') ? 'timeout (10s)' : String(e)
     return c.json({
       ok: false,
       latency_ms: Date.now() - start,
-      error: String(e),
+      error: msg,
       model: c.env.AI_MODEL,
       base_url: c.env.AI_BASE_URL,
     }, 500)
