@@ -32,15 +32,19 @@ export async function callAI(
 export async function generateImage(
   env: { AI_API_KEY: string; AI_BASE_URL: string; AI_IMAGE_BASE_URL?: string },
   prompt: string,
-  options: { size?: string; quality?: string; timeoutMs?: number; retries?: number } = {}
+  options: { size?: string; quality?: string; deadlineMs?: number; retries?: number } = {}
 ): Promise<Uint8Array | null> {
-  const { size = '1024x1024', quality = 'low', timeoutMs = 180000, retries = 1 } = options
+  const { size = '1024x1024', quality = 'low', deadlineMs = 190000, retries = 1 } = options
   // 生图走灰云直连域名，绕过 api.ch-tools.org 那层 Cloudflare 的 ~100s 边缘超时（524）
   const baseUrl = env.AI_IMAGE_BASE_URL || env.AI_BASE_URL
+  // 总时间预算：后端整体封顶 deadlineMs（<前端 210s），含重试，避免前后端超时不一致
+  const deadline = Date.now() + deadlineMs
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 5000) break // 预算耗尽 → 不再重试（这样重试只在快速失败后发生）
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const timer = setTimeout(() => controller.abort(), remaining)
     try {
       const response = await fetch(`${baseUrl}/v1/images/generations`, {
         method: 'POST',
