@@ -6,6 +6,7 @@ export type Env = {
     AI_API_KEY: string
     CORS_ORIGINS: string
     AI_BASE_URL: string
+    AI_IMAGE_BASE_URL: string
     AI_MODEL: string
   }
 }
