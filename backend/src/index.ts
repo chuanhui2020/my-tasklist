@@ -7,7 +7,8 @@ import { sql } from 'drizzle-orm'
 import { authMiddleware, adminMiddleware } from './middleware/auth'
 import { authRoutes } from './routes/auth'
 import { taskRoutes } from './routes/tasks'
-import { fortuneRoutes } from './routes/fortune'
+import { fortuneRoutes, processImageJob, markImageFailed } from './routes/fortune'
+import type { FortuneImageJob } from './types'
 import { bmiRoutes } from './routes/bmi'
 import { secureNotesRoutes } from './routes/secure-notes'
 import { countdownRoutes } from './routes/countdowns'
@@ -116,5 +117,23 @@ export default {
   async scheduled(_event: ScheduledEvent, env: { DB: D1Database }) {
     const db = drizzle(env.DB)
     await db.run(sql`SELECT 1`)
+  },
+  // Queue 消费者：生图任务在这里跑（15min wall-time，可安全等待 ~125s 的生图请求）
+  async queue(batch: MessageBatch<FortuneImageJob>, env: Env['Bindings']) {
+    for (const message of batch.messages) {
+      try {
+        await processImageJob(env, message.body)
+        message.ack()
+      } catch (e) {
+        console.error('queue image job failed:', String(e).slice(0, 200))
+        // 重试耗尽（attempts 从 1 计）则置 failed，避免永久卡在 generating
+        if (message.attempts >= 3) {
+          await markImageFailed(env, message.body)
+          message.ack()
+        } else {
+          message.retry()
+        }
+      }
+    }
   },
 }

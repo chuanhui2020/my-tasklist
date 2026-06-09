@@ -45,6 +45,7 @@ export const fortuneRecords = sqliteTable('fortune_records', {
   advice: text('advice').notNull(),
   work_fortune: text('work_fortune'),
   image_r2_key: text('image_r2_key'),
+  image_status: text('image_status'), // null/未开始, 'generating', 'done', 'failed'
   created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
