@@ -373,7 +373,18 @@ fortuneRoutes.post('/:id/generate-image', async (c) => {
     return c.json({ status: 'generating' }, 202)
   }
 
-  await c.env.FORTUNE_IMAGE_QUEUE.send({ recordId: record.id, userId: user.id })
+  try {
+    await c.env.FORTUNE_IMAGE_QUEUE.send({ recordId: record.id, userId: user.id })
+  } catch (e) {
+    // 入队失败：回滚占位，否则会永久卡在 generating 且无法重试
+    console.error('enqueue image job failed:', String(e).slice(0, 200))
+    await query('rollback image generating', (db) =>
+      db.update(fortuneRecords)
+        .set({ image_status: 'failed' })
+        .where(and(eq(fortuneRecords.id, record.id), sql`${fortuneRecords.image_r2_key} IS NULL`))
+    )
+    return c.json({ error: '生图任务入队失败，请重试' }, 503)
+  }
   return c.json({ status: 'generating' }, 202)
 })
 
