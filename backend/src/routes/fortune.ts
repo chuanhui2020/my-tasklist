@@ -441,7 +441,7 @@ export async function processImageJob(
   }
 
   const imagePrompt = buildImagePrompt(record.poem, record.fortune_type)
-  // 走灰云直连，无 100s 限制；retries:0，失败交给 Queue 重试机制
+  // 在 Queue 消费者中执行（15min wall-time，不受请求侧 100s 限制）；retries:0，失败交给 Queue 重试机制
   const imageBytes = await generateImage(env, imagePrompt, { deadlineMs: 280000, retries: 0 })
   if (!imageBytes) {
     // 抛异常 → Queue 重试；最终失败由 dead-letter 置 failed
