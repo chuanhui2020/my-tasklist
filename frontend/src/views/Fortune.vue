@@ -134,7 +134,7 @@
                                             <div class="loading-dots">
                                                 <span class="dot" v-for="i in 3" :key="i" :style="{ animationDelay: (i - 1) * 0.3 + 's' }"></span>
                                             </div>
-                                            <span class="loading-hint">画师正在绘制签图...（约 1-2 分钟）</span>
+                                            <span class="loading-hint">画师正在绘制签图...（约 3-4 分钟，请耐心等待）</span>
                                         </div>
                                     </div>
                                     <div v-else-if="imageFailed && !fortuneImageUrl" class="illustration-loading">
