@@ -332,8 +332,8 @@ const pollForImage = (fortuneId) => {
 
     const startedAt = Date.now()
     imagePollingTimer = setInterval(async () => {
-        // 最长等 5 分钟
-        if (Date.now() - startedAt > 300000) {
+        // 最长等 11 分钟（生图实测 ~200s，留足余量）
+        if (Date.now() - startedAt > 660000) {
             stopImagePolling()
             imageLoading.value = false
             imageFailed.value = true

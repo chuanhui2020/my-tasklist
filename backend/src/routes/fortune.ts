@@ -441,8 +441,9 @@ export async function processImageJob(
   }
 
   const imagePrompt = buildImagePrompt(record.poem, record.fortune_type)
-  // 在 Queue 消费者中执行（15min wall-time，不受请求侧 100s 限制）；retries:0，失败交给 Queue 重试机制
-  const imageBytes = await generateImage(env, imagePrompt, { deadlineMs: 280000, retries: 0 })
+  // 在 Queue 消费者中执行（15min wall-time）；deadline 600s 远大于生图实测 ~200s，
+  // 留足余量避免单次超时；retries:0，真失败交给 Queue 重试机制（避免单次内重复扣费）
+  const imageBytes = await generateImage(env, imagePrompt, { deadlineMs: 600000, retries: 0 })
   if (!imageBytes) {
     // 抛异常 → Queue 重试；最终失败由 dead-letter 置 failed
     throw new Error(`image generation returned null for record ${record.id}`)
