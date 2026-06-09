@@ -47,7 +47,7 @@
 
     <!-- 截止时间状态徽章 -->
     <div class="task-due" :class="`due-${dueStatus.level}`">
-      <el-icon class="due-icon"><component :is="dueStatus.icon" /></el-icon>
+      <el-icon class="due-icon"><component :is="dueIcon" /></el-icon>
       <span class="due-label">{{ dueStatus.label }}</span>
     </div>
 
