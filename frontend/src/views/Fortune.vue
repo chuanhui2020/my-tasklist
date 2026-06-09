@@ -350,7 +350,7 @@ const pollForImage = (fortuneId) => {
                 imageFailed.value = true
             }
             // 'generating' / 'none' → 继续轮询
-        } catch (e) {
+        } catch {
             // 网络抖动，继续轮询
         }
     }, 4000)
