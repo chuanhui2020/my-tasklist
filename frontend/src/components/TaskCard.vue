@@ -45,6 +45,12 @@
       </div>
     </div>
 
+    <!-- 截止时间状态徽章 -->
+    <div class="task-due" :class="`due-${dueStatus.level}`">
+      <el-icon class="due-icon"><component :is="dueStatus.icon" /></el-icon>
+      <span class="due-label">{{ dueStatus.label }}</span>
+    </div>
+
     <!-- 描述 -->
     <p v-if="task.description"
       ref="descRef"
@@ -98,9 +104,13 @@
 </template>
 
 <script>
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { Check, RefreshLeft, Edit, Delete } from '@element-plus/icons-vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { Check, RefreshLeft, Edit, Delete, CircleCheck, Minus, Warning, AlarmClock, Clock, Calendar } from '@element-plus/icons-vue'
 import api from '@/api'
+import { getDueStatus } from '@/utils/dueStatus'
+
+// 截止状态 level → 图标组件映射（与 dueStatus.js 的 icon 名对应）
+const DUE_ICONS = { CircleCheck, Minus, Warning, AlarmClock, Clock, Calendar }
 
 const PLACEHOLDERS = [
   '此处省略一万字 📖',
@@ -158,6 +168,9 @@ export default {
 
     const placeholder = PLACEHOLDERS[(props.task.id || 0) % PLACEHOLDERS.length]
 
+    const dueStatus = computed(() => getDueStatus(props.task))
+    const dueIcon = computed(() => DUE_ICONS[dueStatus.value.icon] || Calendar)
+
     const getImageUrl = (img) => {
       return api.getTaskImageUrl(props.task.id, img.id)
     }
@@ -177,6 +190,8 @@ export default {
       descRef,
       isTruncated,
       placeholder,
+      dueStatus,
+      dueIcon,
       getImageUrl,
       openImage
     }
@@ -273,6 +288,90 @@ export default {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
   border-color: var(--text-primary);
+}
+
+/* === Due-date status badge === */
+.task-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  /* tabular figures: 数字等宽，倒计时变化时不抖动 */
+  font-variant-numeric: tabular-nums;
+  width: fit-content;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.task-due .due-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* 已逾期：红色，最高警示 */
+.task-due.due-overdue {
+  color: #fca5a5;
+  background: rgba(220, 38, 38, 0.14);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+/* 今天到期：橙色 */
+.task-due.due-today {
+  color: #fdba74;
+  background: rgba(234, 88, 12, 0.14);
+  border-color: rgba(234, 88, 12, 0.32);
+}
+
+/* 3 天内：黄色 */
+.task-due.due-soon {
+  color: #fde047;
+  background: rgba(202, 138, 4, 0.14);
+  border-color: rgba(202, 138, 4, 0.30);
+}
+
+/* 一周内：青色（主色，中性偏提醒） */
+.task-due.due-upcoming {
+  color: #67e8f9;
+  background: rgba(6, 182, 212, 0.12);
+  border-color: rgba(6, 182, 212, 0.28);
+}
+
+/* 较远的未来：低饱和青灰，仅展示日期 */
+.task-due.due-future {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--glass-border);
+}
+
+/* 无期限：灰色，最弱 */
+.task-due.due-none {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--glass-border);
+}
+
+/* 已完成：淡化 */
+.task-due.due-done {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.10);
+  border-color: rgba(16, 185, 129, 0.24);
+}
+
+/* 已逾期徽章轻微脉冲，引起注意；尊重 reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  .task-due.due-overdue .due-icon {
+    animation: due-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes due-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 /* === Description === */

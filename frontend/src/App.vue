@@ -24,10 +24,23 @@
               <span></span><span></span><span></span>
             </button>
             <div v-if="mobileMenuOpen" class="mobile-backdrop" @click="mobileMenuOpen = false"></div>
-            <div class="user-box">
-              <span class="user-name">{{ authState.user?.username }}</span>
-              <el-button type="primary" plain size="small" class="logout-btn" @click="handleLogout">退出</el-button>
-            </div>
+            <el-dropdown trigger="click" class="user-dropdown" popper-class="user-dropdown-menu" @command="handleUserCommand">
+              <button class="user-trigger" aria-label="用户菜单">
+                <span class="user-avatar"><el-icon><UserFilled /></el-icon></span>
+                <span class="user-name">{{ authState.user?.username }}</span>
+                <el-icon class="user-caret"><ArrowDown /></el-icon>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="change-password">
+                    <el-icon><Lock /></el-icon>修改密码
+                  </el-dropdown-item>
+                  <el-dropdown-item command="logout" divided class="logout-item">
+                    <el-icon><SwitchButton /></el-icon>退出登录
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
           <div v-else class="nav-area">
             <el-button type="primary" size="small" @click="goLogin">登录</el-button>
@@ -53,7 +66,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useCountdownAlert } from '@/composables/useCountdownAlert'
 import CountdownOverlay from '@/components/CountdownOverlay.vue'
-import { Promotion, List, AlarmClock, Lock, MagicStick, DataLine, Key, UserFilled, Dish, Wallet } from '@element-plus/icons-vue'
+import { Promotion, List, AlarmClock, Lock, MagicStick, DataLine, Key, UserFilled, Dish, Wallet, ArrowDown, SwitchButton } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -65,7 +78,6 @@ const mobileMenuOpen = ref(false)
 const navLinks = [
   { to: '/tasks', label: '任务列表', icon: List },
   { to: '/countdown', label: '疯狂倒计时', icon: AlarmClock },
-  { to: '/change-password', label: '修改密码', icon: Lock },
   { to: '/fortune', label: '灵签占卜', icon: MagicStick },
   { to: '/bmi', label: 'BMI管理', icon: DataLine },
   { to: '/secure-notes', label: '密钥盒子', icon: Key },
@@ -77,7 +89,7 @@ const adminLinks = [
   { to: '/admin/finance', label: '财务管理', icon: Wallet },
 ]
 
-const routeOrder = ['/tasks', '/countdown', '/change-password', '/fortune', '/bmi', '/secure-notes', '/admin/users', '/admin/menu', '/admin/finance']
+const routeOrder = ['/tasks', '/countdown', '/fortune', '/bmi', '/secure-notes', '/admin/users', '/admin/menu', '/admin/finance']
 const transitionName = ref('fade')
 
 router.afterEach((to, from) => {
@@ -115,9 +127,13 @@ const goLogin = () => {
   router.push({ path: '/login', query: { redirect: route.fullPath } })
 }
 
-const handleLogout = () => {
-  clearAuth()
-  router.replace({ path: '/login', query: { redirect: '/' } })
+const handleUserCommand = (command) => {
+  if (command === 'change-password') {
+    router.push('/change-password')
+  } else if (command === 'logout') {
+    clearAuth()
+    router.replace({ path: '/login', query: { redirect: '/' } })
+  }
 }
 
 </script>
@@ -276,29 +292,67 @@ const handleLogout = () => {
   font-size: 12px;
 }
 
-.user-box {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  color: var(--text-primary);
+.user-dropdown {
   padding-left: 24px;
   border-left: 1px solid var(--glass-border);
+}
+
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  outline: none;
+}
+
+.user-trigger:hover,
+.user-trigger:focus-visible {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: var(--primary-color);
+}
+
+.user-trigger:focus-visible {
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.4);
+}
+
+.user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color, #8b5cf6));
+  color: #fff;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .user-name {
   font-weight: 600;
   font-size: 14px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.logout-btn {
-  background: transparent !important;
-  border: 1px solid var(--glass-border) !important;
-  color: var(--text-secondary) !important;
+.user-caret {
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
 }
 
-.logout-btn:hover {
-  border-color: var(--text-secondary) !important;
-  color: var(--text-primary) !important;
+.user-dropdown.is-opened .user-caret,
+.user-trigger[aria-expanded="true"] .user-caret {
+  transform: rotate(180deg);
 }
 
 /* Hamburger button */
@@ -481,18 +535,88 @@ const handleLogout = () => {
     margin: 8px 0;
   }
 
-  .user-box {
-    padding-left: 0;
-    border-left: none;
-    gap: 12px;
+  .user-trigger {
+    padding: 6px 8px;
   }
 
   .user-name {
     display: none;
   }
 
+  .user-caret {
+    display: none;
+  }
+
   .app-main {
     padding: 16px;
+  }
+}
+</style>
+
+<!-- 用户下拉菜单：el-dropdown 通过 teleport 挂到 body，需用非 scoped 样式 + popper-class 命中 -->
+<style>
+.user-dropdown-menu.el-popper {
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+}
+
+.user-dropdown-menu.el-popper .el-popper__arrow::before {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+}
+
+.user-dropdown-menu .el-dropdown-menu {
+  background: transparent;
+  padding: 0;
+}
+
+.user-dropdown-menu .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 14px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin: 2px 0;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.user-dropdown-menu .el-dropdown-menu__item .el-icon {
+  font-size: 16px;
+}
+
+.user-dropdown-menu .el-dropdown-menu__item:not(.is-disabled):hover,
+.user-dropdown-menu .el-dropdown-menu__item:not(.is-disabled):focus {
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--primary-color, #06b6d4);
+}
+
+.user-dropdown-menu .el-dropdown-menu__item--divided {
+  border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.user-dropdown-menu .el-dropdown-menu__item--divided::before {
+  display: none;
+}
+
+/* 退出登录用语义化危险色 */
+.user-dropdown-menu .el-dropdown-menu__item.logout-item:not(.is-disabled):hover,
+.user-dropdown-menu .el-dropdown-menu__item.logout-item:not(.is-disabled):focus {
+  background: rgba(220, 38, 38, 0.14);
+  color: #f87171;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .user-dropdown-menu .el-dropdown-menu__item {
+    transition: none;
   }
 }
 </style>

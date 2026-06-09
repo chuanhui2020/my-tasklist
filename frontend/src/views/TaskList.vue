@@ -477,9 +477,12 @@ export default {
           await api.deleteTask(task.id)
           Object.keys(taskCache).forEach(k => delete taskCache[k])
           ElMessage.success('任务已删除')
-          // If current page is now empty and not the first page, go back
+          // 删除成功后重刷任务列表：保证 total、分页、排序与服务端一致
+          // 若当前页删空且非首页，回退一页（watch 会触发 loadTasks），否则原页重刷
           if (tasks.value.length === 0 && currentPage.value > 1) {
             currentPage.value--
+          } else {
+            await loadTasks({ showSpinner: false })
           }
         } catch (error) {
           tasks.value = oldTasks
