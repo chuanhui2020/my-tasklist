@@ -212,6 +212,7 @@ function fortuneToDict(r: typeof fortuneRecords.$inferSelect) {
     advice,
     work_fortune: r.work_fortune,
     hasImage: !!r.image_r2_key,
+    imageStatus: r.image_r2_key ? 'done' : (r.image_status || null),
     created_at: r.created_at,
   }
 }
@@ -326,7 +327,7 @@ fortuneRoutes.get('/history', async (c) => {
   return c.json({ records: records.map(fortuneToDict) })
 })
 
-// POST /:id/generate-image - trigger image generation separately
+// POST /:id/generate-image - 异步触发：立即返回 202，后台生成（绕开请求侧 ~100s 限制）
 fortuneRoutes.post('/:id/generate-image', async (c) => {
   const user = c.get('user')
   const id = parseInt(c.req.param('id'), 10)
@@ -342,31 +343,70 @@ fortuneRoutes.post('/:id/generate-image', async (c) => {
   if (!record) {
     return c.json({ error: '签文不存在' }, 404)
   }
-
   if (record.image_r2_key) {
-    return c.json({ success: true, hasImage: true })
+    return c.json({ status: 'done', hasImage: true })
   }
-
   if (!record.poem) {
     return c.json({ error: '签诗为空' }, 400)
   }
-
-  const imagePrompt = buildImagePrompt(record.poem, record.fortune_type)
-  const imageBytes = await generateImage(c.env, imagePrompt)
-  if (!imageBytes) {
-    return c.json({ error: '图片生成失败' }, 500)
+  if (record.image_status === 'generating') {
+    return c.json({ status: 'generating' }, 202) // 已在生成中，避免重复调用/重复扣费
   }
 
-  const r2Key = `fortune/${user.id}/${record.id}.png`
-  await c.env.IMAGES_BUCKET.put(r2Key, imageBytes, {
-    httpMetadata: { contentType: 'image/png' },
-  })
-
-  await query('update fortune image key', (db) =>
+  await query('mark image generating', (db) =>
     db.update(fortuneRecords)
-      .set({ image_r2_key: r2Key })
+      .set({ image_status: 'generating' })
       .where(eq(fortuneRecords.id, record.id))
   )
 
-  return c.json({ success: true, hasImage: true })
+  // 后台生成，不阻塞响应；waitUntil 保证客户端断开后仍能跑完并存图
+  c.executionCtx.waitUntil((async () => {
+    try {
+      const imagePrompt = buildImagePrompt(record.poem, record.fortune_type)
+      // 走灰云直连、无 100s 限制；retries:0 避免失败时重复扣费（由用户手动重试）
+      const imageBytes = await generateImage(c.env, imagePrompt, { deadlineMs: 280000, retries: 0 })
+      if (!imageBytes) {
+        await query('mark image failed', (db) =>
+          db.update(fortuneRecords).set({ image_status: 'failed' }).where(eq(fortuneRecords.id, record.id))
+        )
+        return
+      }
+      const r2Key = `fortune/${user.id}/${record.id}.png`
+      await c.env.IMAGES_BUCKET.put(r2Key, imageBytes, { httpMetadata: { contentType: 'image/png' } })
+      await query('update fortune image key', (db) =>
+        db.update(fortuneRecords)
+          .set({ image_r2_key: r2Key, image_status: 'done' })
+          .where(eq(fortuneRecords.id, record.id))
+      )
+    } catch (e) {
+      console.error('background image gen failed:', String(e).slice(0, 200))
+      await query('mark image failed (exc)', (db) =>
+        db.update(fortuneRecords).set({ image_status: 'failed' }).where(eq(fortuneRecords.id, record.id))
+      )
+    }
+  })())
+
+  return c.json({ status: 'generating' }, 202)
+})
+
+// GET /:id/image-status - 前端轮询图片生成状态
+fortuneRoutes.get('/:id/image-status', async (c) => {
+  const user = c.get('user')
+  const id = parseInt(c.req.param('id'), 10)
+  const { query } = createDB(c.env.DB, 'fortune')
+
+  const [record] = await query('get image status', (db) =>
+    db.select({ image_r2_key: fortuneRecords.image_r2_key, image_status: fortuneRecords.image_status })
+      .from(fortuneRecords)
+      .where(and(eq(fortuneRecords.id, id), eq(fortuneRecords.user_id, user.id)))
+      .limit(1)
+  )
+
+  if (!record) {
+    return c.json({ error: '签文不存在' }, 404)
+  }
+  return c.json({
+    hasImage: !!record.image_r2_key,
+    status: record.image_r2_key ? 'done' : (record.image_status || 'none'),
+  })
 })

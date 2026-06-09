@@ -127,14 +127,19 @@
                                 </div>
 
                                 <!-- 签图 -->
-                                <div class="result-illustration" v-if="fortuneImageUrl || imageLoading">
+                                <div class="result-illustration" v-if="fortuneImageUrl || imageLoading || imageFailed">
                                     <div class="illustration-title">【签图】</div>
                                     <div v-if="imageLoading && !fortuneImageUrl" class="illustration-loading">
                                         <div class="illustration-placeholder">
                                             <div class="loading-dots">
                                                 <span class="dot" v-for="i in 3" :key="i" :style="{ animationDelay: (i - 1) * 0.3 + 's' }"></span>
                                             </div>
-                                            <span class="loading-hint">画师正在绘制签图...</span>
+                                            <span class="loading-hint">画师正在绘制签图...（约 1-2 分钟）</span>
+                                        </div>
+                                    </div>
+                                    <div v-else-if="imageFailed && !fortuneImageUrl" class="illustration-loading">
+                                        <div class="illustration-placeholder">
+                                            <span class="loading-hint">签图生成失败，<a class="retry-link" @click="retryImage">点击重试</a></span>
                                         </div>
                                     </div>
                                     <div v-if="fortuneImageUrl" class="illustration-image" @click="overlayImageUrl = fortuneImageUrl; showImageOverlay = true">
@@ -265,6 +270,7 @@ const historyRecords = ref([])
 // Image state
 const fortuneImageUrl = ref(null)
 const imageLoading = ref(false)
+const imageFailed = ref(false)
 const showImageOverlay = ref(false)
 const overlayImageUrl = ref('')
 let imagePollingTimer = null
@@ -306,30 +312,52 @@ const stopImagePolling = () => {
 }
 
 const pollForImage = (fortuneId) => {
+    stopImagePolling()
     imageLoading.value = true
+    imageFailed.value = false
     fortuneImageUrl.value = null
 
-    api.generateFortuneImage(fortuneId).then(() => {
+    // 触发后台生成（立即返回 202「生成中」，不阻塞）
+    api.generateFortuneImage(fortuneId).catch(() => {})
+
+    const markDone = () => {
         fortuneImageUrl.value = api.getFortuneImageUrl(fortuneId)
         fortuneData.value.hasImage = true
         imageLoading.value = false
+        imageFailed.value = false
         const historyRecord = historyRecords.value.find(r => r.id === fortuneId)
         if (historyRecord) historyRecord.hasImage = true
-    }).catch(() => {
-        const url = api.getFortuneImageUrl(fortuneId)
-        const img = new Image()
-        img.onload = () => {
-            fortuneImageUrl.value = url
-            fortuneData.value.hasImage = true
+        stopImagePolling()
+    }
+
+    const startedAt = Date.now()
+    imagePollingTimer = setInterval(async () => {
+        // 最长等 5 分钟
+        if (Date.now() - startedAt > 300000) {
+            stopImagePolling()
             imageLoading.value = false
-            const historyRecord = historyRecords.value.find(r => r.id === fortuneId)
-            if (historyRecord) historyRecord.hasImage = true
+            imageFailed.value = true
+            return
         }
-        img.onerror = () => {
-            imageLoading.value = false
+        try {
+            const res = await api.getFortuneImageStatus(fortuneId)
+            const { hasImage, status } = res.data || {}
+            if (hasImage) {
+                markDone()
+            } else if (status === 'failed') {
+                stopImagePolling()
+                imageLoading.value = false
+                imageFailed.value = true
+            }
+            // 'generating' / 'none' → 继续轮询
+        } catch (e) {
+            // 网络抖动，继续轮询
         }
-        img.src = url
-    })
+    }, 4000)
+}
+
+const retryImage = () => {
+    if (fortuneData.value?.id) pollForImage(fortuneData.value.id)
 }
 
 const getHistoryImageUrl = (fortuneId) => {
@@ -524,6 +552,7 @@ const reset = () => {
     fallingStickRotation.value = 0
     fortuneImageUrl.value = null
     imageLoading.value = false
+    imageFailed.value = false
     stopImagePolling()
 }
 </script>
@@ -1000,6 +1029,13 @@ const reset = () => {
     font-family: 'KaiTi', serif;
     font-size: 16px;
     opacity: 0.8;
+}
+
+.retry-link {
+    color: #FFD700;
+    text-decoration: underline;
+    cursor: pointer;
+    font-weight: bold;
 }
 
 .illustration-image {

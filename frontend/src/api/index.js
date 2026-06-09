@@ -152,7 +152,12 @@ export default {
   },
 
   generateFortuneImage(fortuneId) {
-    return api.post(`/fortune/${fortuneId}/generate-image`, null, { timeout: 210000 })
+    // 异步：立即返回 202「生成中」，无需长超时
+    return api.post(`/fortune/${fortuneId}/generate-image`, null, { timeout: 30000 })
+  },
+
+  getFortuneImageStatus(fortuneId) {
+    return api.get(`/fortune/${fortuneId}/image-status`, { _silent: true })
   },
 
   generateBmiAdvice(payload) {
