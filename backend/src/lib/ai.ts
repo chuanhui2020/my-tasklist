@@ -35,9 +35,10 @@ export async function generateImage(
   options: { size?: string; quality?: string; deadlineMs?: number; retries?: number } = {}
 ): Promise<Uint8Array | null> {
   const { size = '1024x1024', quality = 'low', deadlineMs = 190000, retries = 1 } = options
-  // 生图基址；AI_IMAGE_BASE_URL 可单独配置（如需绕过代理超时），默认与对话同源
+  // 生图走灰云直连域名（api-direct），绕过 api.ch-tools.org 橙云的 ~100s 边缘超时；
+  // 生图常达 ~200s，必须直连源站。消费者侧 15min wall-time 足够等待。
   const baseUrl = env.AI_IMAGE_BASE_URL || env.AI_BASE_URL
-  // 总时间预算：后端整体封顶 deadlineMs（<前端 210s），含重试，避免前后端超时不一致
+  // 总时间预算：单次生图整体封顶 deadlineMs（含重试）。生图常达 ~200s，调用方应传足够值
   const deadline = Date.now() + deadlineMs
 
   for (let attempt = 0; attempt <= retries; attempt++) {
