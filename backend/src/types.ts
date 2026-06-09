@@ -8,5 +8,11 @@ export type Env = {
     AI_BASE_URL: string
     AI_IMAGE_BASE_URL: string
     AI_MODEL: string
+    FORTUNE_IMAGE_QUEUE: Queue<FortuneImageJob>
   }
+}
+
+export type FortuneImageJob = {
+  recordId: number
+  userId: number
 }

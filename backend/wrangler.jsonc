@@ -42,5 +42,13 @@
   "triggers": {
     "crons": ["*/5 * * * *"],
   },
+  "queues": {
+    "producers": [
+      { "queue": "fortune-image-queue", "binding": "FORTUNE_IMAGE_QUEUE" },
+    ],
+    "consumers": [
+      { "queue": "fortune-image-queue", "max_batch_size": 1, "max_retries": 2, "max_concurrency": 3 },
+    ],
+  },
   // SECRET_KEY, AI_API_KEY 通过 wrangler secret put 设置
 }
