@@ -205,7 +205,8 @@ export default {
     return api.post('/menu/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
-      }
+      },
+      timeout: 185000  // 视觉识别（gpt-5.5 OCR）可达 ~170s，留出余量；与后端 170s deadline 对齐，让后端先报真实错误
     })
   },
 

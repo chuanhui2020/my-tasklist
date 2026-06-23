@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, desc } from 'drizzle-orm'
 import { weeklyMenus } from '../db/schema'
 import { authMiddleware, adminMiddleware } from '../middleware/auth'
-import { callAI } from '../lib/ai'
+import { callAI, AIError } from '../lib/ai'
 import { createDB, beijingNow } from '../lib/db'
 import type { Env } from '../types'
 
@@ -202,13 +202,16 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
           { type: 'text', text: MENU_USER_PROMPT },
         ],
       },
-    ], { temperature: 0, max_tokens: 2200 })
-  } catch {
-    return c.json({ error: '菜单识别失败，请检查模型配置或稍后重试' }, 503)
+      // direct=true：视觉识别走灰云直连，绕过橙云 ~100s 边缘超时（同占卜生图修复）
+    ], { temperature: 0, max_tokens: 2200, direct: true })
+  } catch (e) {
+    const detail = e instanceof AIError ? (e.detail || e.message) : String(e)
+    console.error('menu recognize failed:', detail)
+    return c.json({ error: '菜单识别失败，请检查模型配置或稍后重试', detail: String(detail).slice(0, 200) }, 503)
   }
 
   if (!content) {
-    return c.json({ error: '菜单识别失败，请检查模型配置或稍后重试' }, 503)
+    return c.json({ error: '菜单识别失败：AI 返回为空，请稍后重试' }, 503)
   }
 
   let menuPayload: Record<string, Record<string, unknown>>

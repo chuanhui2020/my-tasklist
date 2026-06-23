@@ -1,32 +1,58 @@
-export async function callAI(
-  env: { AI_API_KEY: string; AI_BASE_URL: string; AI_MODEL: string },
-  messages: { role: string; content: string | { type: string; [key: string]: unknown }[] }[],
-  options: { temperature?: number; max_tokens?: number } = {}
-): Promise<string> {
-  const { temperature = 0.7, max_tokens = 2000 } = options
-
-  const response = await fetch(`${env.AI_BASE_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.AI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: env.AI_MODEL,
-      messages,
-      temperature,
-      max_tokens,
-    }),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    console.error('AI API error:', response.status, text)
-    throw new Error(`AI API error: ${response.status}`)
+export class AIError extends Error {
+  status?: number
+  detail?: string
+  constructor(message: string, status?: number, detail?: string) {
+    super(message)
+    this.name = 'AIError'
+    this.status = status
+    this.detail = detail
   }
+}
 
-  const data = await response.json() as { choices: { message: { content: string } }[] }
-  return data.choices[0].message.content
+export async function callAI(
+  env: { AI_API_KEY: string; AI_BASE_URL: string; AI_IMAGE_BASE_URL?: string; AI_MODEL: string },
+  messages: { role: string; content: string | { type: string; [key: string]: unknown }[] }[],
+  options: { temperature?: number; max_tokens?: number; deadlineMs?: number; direct?: boolean } = {}
+): Promise<string> {
+  const { temperature = 0.7, max_tokens = 2000, deadlineMs = 170000, direct = false } = options
+  // direct=true 走灰云直连 api-direct（DNS-only，nginx proxy_read_timeout 180s），
+  // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（gpt-5.5 OCR）常 >100s，必须直连。
+  const baseUrl = direct ? (env.AI_IMAGE_BASE_URL || env.AI_BASE_URL) : env.AI_BASE_URL
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), deadlineMs)
+  try {
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.AI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: env.AI_MODEL,
+        messages,
+        temperature,
+        max_tokens,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      console.error('AI API error:', response.status, text.slice(0, 500))
+      throw new AIError(`AI API error: ${response.status}`, response.status, text.slice(0, 200))
+    }
+
+    const data = await response.json() as { choices: { message: { content: string } }[] }
+    return data.choices[0].message.content
+  } catch (e) {
+    if (e instanceof AIError) throw e
+    const aborted = String(e).toLowerCase().includes('abort')
+    console.error('AI API exception:', String(e).slice(0, 200))
+    throw new AIError(aborted ? `AI 超时（${Math.round(deadlineMs / 1000)}s）` : 'AI 调用异常', undefined, String(e).slice(0, 200))
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function generateImage(
