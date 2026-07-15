@@ -68,7 +68,7 @@
             <el-button type="primary" :disabled="todayWeightRecorded" @click="showWeightDialog">
               {{ todayWeightRecorded ? '今日已记录' : '📝 今日体重' }}
             </el-button>
-            <el-button @click="showBackfillDialog">📅 补录体重</el-button>
+            <el-button @click="showBackfillDialog">✏️ 修改体重</el-button>
           </div>
           <span class="form-note">BMI = 体重(kg) ÷ 身高(m)²</span>
         </div>
@@ -168,8 +168,8 @@
     <WeightAnalysis :history="analysisHistory" :bmi-level="bmiLevel" />
 
     <el-dialog v-model="weightDialogVisible" title="记录今日体重" width="420px" :close-on-click-modal="false">
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px">
-        每日体重仅可记录一次，记录后无法修改，请确认数据准确。
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
+        确认将当前体重记录为今日体重，记录后可通过「修改体重」随时调整。
       </el-alert>
       <div class="weight-confirm-value">
         当前体重: <strong>{{ form.weight }} kg</strong>
@@ -182,10 +182,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="backfillDialogVisible" title="补录体重" width="420px" :close-on-click-modal="false">
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px">
-        每日体重仅可记录一次，记录后无法修改，请确认数据准确。
-      </el-alert>
+    <el-dialog v-model="backfillDialogVisible" title="修改体重" width="420px" :close-on-click-modal="false">
       <el-form label-position="top">
         <el-form-item label="日期">
           <el-date-picker
@@ -196,16 +193,34 @@
             value-format="YYYY-MM-DD"
             :disabled-date="disableBackfillDate"
             style="width: 100%"
-          />
+            @change="onBackfillDateChange"
+          >
+            <template #default="cell">
+              <div class="wr-cell" :class="cellClass(cell)">
+                <span class="wr-cell-text">{{ cell.text }}</span>
+                <span class="wr-cell-dot"></span>
+              </div>
+            </template>
+          </el-date-picker>
+          <div class="wr-legend">
+            <span><i class="wr-dot has-record"></i>已记录</span>
+            <span><i class="wr-dot no-record"></i>未记录</span>
+          </div>
         </el-form-item>
         <el-form-item label="体重 (kg)">
           <el-input-number v-model="backfillWeight" :min="30" :max="200" :precision="1" :step="0.5" controls-position="right" style="width: 100%" />
         </el-form-item>
       </el-form>
+      <div v-if="backfillDate" class="wr-status" :class="selectedDateHasRecord ? 'is-update' : 'is-new'">
+        <el-icon v-if="selectedDateHasRecord"><EditPen /></el-icon>
+        <el-icon v-else><CirclePlus /></el-icon>
+        <span v-if="selectedDateHasRecord">该日已有记录 {{ selectedDateRecordWeight }} kg，保存后将覆盖</span>
+        <span v-else>该日尚未记录，保存后将新增</span>
+      </div>
       <template #footer>
         <el-button @click="backfillDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="recordingBackfill" @click="confirmBackfillWeight">
-          确认补录
+          保存
         </el-button>
       </template>
     </el-dialog>
@@ -215,7 +230,7 @@
 <script setup>
 import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { DataLine } from '@element-plus/icons-vue'
+import { DataLine, EditPen, CirclePlus } from '@element-plus/icons-vue'
 import api from '@/api'
 import WeightChart from '@/components/bmi/WeightChart.vue'
 import WeightAnalysis from '@/components/bmi/WeightAnalysis.vue'
@@ -499,10 +514,42 @@ const confirmRecordWeight = async () => {
   }
 }
 
-const showBackfillDialog = () => {
+// 已记录日期集合（用于日历特殊显示 + 判断新增/覆盖）
+const recordedDateSet = computed(() => new Set(analysisHistory.value.map(r => r.date)))
+
+const formatLocalDate = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const selectedDateHasRecord = computed(() =>
+  !!backfillDate.value && recordedDateSet.value.has(backfillDate.value)
+)
+
+const selectedDateRecordWeight = computed(() => {
+  const rec = analysisHistory.value.find(r => r.date === backfillDate.value)
+  return rec ? rec.weight : null
+})
+
+// 日历单元格样式：选中/今天 + 已记录(绿点)/未记录(空心橙点)
+const cellClass = (cell) => {
+  const classes = []
+  if (cell?.isCurrent) classes.push('is-current')
+  if (cell?.type === 'today') classes.push('is-today')
+  const d = cell?.date
+  if (d && !disableBackfillDate(d)) {
+    classes.push(recordedDateSet.value.has(formatLocalDate(d)) ? 'has-record' : 'no-record')
+  }
+  return classes
+}
+
+const showBackfillDialog = async () => {
   backfillDate.value = ''
   backfillWeight.value = form.weight
   backfillDialogVisible.value = true
+  await loadAnalysisHistory()
 }
 
 const disableBackfillDate = (d) => {
@@ -513,20 +560,29 @@ const disableBackfillDate = (d) => {
   return d > today || d < earliest
 }
 
+// 选中已记录的日期时，自动带出已有体重值方便修改
+const onBackfillDateChange = (val) => {
+  if (!val) return
+  const rec = analysisHistory.value.find(r => r.date === val)
+  if (rec) backfillWeight.value = rec.weight
+}
+
 const confirmBackfillWeight = async () => {
   if (!backfillDate.value) {
     ElMessage.warning('请选择日期')
     return
   }
+  const isUpdate = selectedDateHasRecord.value
   recordingBackfill.value = true
   try {
     await api.recordWeight({ weight: backfillWeight.value, date: backfillDate.value })
     backfillDialogVisible.value = false
-    ElMessage.success(`${backfillDate.value} 体重已补录`)
+    ElMessage.success(`${backfillDate.value} 体重已${isUpdate ? '更新' : '保存'}`)
     weightChartRef.value?.reload()
-    loadAnalysisHistory()
+    await loadAnalysisHistory()
+    checkTodayWeight()
   } catch (_e) {
-    // 409 already handled by global interceptor
+    // 错误已由全局拦截器处理
   } finally {
     recordingBackfill.value = false
   }
@@ -959,6 +1015,106 @@ const loadAnalysisHistory = async () => {
   font-size: 18px;
   padding: 20px 0;
   color: var(--text-primary);
+}
+
+/* 修改体重日历：单元格自定义内容（选中/今天需自行着色） */
+.wr-cell {
+  position: relative;
+  height: 30px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wr-cell-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  border-radius: 50%;
+}
+
+.wr-cell.is-today .wr-cell-text {
+  color: var(--el-color-primary);
+  font-weight: 700;
+}
+
+.wr-cell.is-current .wr-cell-text {
+  background: var(--el-color-primary);
+  color: #fff;
+}
+
+.wr-cell-dot {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.wr-cell.has-record .wr-cell-dot {
+  background: #10b981;
+}
+
+.wr-cell.no-record .wr-cell-dot {
+  border: 1px solid #f59e0b;
+}
+
+.wr-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wr-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wr-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.wr-dot.has-record {
+  background: #10b981;
+}
+
+.wr-dot.no-record {
+  border: 1px solid #f59e0b;
+}
+
+.wr-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.wr-status.is-update {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.wr-status.is-new {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
 }
 
 .guide-grid {

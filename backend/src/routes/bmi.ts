@@ -165,24 +165,28 @@ bmiRoutes.post('/weight', authMiddleware, async (c) => {
     }
     const earliest = new Date(beijingNow().getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     if (recordDate < earliest) {
-      return c.json({ error: '只能补录最近三个月的体重数据' }, 400)
+      return c.json({ error: '只能修改最近三个月的体重数据' }, 400)
     }
   }
 
-  const [existing] = await query('check duplicate weight', (db) =>
+  const [existing] = await query('check existing weight', (db) =>
     db.select().from(weightRecords)
       .where(and(eq(weightRecords.user_id, user.id), eq(weightRecords.date, recordDate)))
       .limit(1)
   )
-  if (existing) {
-    return c.json({ error: `${recordDate} 的体重已记录，无法修改` }, 409)
-  }
 
-  const [record] = await query('insert weight', (db) =>
-    db.insert(weightRecords).values({
-      user_id: user.id, weight, date: recordDate,
-    }).returning()
-  )
+  // 允许修改：已有记录则更新，否则新增（去掉每日仅可记录一次的限制）
+  const record = existing
+    ? (await query('update weight', (db) =>
+        db.update(weightRecords).set({ weight })
+          .where(and(eq(weightRecords.user_id, user.id), eq(weightRecords.date, recordDate)))
+          .returning()
+      ))[0]
+    : (await query('insert weight', (db) =>
+        db.insert(weightRecords).values({
+          user_id: user.id, weight, date: recordDate,
+        }).returning()
+      ))[0]
 
   if (recordDate === today) {
     try {
