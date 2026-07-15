@@ -22,11 +22,12 @@ Personal Task Management System - A full-stack edge-deployed web application.
        ├── Workers (后端 API)  ← api-tasklist.ch-tools.org
        │   ├── D1 (SQLite 数据库)
        │   ├── R2 (图片存储)
-       │   └── Container (Code Review 自动化)
+       │   ├── Queue (fortune-image-queue，占卜生图异步任务)
+       │   └── Cron (*/5 min，保活 D1)
        └── Workers Static Assets (前端 SPA)  ← tasklist.ch-tools.org
 ```
 
-全栈边缘部署，零服务器成本。前后端跨域（不同子域名），后端配置 CORS。
+全栈边缘部署，零服务器成本。前后端跨域（不同子域名），后端配置 CORS。Code Review 自动化已从 Cloudflare Container 迁移到 GitHub Actions（见下方「Git 工作流」）。
 
 **部署后端：**
 ```bash
@@ -38,12 +39,10 @@ npx wrangler deploy
 
 **管理 Secrets：**
 ```bash
-echo "value" | npx wrangler secret put SECRET_KEY
-echo "value" | npx wrangler secret put AI_API_KEY
-echo "value" | npx wrangler secret put GITHUB_TOKEN
-echo "value" | npx wrangler secret put GITHUB_WEBHOOK_SECRET
-echo "value" | npx wrangler secret put OPENAI_API_KEY
+echo "value" | npx wrangler secret put SECRET_KEY   # JWT 签名密钥
+echo "value" | npx wrangler secret put AI_API_KEY    # AI 服务密钥
 ```
+> Code Review 的 AI 密钥是 GitHub Actions Secret（`AI_API_KEY`），与 Worker 的 wrangler secret 相互独立。
 
 **D1 数据库操作：**
 ```bash
@@ -69,14 +68,13 @@ npx wrangler dev
 
 ```
 backend/
-├── wrangler.jsonc              # Workers 配置 + D1 binding + R2 binding + Container
+├── wrangler.jsonc              # Workers 配置 + D1/R2/Queue binding + Cron
 ├── package.json
 ├── tsconfig.json
 ├── drizzle.config.ts           # Drizzle 迁移配置
 ├── src/
-│   ├── index.ts                # Hono app 入口，路由注册，CORS
+│   ├── index.ts                # Hono app 入口，路由注册，CORS，scheduled(cron) + queue 消费者
 │   ├── types.ts                # Env 类型定义 (Bindings)
-│   ├── container.ts            # CodeReviewContainer (Durable Object + Container)
 │   ├── db/
 │   │   └── schema.ts           # Drizzle 表定义 (所有模型)
 │   ├── middleware/
@@ -84,23 +82,18 @@ backend/
 │   ├── routes/
 │   │   ├── auth.ts             # /api/auth/* - 登录、用户管理、改密码
 │   │   ├── tasks.ts            # /api/tasks/* - 任务 CRUD + 分页排序 + 图片上传/预览/删除
-│   │   ├── fortune.ts          # /api/fortune/* - AI 运势签文
-│   │   ├── bmi.ts              # /api/bmi/* - BMI + 体重记录 + AI 分析
+│   │   ├── fortune.ts          # /api/fortune/* - AI 运势签文 + 异步生图 (Queue)
+│   │   ├── bmi.ts              # /api/bmi/* - BMI + 体重记录(upsert) + AI 分析
 │   │   ├── secure-notes.ts     # /api/secure-notes/* - 加密笔记
 │   │   ├── countdowns.ts       # /api/countdowns/* - 倒计时提醒
 │   │   ├── menu.ts             # /api/menu/* - 菜单识别 (AI vision)
-│   │   └── github-webhook.ts   # /api/webhooks/github - GitHub Webhook (自动 Code Review)
+│   │   └── finance.ts          # /api/finance/* - 贷款管理 + 独立密码
 │   └── lib/
 │       ├── crypto.ts           # 密码哈希 (PBKDF2) + 笔记加密 (AES-GCM)
 │       ├── token.ts            # JWT 生成/验证 (jose)
 │       ├── ai.ts               # AI API 调用 (fetch)
-│       └── github.ts           # GitHub API 工具函数
-├── container/                  # Code Review Container (Node.js 运行时)
-├── drizzle/
-│   ├── 0000_initial.sql        # D1 初始化 SQL
-│   ├── 0001_task_images.sql    # 任务图片表迁移
-│   ├── 0002_last_login_at.sql  # 用户最近登录时间
-│   └── 0002_secure_notes_description.sql  # 笔记描述字段
+│       └── db.ts               # createDB (drizzle + query 重试封装) + 北京时间助手 + D1Error
+├── drizzle/                    # D1 迁移 SQL (0000_initial.sql … 0008_fortune_image_status.sql)
 └── scripts/
     ├── export_data.py          # MySQL → JSON 导出 (迁移用)
     └── import-to-d1.ts         # JSON → D1 SQL 导入 (迁移用)
@@ -116,21 +109,25 @@ backend/
    - Current user via `c.get('user')` (Hono context variable)
 
 2. **Database Access:**
-   - Drizzle ORM with D1 driver: `const db = drizzle(c.env.DB)`
+   - 统一用 `createDB(c.env.DB, 'route')`（`lib/db.ts`）得到 `{ db, query }`
+   - `query('label', (db) => db.select()...)` 封装一次自动重试，二次失败抛 `D1Error`（由 `index.ts` 全局 `onError` 捕获）
+   - 北京时间助手：`beijingNow() / beijingDate() / beijingDatetime()`（业务按东八区取日期）
    - Schema 定义在 `src/db/schema.ts`
    - D1 基于 SQLite：无 ENUM（用 TEXT + Drizzle enum），日期存 TEXT (ISO 8601)
    - 无自动迁移，schema 变更需手动写 SQL 并执行
 
 3. **Models (`db/schema.ts`):**
-   - `users`: username, password_hash, role (admin/user), last_login_at
+   - `users`: username, password_hash, role (admin/user), last_login_at, token_invalid_before
    - `tasks`: title, description, status (pending/done), due_date, user_id
    - `taskImages`: task_id, user_id, r2_key, filename, mime_type, size, sort_order
    - `bmiProfiles`: gender, age, height, weight (per user, unique)
-   - `fortuneRecords`: fortune_number, fortune_type, type_text, poem, interpretation, advice, work_fortune
+   - `fortuneRecords`: fortune_number, fortune_type, type_text, poem, interpretation, advice, work_fortune, image_r2_key, image_status
    - `secureNotes`: title, description, encrypted_content, salt, password_hash
-   - `weightRecords`: weight, date (unique per user per date)
+   - `weightRecords`: weight, date (unique per user per date；写入为 upsert，同日再记录即更新)
    - `countdowns`: title, target_time, remind_before, remind_level, status
    - `weeklyMenus`: week_start, menu_json, uploaded_by
+   - `financePasswords`: 财务模块独立密码 (per user, unique)
+   - `loans`: name, bank, loan_type (mortgage/bank_loan), remaining_balance, monthly_payment, remaining_months, annual_rate, status
 
 4. **API Response Pattern:**
    - Success: `c.json({...})` or `c.json({...}, 201)`
@@ -204,13 +201,14 @@ frontend/src/
 
 **Backend (`backend/wrangler.jsonc`):**
 - `vars.CORS_ORIGINS`: Allowed frontend origins (comma-separated)
-- `vars.AI_BASE_URL`: AI service URL
+- `vars.AI_BASE_URL`: AI 服务地址（橙云网关）
+- `vars.AI_IMAGE_BASE_URL`: AI 生图直连地址（灰云直连，绕过 100s 超时）
 - `vars.AI_MODEL`: AI model name
-- Secrets (via `wrangler secret put`): `SECRET_KEY`, `AI_API_KEY`, `GITHUB_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `OPENAI_API_KEY`
+- Secrets (via `wrangler secret put`): `SECRET_KEY`, `AI_API_KEY`
 - D1 binding: `DB` → `tasklist_db`
 - R2 binding: `IMAGES_BUCKET` → `tasklist-images`
-- Durable Object binding: `CODE_REVIEW_CONTAINER` → `CodeReviewContainer`
-- Container: `CodeReviewContainer` (Node.js, Code Review 自动化)
+- Queue binding: `FORTUNE_IMAGE_QUEUE` → `fortune-image-queue`（占卜生图异步，producer + consumer）
+- Cron 触发器: `*/5 * * * *`（scheduled handler 跑 `SELECT 1` 保活 D1）
 
 **Frontend (`frontend/.env.production`):**
 - `VITE_API_BASE_URL`: API base URL (production: `https://api-tasklist.ch-tools.org/api`)
@@ -227,8 +225,8 @@ frontend/src/
 ```typescript
 // src/routes/your-feature.ts
 import { Hono } from 'hono'
-import { drizzle } from 'drizzle-orm/d1'
 import { authMiddleware } from '../middleware/auth'
+import { createDB } from '../lib/db'
 import type { Env } from '../types'
 
 export const yourRoutes = new Hono<Env>()
@@ -236,9 +234,9 @@ yourRoutes.use('*', authMiddleware)
 
 yourRoutes.get('/', async (c) => {
   const user = c.get('user')
-  const db = drizzle(c.env.DB)
-  // ... your logic
-  return c.json({ result: '...' })
+  const { query } = createDB(c.env.DB, 'your-feature')
+  const rows = await query('list items', (db) => db.select().from(/* table */))
+  return c.json({ result: rows })
 })
 ```
 
@@ -279,18 +277,23 @@ app.route('/api/your-feature', yourRoutes)
 
 ## Git 工作流：提交 → Review → 修复
 
-本项目配置了自动 Code Review 流程，每次 push 到 dev 分支后会自动触发。提交代码后必须遵循以下流程：
+自动 Code Review 由 **GitHub Actions**（`.github/workflows/code-review.yml`）驱动，push 到任意 **非 master/main** 分支即触发。Workflow 分三个 job 顺序执行：
 
-1. **提交并推送到 dev 分支**
-2. **等待 PR 自动创建**：webhook 会自动创建 dev→master 的 PR（如果没有 open 的）
-3. **等待 Review 完成**：轮询 PR 状态直到评论数增加（Codex AI Review 会发评论）
-4. **检查 Review 结果**：
-   - `VERDICT: PASS` → PR 会被自动合并（若自动合并失败需人工处理），同步本地 `git fetch origin master && git merge origin/master && git push origin dev`
-   - `VERDICT: FAIL` → PR 不会合并，需要修复后重新提交
-5. **修复 Review 问题**：
-   - FAIL 时的 critical issues：必须修复，否则 verdict 不会变为 PASS
-   - Warnings/Suggestions：PASS 时仍建议修复，提交新 commit 推送到 dev 会触发新一轮 review
-6. **重复步骤 3-5**，直到 PASS（自动合并依据是 verdict，不是 warning 数量）
+1. **lint** → 前端 `npm run lint` + 后端 `npm run lint`
+2. **build-check** → 前端 `npm run build` + 后端 `npm run typecheck`
+3. **code-review** →
+   - 查找/创建 `dev→master` PR（标题 `Auto PR: <branch>`）
+   - Codex CLI 审查 `git diff origin/master...HEAD`，按固定格式发 PR 评论并给出 `VERDICT: PASS|FAIL`
+   - **PASS** → `gh pr merge` 自动合并到 master（合并失败会留言提示人工处理）
+   - **FAIL** → 不合并，给 PR 打 `needs-fix` 标签
 
-轮询命令：`gh pr view <number> --json state,comments --jq '{state: .state, comment_count: (.comments | length)}'`
-查看评论：`gh api repos/chuanhui2020/my-tasklist/issues/<number>/comments --jq '.[<last_index>].body'`
+> 只有 lint、build-check 通过后才会跑 Codex review；所以本地 push 前先自查 `lint` / `build` / `typecheck` 可少走弯路。
+
+**提交代码后建议流程：**
+
+1. 提交并 push 到 `dev`
+2. 轮询最新 workflow run：`gh run list --branch dev --limit 1 --json status,conclusion,headSha`
+3. 查看 review 评论：`gh api repos/chuanhui2020/my-tasklist/issues/<PR号>/comments --jq '.[-1].body'`
+4. **PASS 合并后**同步本地：`git fetch origin master && git merge origin/master && git push origin dev`
+5. **FAIL** → 修复 critical 问题后再次 push，触发新一轮 review，直到 PASS
+6. **后端改动需手动部署**：`cd backend && npx wrangler deploy`（前端由 master push 自动部署，后端不会随合并自动上线）
