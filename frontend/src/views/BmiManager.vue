@@ -578,6 +578,10 @@ const confirmBackfillWeight = async () => {
     await api.recordWeight({ weight: backfillWeight.value, date: backfillDate.value })
     backfillDialogVisible.value = false
     ElMessage.success(`${backfillDate.value} 体重已${isUpdate ? '更新' : '保存'}`)
+    // 修改的是今天：同步主表单体重，让 BMI/当前体重立即刷新（后端也已同步 profile）
+    if (backfillDate.value === formatLocalDate(new Date())) {
+      form.weight = backfillWeight.value
+    }
     weightChartRef.value?.reload()
     await loadAnalysisHistory()
     checkTodayWeight()
