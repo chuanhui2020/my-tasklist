@@ -88,16 +88,21 @@ jobs:
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Run Codex review
+        id: codex
         timeout-minutes: 10
         env:
           OPENAI_API_KEY: ${{ secrets.AI_API_KEY }}
-          CODEX_SANDBOX_TYPE: danger-full-access
         run: |
           mkdir -p ~/.codex
           cat > ~/.codex/config.toml << 'TOML'
           model = "${{ env.AI_MODEL }}"
           model_provider = "proxy"
-          sandbox = "danger-full-access"
+          # 审查只需读代码 + git diff：沙箱设为 read-only，模型生成的命令不能写盘/联网，
+          # 避免仓库内容做提示注入后窃取 GH_TOKEN / OPENAI_API_KEY。
+          # （沙箱只约束模型生成的命令，codex 自身访问模型 API 不受影响）
+          sandbox = "read-only"
+          # 非交互 CI：审批一律拒绝，避免模型请求提权时卡住
+          approval_policy = "never"
           reasoning_effort = "high"
 
           [model_providers.proxy]
@@ -123,8 +128,8 @@ jobs:
           ===REVIEW_END===
           Use VERDICT: FAIL only for confirmed runtime errors or data loss bugs.'
 
-          # 0.147.0 已移除 exec 的 --full-auto；CI runner 本身是一次性隔离环境，用 bypass 等价替代
-          codex exec --dangerously-bypass-approvals-and-sandbox "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
+          # 0.147.0 已移除 exec 的 --full-auto，用显式 --sandbox 替代（与 config.toml 保持一致）
+          codex exec --sandbox read-only "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
 
           # 把原始输出打进 job log：失败时 codex_raw.txt 不落盘也不上传，报错会彻底丢失
           echo "===== codex raw output (tail 4000B) ====="
@@ -138,6 +143,8 @@ jobs:
             grep -B50 "VERDICT" /tmp/codex_raw.txt | grep -v "^exec\|^codex\|^ succeeded\|^--------\|^workdir\|^model\|^provider\|^approval\|^sandbox\|^reasoning\|^session\|^user" | tail -20 > /tmp/codex_output.txt
           else
             echo "Review 未能生成有效输出" > /tmp/codex_output.txt
+            # 标记失败，交给最后一步 fail job；不在这里 exit，否则评论/标签都不会执行
+            echo "review_failed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate changelog
@@ -200,3 +207,12 @@ jobs:
             gh label create "needs-fix" --color "d73a4a" --description "Review failed" 2>/dev/null || true
             gh issue edit "$PR_NUMBER" --add-label "needs-fix"
           fi
+
+      # review 完全没产出（CLI 报错、模型不可用等）属于流程故障，必须让 job 变红。
+      # 此前这种情况 job 仍是绿灯，只在 PR 上留个 needs-fix，导致 codex --full-auto
+      # 被上游移除后 review 静默失效了很久都没人察觉。
+      - name: Fail on empty review
+        if: steps.codex.outputs.review_failed == 'true'
+        run: |
+          echo "::error::Codex review 未产出有效输出，见 'Run Codex review' 步骤的 raw output"
+          exit 1
