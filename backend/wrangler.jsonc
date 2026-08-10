@@ -37,7 +37,7 @@
     "CORS_ORIGINS": "https://tasklist.ch-tools.org",
     "AI_BASE_URL": "https://api.ch-tools.org",
     "AI_IMAGE_BASE_URL": "https://api-direct.ch-tools.org",
-    "AI_MODEL": "gpt-5.5",
+    "AI_MODEL": "gpt-5.6",
   },
   "triggers": {
     "crons": ["*/5 * * * *"],
