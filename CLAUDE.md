@@ -289,6 +289,17 @@ app.route('/api/your-feature', yourRoutes)
 
 > 只有 lint、build-check 通过后才会跑 Codex review；所以本地 push 前先自查 `lint` / `build` / `typecheck` 可少走弯路。
 
+**Codex CLI 版本已锁死，不会自动升级。**
+
+`code-review.yml` 的 `npm install -g @openai/codex@<version>` 固定了版本。想升级就手动改那一行的版本号，但**升级前务必确认 `codex exec` 的参数没变** —— 2026-08 升到 `0.147.0` 时 `exec` 移除了 `--full-auto`，`codex exec` 直接报 `unexpected argument` 秒退，review 长期静默失效（当时未锁版本，每次自动装 latest）。
+
+配套的两道防线（改 workflow 时别拆掉）：
+
+- **空输出 = job 变红**：review 无有效输出时会走 `Fail on empty review` 步骤 `exit 1`。此前这种情况 job 仍是绿灯、只打 `needs-fix` 标签，故障要翻 PR 才看得见。该步骤**必须排在评论和打标签之后**，否则 PR 上不会留下任何线索。
+- **原始输出进日志**：`codex exec` 的 stdout/stderr 会 tail 进 job log。定位 review 失败先看这段，别猜。
+
+Codex 以 `--sandbox read-only` + `approval_policy = "never"` 运行：审查只需读代码和跑 `git diff`，不给写盘和联网权限，避免仓库内容做提示注入后窃取 `GH_TOKEN` / `OPENAI_API_KEY`。沙箱只约束模型生成的命令，codex 自身访问模型 API 不受影响。
+
 **提交代码后建议流程：**
 
 1. 提交并 push 到 `dev`
