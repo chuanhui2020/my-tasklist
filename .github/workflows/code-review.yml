@@ -123,7 +123,8 @@ jobs:
           ===REVIEW_END===
           Use VERDICT: FAIL only for confirmed runtime errors or data loss bugs.'
 
-          codex exec --full-auto "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
+          # 0.147.0 已移除 exec 的 --full-auto；CI runner 本身是一次性隔离环境，用 bypass 等价替代
+          codex exec --dangerously-bypass-approvals-and-sandbox "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
 
           # 把原始输出打进 job log：失败时 codex_raw.txt 不落盘也不上传，报错会彻底丢失
           echo "===== codex raw output (tail 4000B) ====="
