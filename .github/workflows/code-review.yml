@@ -69,7 +69,9 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          npm install -g @openai/codex
+          # 锁定版本：避免上游 breaking release 静默打断 review（0.147.0 = 2026-08-10 最新稳定版）
+          npm install -g @openai/codex@0.147.0
+          codex --version
 
       - name: Find or create PR
         id: pr
@@ -122,6 +124,11 @@ jobs:
           Use VERDICT: FAIL only for confirmed runtime errors or data loss bugs.'
 
           codex exec --full-auto "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
+
+          # 把原始输出打进 job log：失败时 codex_raw.txt 不落盘也不上传，报错会彻底丢失
+          echo "===== codex raw output (tail 4000B) ====="
+          tail -c 4000 /tmp/codex_raw.txt || echo "(codex_raw.txt 为空或不存在)"
+          echo "===== end codex raw output ====="
 
           # Extract content between markers (take the LAST block only)
           if grep -q "===REVIEW_START===" /tmp/codex_raw.txt; then
