@@ -16,7 +16,7 @@ export async function callAI(
 ): Promise<string> {
   const { temperature = 0.7, max_tokens = 2000, deadlineMs = 170000, direct = false } = options
   // direct=true 走灰云直连 api-direct（DNS-only，nginx proxy_read_timeout 180s），
-  // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（gpt-5.5 OCR）常 >100s，必须直连。
+  // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（gpt-5.6 OCR）常 >100s，必须直连。
   const baseUrl = direct ? (env.AI_IMAGE_BASE_URL || env.AI_BASE_URL) : env.AI_BASE_URL
 
   const controller = new AbortController()
