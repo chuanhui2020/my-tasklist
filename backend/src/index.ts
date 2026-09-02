@@ -60,7 +60,8 @@ app.get('/api/debug/ai', authMiddleware, adminMiddleware, async (c) => {
       body: JSON.stringify({
         model: c.env.AI_MODEL,
         messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 5,
+        // 推理模型下额度含推理 token，给 5 必然返回空内容、误判成「服务异常」
+        max_completion_tokens: 500,
       }),
       signal: controller.signal,
     })
@@ -74,9 +75,19 @@ app.get('/api/debug/ai', authMiddleware, adminMiddleware, async (c) => {
       base_url: c.env.AI_BASE_URL,
     }
     try {
-      const data = JSON.parse(text) as { error?: { message?: string }; choices?: { message?: { content?: string } }[] }
+      const data = JSON.parse(text) as {
+        error?: { message?: string }
+        model?: string
+        choices?: { message?: { content?: string }; finish_reason?: string }[]
+        usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } }
+      }
       if (response.ok) {
         result.reply = data.choices?.[0]?.message?.content ?? ''
+        // 网关对 AI_MODEL 别名的实际解析结果 + 推理 token 开销，排查识别故障时先看这两项
+        result.resolved_model = data.model ?? null
+        result.finish_reason = data.choices?.[0]?.finish_reason ?? null
+        result.completion_tokens = data.usage?.completion_tokens ?? null
+        result.reasoning_tokens = data.usage?.completion_tokens_details?.reasoning_tokens ?? null
       } else {
         result.error_message = data.error?.message ?? 'unknown error'
       }

@@ -12,12 +12,17 @@ export class AIError extends Error {
 export async function callAI(
   env: { AI_API_KEY: string; AI_BASE_URL: string; AI_IMAGE_BASE_URL?: string; AI_MODEL: string },
   messages: { role: string; content: string | { type: string; [key: string]: unknown }[] }[],
-  options: { temperature?: number; max_tokens?: number; deadlineMs?: number; direct?: boolean } = {}
+  options: { max_completion_tokens?: number; deadlineMs?: number; direct?: boolean; model?: string } = {}
 ): Promise<string> {
-  const { temperature = 0.7, max_tokens = 2000, deadlineMs = 170000, direct = false } = options
+  // gpt-5.x 是推理模型：
+  // - 只认 max_completion_tokens（max_tokens 已废弃且不兼容），且该额度是「推理 token + 可见输出」合计，
+  //   给少了会把预算全烧在推理上、content 返回空，所以各调用方要按「期望输出 + 推理余量」给值
+  // - 不支持 temperature，传了会被忽略或直接 400，故不再下发
+  const { max_completion_tokens = 4000, deadlineMs = 170000, direct = false, model } = options
   // direct=true 走灰云直连 api-direct（DNS-only，nginx proxy_read_timeout 180s），
   // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（gpt-5.6 OCR）常 >100s，必须直连。
   const baseUrl = direct ? (env.AI_IMAGE_BASE_URL || env.AI_BASE_URL) : env.AI_BASE_URL
+  const usedModel = model || env.AI_MODEL
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), deadlineMs)
@@ -29,10 +34,9 @@ export async function callAI(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: env.AI_MODEL,
+        model: usedModel,
         messages,
-        temperature,
-        max_tokens,
+        max_completion_tokens,
       }),
       signal: controller.signal,
     })
@@ -43,8 +47,23 @@ export async function callAI(
       throw new AIError(`AI API error: ${response.status}`, response.status, text.slice(0, 200))
     }
 
-    const data = await response.json() as { choices: { message: { content: string } }[] }
-    return data.choices[0].message.content
+    const data = await response.json() as {
+      choices?: { message?: { content?: string | null }; finish_reason?: string }[]
+      usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } }
+    }
+    const choice = data.choices?.[0]
+    const content = choice?.message?.content || ''
+    // 空内容/截断是推理模型典型故障（预算被推理吃光），把预算账单打进日志，省得靠猜
+    if (!content || choice?.finish_reason === 'length') {
+      console.warn('AI empty or truncated output:', JSON.stringify({
+        model: usedModel,
+        finish_reason: choice?.finish_reason,
+        max_completion_tokens,
+        completion_tokens: data.usage?.completion_tokens,
+        reasoning_tokens: data.usage?.completion_tokens_details?.reasoning_tokens,
+      }))
+    }
+    return content
   } catch (e) {
     if (e instanceof AIError) throw e
     const aborted = String(e).toLowerCase().includes('abort')
