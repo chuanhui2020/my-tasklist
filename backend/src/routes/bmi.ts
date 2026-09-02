@@ -90,7 +90,7 @@ bmiRoutes.post('/advice', async (c) => {
     const content = await callAI(c.env, [
       { role: 'system', content: '你是一位简洁的健康管理助手，输出必须是纯 JSON。' },
       { role: 'user', content: prompt },
-    ], { temperature: 0.5, max_tokens: 120 })
+    ], { max_completion_tokens: 2000 })
     advice = extractAdvice(content, fallback)
   } catch {
     advice = fallback
@@ -310,7 +310,7 @@ ${dataLines}
     const content = await callAI(c.env, [
       { role: 'system', content: '你是一位专业的健康管理顾问。输出必须是自然中文段落，不要 JSON，不要 Markdown，不要代码块。' },
       { role: 'user', content: prompt },
-    ], { temperature: 0.5, max_tokens: 800 })
+    ], { max_completion_tokens: 6000 })
 
     analysis = stripCodeFences(content) || fallback
   } catch {

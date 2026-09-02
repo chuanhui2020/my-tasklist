@@ -203,7 +203,8 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
         ],
       },
       // direct=true：视觉识别走灰云直连，绕过橙云 ~100s 边缘超时（同占卜生图修复）
-    ], { temperature: 0, max_tokens: 2200, direct: true })
+      // 16000：整周菜单 JSON 本身就近 2000 token，再叠加密集表格 OCR 的推理开销，给足余量避免截断
+    ], { max_completion_tokens: 16000, direct: true })
   } catch (e) {
     const detail = e instanceof AIError ? (e.detail || e.message) : String(e)
     console.error('menu recognize failed:', detail)
