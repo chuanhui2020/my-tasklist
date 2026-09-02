@@ -68,6 +68,54 @@
 
           <Transition name="expand">
             <div v-if="expandedWeek === menu.week_start" class="week-detail" @click.stop>
+              <!-- 工具栏：识别有误时的人工订正入口 -->
+              <div class="detail-toolbar">
+                <template v-if="editingId !== menu.id">
+                  <span class="toolbar-hint">AI 识别可能有误，可手动订正</span>
+                  <el-button size="small" text class="toolbar-btn" @click="startEdit(menu)">✎ 编辑</el-button>
+                </template>
+                <template v-else>
+                  <span class="toolbar-hint">改完点保存，留空的条目会被自动丢弃</span>
+                  <div class="toolbar-actions">
+                    <el-button size="small" text :disabled="saving" @click="cancelEdit">取消</el-button>
+                    <el-button size="small" type="primary" :loading="saving" @click="saveEdit(menu)">保存</el-button>
+                  </div>
+                </template>
+              </div>
+
+              <!-- 编辑态 -->
+              <template v-if="editingId === menu.id">
+                <div v-for="dayName in weekdays" :key="dayName" class="day-section">
+                  <div class="day-title">
+                    {{ dayName }}
+                    <span v-if="isDraftDayEmpty(dayName)" class="day-empty-tag">暂无安排</span>
+                  </div>
+                  <template v-if="!isDraftDayEmpty(dayName) || openedEmptyDays.includes(dayName)">
+                    <div v-for="group in draftGroups(dayName)" :key="group.key" class="edit-group">
+                      <div class="edit-group-title">{{ group.title }}</div>
+                      <div v-for="row in group.rows" :key="row.label" class="edit-row">
+                        <span class="edit-cat">{{ row.label }}</span>
+                        <div class="edit-items">
+                          <span v-for="(item, i) in row.items" :key="i" class="edit-chip" :class="{ fruit: group.key === '水果' }">
+                            <input
+                              v-model="row.items[i]"
+                              class="chip-input"
+                              :style="{ width: chipWidth(item) }"
+                              placeholder="菜名"
+                            />
+                            <button class="chip-del" type="button" @click="row.items.splice(i, 1)">✕</button>
+                          </span>
+                          <button class="chip-add" type="button" @click="row.items.push('')">+ 添加</button>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  <button v-else class="chip-add" type="button" @click="openedEmptyDays.push(dayName)">+ 添加安排</button>
+                </div>
+              </template>
+
+              <!-- 只读态 -->
+              <template v-else>
               <div v-for="dayName in weekdays" :key="dayName" class="day-section">
                 <div class="day-title">{{ dayName }}</div>
                 <div class="day-meals">
@@ -98,6 +146,7 @@
                   </div>
                 </div>
               </div>
+              </template>
             </div>
           </Transition>
         </div>
@@ -122,6 +171,13 @@ const uploading = ref(false)
 const menuList = ref([])
 const listLoading = ref(false)
 const expandedWeek = ref(null)
+
+// 人工订正状态：editDraft 是完整 7 天骨架的深拷贝，
+// 这样任何一天/任何分类都能直接加条目，空白的部分保存时由后端裁掉
+const editingId = ref(null)
+const editDraft = ref(null)
+const openedEmptyDays = ref([])
+const saving = ref(false)
 
 function handleFileChange(e) {
   const file = e.target.files?.[0]
@@ -165,7 +221,66 @@ async function loadMenuList() {
 }
 
 function toggleWeek(menu) {
+  // 编辑中不允许折叠，否则未保存的修改会被静默丢弃
+  if (editingId.value === menu.id) return
   expandedWeek.value = expandedWeek.value === menu.week_start ? null : menu.week_start
+}
+
+function startEdit(menu) {
+  const src = menu.menu || {}
+  const draft = { '午餐': {}, '水果': {}, '晚餐': {} }
+  for (const day of weekdays) {
+    for (const meal of ['午餐', '晚餐']) {
+      draft[meal][day] = {}
+      for (const cat of mealCategories) {
+        draft[meal][day][cat] = [...(src[meal]?.[day]?.[cat] || [])]
+      }
+    }
+    draft['水果'][day] = [...(src['水果']?.[day] || [])]
+  }
+  editDraft.value = draft
+  openedEmptyDays.value = []
+  editingId.value = menu.id
+}
+
+function cancelEdit() {
+  editingId.value = null
+  editDraft.value = null
+  openedEmptyDays.value = []
+}
+
+async function saveEdit(menu) {
+  saving.value = true
+  try {
+    await api.updateWeeklyMenu(menu.id, editDraft.value)
+    ElMessage.success('菜单已更新')
+    cancelEdit()
+    await loadMenuList()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 把嵌套 draft 摊平成模板好渲染的分组；rows[].items 是 draft 里数组的引用，
+// 因此 v-model 直接写回 draft，无需再同步
+function draftGroups(dayName) {
+  const d = editDraft.value
+  if (!d) return []
+  return [
+    { key: '午餐', title: '☀️ 午餐', rows: mealCategories.map(cat => ({ label: cat, items: d['午餐'][dayName][cat] })) },
+    { key: '水果', title: '🍎 水果', rows: [{ label: '水果', items: d['水果'][dayName] }] },
+    { key: '晚餐', title: '🌙 晚餐', rows: mealCategories.map(cat => ({ label: cat, items: d['晚餐'][dayName][cat] })) },
+  ]
+}
+
+function isDraftDayEmpty(dayName) {
+  return draftGroups(dayName).every(g => g.rows.every(r => r.items.every(i => !String(i).trim())))
+}
+
+function chipWidth(item) {
+  return `${Math.max(3.5, (item?.length || 0) + 1.5)}em`
 }
 
 function isCurrentWeek(weekStart) {
@@ -518,6 +633,127 @@ onMounted(loadMenuList)
 .no-menu {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* 编辑态 */
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0 2px;
+}
+
+.toolbar-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-btn { flex-shrink: 0; }
+
+.day-empty-tag {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.edit-group { margin-top: 8px; }
+
+.edit-group-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.edit-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.edit-cat {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 36px;
+  padding-top: 5px;
+}
+
+.edit-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.edit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+.edit-chip.fruit {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.chip-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  color: var(--text-primary);
+  padding: 2px 0;
+  min-width: 3.5em;
+  font-family: inherit;
+}
+
+.chip-input::placeholder { color: var(--text-muted); }
+
+.chip-del {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px;
+  border-radius: 50%;
+  transition: all 0.15s;
+}
+
+.chip-del:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.chip-add {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px dashed var(--glass-border);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.chip-add:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
 /* 展开动画 */
