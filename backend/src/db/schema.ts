@@ -104,29 +104,3 @@ export const weeklyMenus = sqliteTable('weekly_menus', {
   created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
   updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
 })
-
-export const financePasswords = sqliteTable('finance_passwords', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  user_id: integer('user_id').notNull().unique().references(() => users.id),
-  password_hash: text('password_hash').notNull(),
-  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
-  updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
-})
-
-export const loans = sqliteTable('loans', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  user_id: integer('user_id').notNull().references(() => users.id),
-  name: text('name').notNull(),
-  bank: text('bank').notNull(),
-  loan_type: text('loan_type', { enum: ['mortgage', 'bank_loan'] }).notNull(),
-  remaining_balance: real('remaining_balance').notNull(),
-  monthly_payment: real('monthly_payment').notNull(),
-  remaining_months: integer('remaining_months').notNull(),
-  annual_rate: real('annual_rate').notNull().default(0),
-  status: text('status', { enum: ['active', 'settled'] }).notNull().default('active'),
-  notes: text('notes').default(''),
-  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
-  updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
-}, (table) => [
-  index('idx_loans_user_status').on(table.user_id, table.status),
-])

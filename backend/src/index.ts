@@ -13,7 +13,6 @@ import { bmiRoutes } from './routes/bmi'
 import { secureNotesRoutes } from './routes/secure-notes'
 import { countdownRoutes } from './routes/countdowns'
 import { menuRoutes } from './routes/menu'
-import { financeRoutes } from './routes/finance'
 
 const app = new Hono<Env>()
 
@@ -38,7 +37,6 @@ app.route('/api/bmi', bmiRoutes)
 app.route('/api/secure-notes', secureNotesRoutes)
 app.route('/api/countdowns', countdownRoutes)
 app.route('/api/menu', menuRoutes)
-app.route('/api/finance', financeRoutes)
 
 // Health check
 app.get('/api/health', (c) => {
