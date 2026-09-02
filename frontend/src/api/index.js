@@ -210,6 +210,10 @@ export default {
     })
   },
 
+  updateWeeklyMenu(id, menu) {
+    return api.put(`/menu/${id}`, { menu })
+  },
+
   getSecureNotes() {
     return api.get('/secure-notes')
   },

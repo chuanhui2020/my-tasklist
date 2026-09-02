@@ -146,6 +146,17 @@ function normalizeMenuPayload(payload: Record<string, unknown>) {
     }
   }
 
+  // 丢弃完全空白的日期。留着会让 /today 的 available 误判：空对象也是 truthy，
+  // 前端会当成「今天有菜」然后渲染出一片空白
+  for (const meal of MEAL_KEYS) {
+    for (const [weekday, value] of Object.entries(normalized[meal])) {
+      const isEmpty = Array.isArray(value)
+        ? value.length === 0
+        : Object.values(value as Record<string, string[]>).every(items => items.length === 0)
+      if (isEmpty) delete normalized[meal][weekday]
+    }
+  }
+
   // 归一化兜不住的键会连带内容一起消失，必须留痕，否则表现为「识别内容不对」且无从查起
   if (dropped.length) {
     console.warn('menu: 无法归类的键，内容已丢弃:', JSON.stringify(dropped.slice(0, 30)))
@@ -322,6 +333,63 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
       }).returning()
     )
   }
+
+  return c.json({
+    success: true,
+    data: {
+      ...menuToDict(record),
+      today: getTodayMenuEntry(menuPayload),
+    },
+  })
+})
+
+// PUT /:id (admin only) — 人工订正识别结果。
+// 图源多为清晰度有限的截图，OCR 对小字形近字（如「橘」/「梅」）会误认，
+// 模型侧只能降低概率、给不了保证，所以补一条人工兜底的路径。
+menuRoutes.put('/:id', adminMiddleware, async (c) => {
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id <= 0) {
+    return c.json({ error: '无效的菜单 ID' }, 400)
+  }
+
+  let body: { menu?: unknown }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: '请求体必须是合法 JSON' }, 400)
+  }
+  if (!body.menu || typeof body.menu !== 'object' || Array.isArray(body.menu)) {
+    return c.json({ error: '缺少 menu 字段' }, 400)
+  }
+
+  // 复用与识别同一套归一化：键名校验、空条目清理、空白日期裁剪全部一致，
+  // 人工改过的数据不会出现只有这条路径才可能产生的形状
+  let menuPayload: Record<string, Record<string, unknown>>
+  try {
+    menuPayload = normalizeMenuPayload(body.menu as Record<string, unknown>)
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 400)
+  }
+
+  const { query } = createDB(c.env.DB, 'menu')
+  const [existing] = await query('get menu for edit', (db) =>
+    db.select().from(weeklyMenus).where(eq(weeklyMenus.id, id)).limit(1)
+  )
+  if (!existing) {
+    return c.json({ error: '菜单不存在' }, 404)
+  }
+
+  const nowStr = beijingNow().toISOString().replace('T', ' ').slice(0, 19)
+  await query('update menu json', (db) =>
+    db.update(weeklyMenus).set({
+      menu_json: JSON.stringify(menuPayload),
+      updated_at: nowStr,
+    }).where(eq(weeklyMenus.id, id))
+  )
+
+  const [record] = await query('get edited menu', (db) =>
+    db.select().from(weeklyMenus).where(eq(weeklyMenus.id, id)).limit(1)
+  )
 
   return c.json({
     success: true,
