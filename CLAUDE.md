@@ -86,8 +86,7 @@ backend/
 │   │   ├── bmi.ts              # /api/bmi/* - BMI + 体重记录(upsert) + AI 分析
 │   │   ├── secure-notes.ts     # /api/secure-notes/* - 加密笔记
 │   │   ├── countdowns.ts       # /api/countdowns/* - 倒计时提醒
-│   │   ├── menu.ts             # /api/menu/* - 菜单识别 (AI vision)
-│   │   └── finance.ts          # /api/finance/* - 贷款管理 + 独立密码
+│   │   └── menu.ts             # /api/menu/* - 菜单识别 (AI vision)
 │   └── lib/
 │       ├── crypto.ts           # 密码哈希 (PBKDF2) + 笔记加密 (AES-GCM)
 │       ├── token.ts            # JWT 生成/验证 (jose)
@@ -126,8 +125,6 @@ backend/
    - `weightRecords`: weight, date (unique per user per date；写入为 upsert，同日再记录即更新)
    - `countdowns`: title, target_time, remind_before, remind_level, status
    - `weeklyMenus`: week_start, menu_json, uploaded_by
-   - `financePasswords`: 财务模块独立密码 (per user, unique)
-   - `loans`: name, bank, loan_type (mortgage/bank_loan), remaining_balance, monthly_payment, remaining_months, annual_rate, status
 
 4. **API Response Pattern:**
    - Success: `c.json({...})` or `c.json({...}, 201)`

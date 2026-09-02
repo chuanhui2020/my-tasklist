@@ -12,13 +12,20 @@ export class AIError extends Error {
 export async function callAI(
   env: { AI_API_KEY: string; AI_BASE_URL: string; AI_IMAGE_BASE_URL?: string; AI_MODEL: string },
   messages: { role: string; content: string | { type: string; [key: string]: unknown }[] }[],
-  options: { max_completion_tokens?: number; deadlineMs?: number; direct?: boolean; model?: string } = {}
+  options: {
+    max_completion_tokens?: number
+    deadlineMs?: number
+    direct?: boolean
+    model?: string
+    /** 推理档位，仅在显式传入时下发（不传则用服务端默认，避免影响其他调用方） */
+    reasoning_effort?: string
+  } = {}
 ): Promise<string> {
   // gpt-5.x 是推理模型：
   // - 只认 max_completion_tokens（max_tokens 已废弃且不兼容），且该额度是「推理 token + 可见输出」合计，
   //   给少了会把预算全烧在推理上、content 返回空，所以各调用方要按「期望输出 + 推理余量」给值
   // - 不支持 temperature，传了会被忽略或直接 400，故不再下发
-  const { max_completion_tokens = 4000, deadlineMs = 170000, direct = false, model } = options
+  const { max_completion_tokens = 4000, deadlineMs = 170000, direct = false, model, reasoning_effort } = options
   // direct=true 走灰云直连 api-direct（DNS-only，nginx proxy_read_timeout 180s），
   // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（gpt-5.6 OCR）常 >100s，必须直连。
   const baseUrl = direct ? (env.AI_IMAGE_BASE_URL || env.AI_BASE_URL) : env.AI_BASE_URL
@@ -37,6 +44,7 @@ export async function callAI(
         model: usedModel,
         messages,
         max_completion_tokens,
+        ...(reasoning_effort ? { reasoning_effort } : {}),
       }),
       signal: controller.signal,
     })

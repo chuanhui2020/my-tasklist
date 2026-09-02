@@ -11,6 +11,49 @@ menuRoutes.use('*', authMiddleware)
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const MENU_CATEGORIES = ['主荤', '半荤', '素菜', '杂粮', '主食', '汤粥']
+const MEAL_KEYS = ['午餐', '水果', '晚餐']
+
+// 前端（MenuManager.vue / LifeProgress.vue）按上面这套键名硬编码渲染，放行未知键也不会显示，
+// 所以模型输出的近义变体必须在这里归一化。归错桶只是分类偏移，静默丢弃则是内容凭空消失。
+const MEAL_ALIASES: Record<string, string> = {
+  '中餐': '午餐', '午饭': '午餐', '中饭': '午餐',
+  '晚饭': '晚餐', '夜餐': '晚餐',
+  '水果类': '水果', '果盘': '水果',
+}
+const CATEGORY_ALIASES: Record<string, string> = {
+  '荤菜': '主荤', '大荤': '主荤', '主荤菜': '主荤', '硬菜': '主荤',
+  '小荤': '半荤', '半荤菜': '半荤',
+  '素': '素菜', '蔬菜': '素菜', '青菜': '素菜', '素菜类': '素菜',
+  '粗粮': '杂粮', '五谷': '杂粮', '杂粮类': '杂粮',
+  '主食类': '主食', '面点': '主食', '米饭': '主食',
+  '汤': '汤粥', '汤类': '汤粥', '粥': '汤粥', '汤羹': '汤粥', '例汤': '汤粥',
+}
+const WEEKDAY_INDEX: Record<string, number> = {
+  '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7, '天': 7,
+  '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7,
+}
+
+function canonicalMeal(raw: string): string | null {
+  const key = String(raw).trim()
+  if (MEAL_KEYS.includes(key)) return key
+  return MEAL_ALIASES[key] || null
+}
+
+function canonicalCategory(raw: string): string | null {
+  const key = String(raw).trim()
+  if (MENU_CATEGORIES.includes(key)) return key
+  return CATEGORY_ALIASES[key] || null
+}
+
+// 兼容「周一 / 星期一 / 礼拜一 / 周1 / 周天」等写法
+function canonicalWeekday(raw: string): string | null {
+  const key = String(raw).trim()
+  if (WEEKDAYS.includes(key)) return key
+  const matched = key.match(/^(?:周|星期|礼拜)?\s*([一二三四五六日天1-7])$/)
+  if (!matched) return null
+  return WEEKDAYS[WEEKDAY_INDEX[matched[1]] - 1]
+}
+
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 
@@ -29,6 +72,8 @@ const MENU_USER_PROMPT = `请识别这张公司每周菜单图片，并返回严
 8. 保留菜名中的备注，例如"（含猪）""（辣）"
 9. 不要补充图片里没有的信息
 10. 最终输出必须能被 JSON.parse 直接解析
+11. 所有键名必须逐字使用上面列出的名称，不得改写或用近义词（"荤菜""星期一"都算错）
+12. 按图片的行列逐格核对，不要跳行，也不要把相邻两天的菜串位
 
 输出示例：
 {
@@ -56,14 +101,23 @@ function stripCodeFences(content: string): string {
   return cleaned
 }
 
-function normalizeDayMenu(payload: Record<string, unknown>) {
+function toItemArray(raw: unknown): string[] {
+  const arr = Array.isArray(raw) ? raw : raw ? [raw] : []
+  return arr.map(i => String(i).trim()).filter(Boolean)
+}
+
+function normalizeDayMenu(payload: Record<string, unknown>, path: string, dropped: string[]) {
   const normalized: Record<string, string[]> = {}
-  for (const category of MENU_CATEGORIES) {
-    let rawItems = payload[category]
-    if (!Array.isArray(rawItems)) {
-      rawItems = rawItems ? [rawItems] : []
+  for (const category of MENU_CATEGORIES) normalized[category] = []
+
+  for (const [rawKey, rawValue] of Object.entries(payload || {})) {
+    const category = canonicalCategory(rawKey)
+    if (!category) {
+      dropped.push(`${path}.${rawKey}`)
+      continue
     }
-    normalized[category] = (rawItems as unknown[]).map(i => String(i).trim()).filter(Boolean)
+    // 用 push 而非赋值：'荤菜' 和 '主荤' 同时出现时合并而不是互相覆盖
+    normalized[category].push(...toItemArray(rawValue))
   }
   return normalized
 }
@@ -72,22 +126,30 @@ function normalizeMenuPayload(payload: Record<string, unknown>) {
   if (typeof payload !== 'object' || !payload) throw new Error('菜单 JSON 必须是对象')
 
   const normalized: Record<string, Record<string, unknown>> = { '午餐': {}, '水果': {}, '晚餐': {} }
+  const dropped: string[] = []
 
-  for (const mealKey of ['午餐', '晚餐'] as const) {
-    const mealPayload = (payload[mealKey] || {}) as Record<string, Record<string, unknown>>
-    for (const [weekday, dayMenu] of Object.entries(mealPayload)) {
-      if (!WEEKDAYS.includes(weekday)) continue
-      normalized[mealKey][weekday] = normalizeDayMenu(dayMenu || {})
+  for (const [rawMeal, rawDays] of Object.entries(payload)) {
+    const meal = canonicalMeal(rawMeal)
+    if (!meal) {
+      dropped.push(rawMeal)
+      continue
+    }
+    for (const [rawDay, dayValue] of Object.entries((rawDays || {}) as Record<string, unknown>)) {
+      const weekday = canonicalWeekday(rawDay)
+      if (!weekday) {
+        dropped.push(`${meal}.${rawDay}`)
+        continue
+      }
+      normalized[meal][weekday] = meal === '水果'
+        ? toItemArray(dayValue)
+        : normalizeDayMenu((dayValue || {}) as Record<string, unknown>, `${meal}.${weekday}`, dropped)
     }
   }
 
-  const fruitPayload = (payload['水果'] || {}) as Record<string, unknown>
-  for (const [weekday, items] of Object.entries(fruitPayload)) {
-    if (!WEEKDAYS.includes(weekday)) continue
-    const arr = Array.isArray(items) ? items : items ? [items] : []
-    normalized['水果'][weekday] = arr.map((i: unknown) => String(i).trim()).filter(Boolean)
+  // 归一化兜不住的键会连带内容一起消失，必须留痕，否则表现为「识别内容不对」且无从查起
+  if (dropped.length) {
+    console.warn('menu: 无法归类的键，内容已丢弃:', JSON.stringify(dropped.slice(0, 30)))
   }
-
   return normalized
 }
 
@@ -197,19 +259,25 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
       { role: 'system', content: MENU_SYSTEM_PROMPT },
       {
         role: 'user',
+        // 指令在前、图片在后（对齐官方 vision 示例的顺序）
         content: [
-          { type: 'image_url', image_url: { url: dataUrl } },
           { type: 'text', text: MENU_USER_PROMPT },
+          { type: 'image_url', image_url: { url: dataUrl } },
         ],
       },
       // direct=true：视觉识别走灰云直连，绕过橙云 ~100s 边缘超时（同占卜生图修复）
       // 16000：整周菜单 JSON 本身就近 2000 token，再叠加密集表格 OCR 的推理开销，给足余量避免截断
-    ], { max_completion_tokens: 16000, direct: true })
+      // reasoning_effort=high：密集表格 OCR 的精度旋钮，默认档位下容易看串行列
+    ], { max_completion_tokens: 16000, direct: true, reasoning_effort: 'high' })
   } catch (e) {
     const detail = e instanceof AIError ? (e.detail || e.message) : String(e)
     console.error('menu recognize failed:', detail)
     return c.json({ error: '菜单识别失败，请检查模型配置或稍后重试', detail: String(detail).slice(0, 200) }, 503)
   }
+
+  // 原始输出落日志：下游 normalize 是白名单归一化，键名兜不住就会丢内容。
+  // 没有这行就无法区分「模型认错了」和「代码吃掉了」，两者的修法完全不同。
+  console.log('menu raw AI output:', content.slice(0, 3000))
 
   if (!content) {
     return c.json({ error: '菜单识别失败：AI 返回为空，请稍后重试' }, 503)
