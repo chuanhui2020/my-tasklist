@@ -96,6 +96,33 @@ export const taskImages = sqliteTable('task_images', {
   index('idx_task_images_task_id').on(table.task_id),
 ])
 
+export const notes = sqliteTable('notes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  title: text('title').notNull(),
+  content: text('content').notNull().default(''),
+  // 逗号分隔的标签，检索时用 (',' || tags || ',') LIKE '%,tag,%' 做精确匹配
+  tags: text('tags').notNull().default(''),
+  pinned: integer('pinned').notNull().default(0),
+  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index('idx_notes_user_pinned').on(table.user_id, table.pinned, table.updated_at),
+])
+
+export const noteAttachments = sqliteTable('note_attachments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  note_id: integer('note_id').notNull().references(() => notes.id),
+  user_id: integer('user_id').notNull().references(() => users.id),
+  r2_key: text('r2_key').notNull(),
+  filename: text('filename').notNull(),
+  mime_type: text('mime_type').notNull(),
+  size: integer('size').notNull(),
+  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index('idx_note_attachments_note_id').on(table.note_id),
+])
+
 export const weeklyMenus = sqliteTable('weekly_menus', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   week_start: text('week_start').notNull().unique(),

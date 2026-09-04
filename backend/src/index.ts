@@ -11,6 +11,7 @@ import { fortuneRoutes, processImageJob, markImageFailed } from './routes/fortun
 import type { FortuneImageJob } from './types'
 import { bmiRoutes } from './routes/bmi'
 import { secureNotesRoutes } from './routes/secure-notes'
+import { noteRoutes } from './routes/notes'
 import { countdownRoutes } from './routes/countdowns'
 import { menuRoutes } from './routes/menu'
 
@@ -35,6 +36,7 @@ app.route('/api/tasks', taskRoutes)
 app.route('/api/fortune', fortuneRoutes)
 app.route('/api/bmi', bmiRoutes)
 app.route('/api/secure-notes', secureNotesRoutes)
+app.route('/api/notes', noteRoutes)
 app.route('/api/countdowns', countdownRoutes)
 app.route('/api/menu', menuRoutes)
 

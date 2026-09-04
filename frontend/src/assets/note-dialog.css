@@ -1,0 +1,252 @@
+/*
+ * 笔记弹窗的暗色主题。
+ *
+ * 项目没有引入 element-plus 的 dark css-vars，EP 组件默认跑浅色主题（白底黑字）。
+ * 笔记弹窗里的内容（markdown 正文、附件行、拖拽区）都是按暗色设计的，
+ * 直接用默认白底会出现浅色字压白底、完全读不出来。所以这里把弹窗整体翻成暗色。
+ *
+ * 所有选择器都挂在 .note-dialog / .note-dialog-overlay / .note-tag-dropdown 下，
+ * 不会影响项目里其他 EP 弹窗。
+ */
+
+.note-dialog-overlay {
+  background-color: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.el-dialog.note-dialog {
+  --el-dialog-width: min(720px, calc(100vw - 24px));
+  --el-dialog-bg-color: rgba(13, 20, 38, 0.96);
+  --el-dialog-padding-primary: 20px;
+  --el-text-color-primary: #f1f5f9;
+  --el-text-color-regular: #cbd5e1;
+  --el-text-color-placeholder: #64748b;
+
+  padding: 0;
+  background: rgba(13, 20, 38, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.el-dialog.note-editor-dialog {
+  --el-dialog-width: min(640px, calc(100vw - 24px));
+}
+
+.note-dialog .el-dialog__header {
+  margin: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+}
+
+.note-dialog .el-dialog__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.note-dialog .el-dialog__headerbtn {
+  top: 12px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+}
+
+.note-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: #94a3b8;
+  font-size: 17px;
+}
+
+.note-dialog .el-dialog__headerbtn:hover .el-dialog__close,
+.note-dialog .el-dialog__headerbtn:focus-visible .el-dialog__close {
+  color: var(--primary-color, #06b6d4);
+}
+
+.note-dialog .el-dialog__headerbtn:focus-visible {
+  outline: 2px solid var(--primary-color, #06b6d4);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.note-dialog .el-dialog__body {
+  padding: 18px 20px;
+  color: #cbd5e1;
+}
+
+.note-dialog .el-dialog__footer {
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+}
+
+/* === 表单控件 === */
+.note-dialog .el-form-item {
+  margin-bottom: 18px;
+}
+
+.note-dialog .el-form-item__label {
+  padding-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.note-dialog .el-input__wrapper,
+.note-dialog .el-textarea__inner,
+.note-dialog .el-select__wrapper {
+  background-color: rgba(2, 6, 23, 0.42);
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.18) inset;
+  border-radius: 8px;
+}
+
+.note-dialog .el-input__wrapper:hover,
+.note-dialog .el-textarea__inner:hover,
+.note-dialog .el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.32) inset;
+}
+
+.note-dialog .el-input__wrapper.is-focus,
+.note-dialog .el-select__wrapper.is-focused,
+.note-dialog .el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--primary-color, #06b6d4) inset,
+    0 0 0 3px rgba(6, 182, 212, 0.14);
+}
+
+.note-dialog .el-input__inner,
+.note-dialog .el-textarea__inner,
+.note-dialog .el-select__placeholder {
+  color: #f1f5f9;
+}
+
+.note-dialog .el-input__inner::placeholder,
+.note-dialog .el-textarea__inner::placeholder {
+  color: #64748b;
+}
+
+.note-dialog .el-input .el-input__count .el-input__count-inner,
+.note-dialog .el-textarea .el-input__count {
+  background: transparent;
+  color: #64748b;
+}
+
+.note-dialog .el-input__suffix,
+.note-dialog .el-select__suffix,
+.note-dialog .el-select__caret {
+  color: #64748b;
+}
+
+/* 正文用等宽字体，markdown 的表格和缩进才对得齐 */
+.note-dialog .content-textarea .el-textarea__inner {
+  font-family: 'JetBrains Mono', Consolas, Monaco, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* 标签选择器里的已选标签 */
+.note-dialog .el-select__selected-item .el-tag,
+.note-dialog .el-select__tags .el-tag {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
+.note-dialog .el-select__selected-item .el-tag .el-tag__close,
+.note-dialog .el-select__tags .el-tag .el-tag__close {
+  color: #c4b5fd;
+}
+
+.note-dialog .el-select__selected-item .el-tag .el-tag__close:hover,
+.note-dialog .el-select__tags .el-tag .el-tag__close:hover {
+  background: rgba(139, 92, 246, 0.45);
+  color: #fff;
+}
+
+/* === 页脚按钮 === */
+.note-dialog .el-dialog__footer .el-button {
+  height: 36px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.note-dialog .el-dialog__footer .el-button--default {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #cbd5e1;
+}
+
+.note-dialog .el-dialog__footer .el-button--default:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #f1f5f9;
+}
+
+.note-dialog .el-dialog__footer .el-button--primary {
+  background: linear-gradient(135deg, #06b6d4, #0891b2);
+  border-color: transparent;
+  color: #fff;
+}
+
+.note-dialog .el-dialog__footer .el-button--primary:hover {
+  box-shadow: 0 0 18px rgba(6, 182, 212, 0.4);
+}
+
+/* === 标签下拉（teleport 到 body，够不到弹窗作用域） === */
+.note-tag-dropdown.el-popper {
+  background: rgba(13, 20, 38, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.note-tag-dropdown.el-popper .el-popper__arrow::before {
+  background: rgba(13, 20, 38, 0.97);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+}
+
+.note-tag-dropdown .el-select-dropdown__item {
+  color: #cbd5e1;
+  border-radius: 8px;
+  margin: 2px 6px;
+  padding: 0 12px;
+}
+
+.note-tag-dropdown .el-select-dropdown__item.is-hovering {
+  background: rgba(6, 182, 212, 0.12);
+  color: #f1f5f9;
+}
+
+.note-tag-dropdown .el-select-dropdown__item.is-selected {
+  color: var(--primary-color, #06b6d4);
+  font-weight: 600;
+}
+
+.note-tag-dropdown .el-select-dropdown__empty {
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .el-dialog.note-dialog {
+    --el-dialog-width: calc(100vw - 16px);
+    border-radius: 16px;
+  }
+
+  .note-dialog .el-dialog__header,
+  .note-dialog .el-dialog__body,
+  .note-dialog .el-dialog__footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-dialog,
+  .note-dialog * {
+    transition-duration: 0.01ms !important;
+  }
+}
