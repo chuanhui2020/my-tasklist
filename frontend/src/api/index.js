@@ -234,6 +234,53 @@ export default {
     return api.delete(`/secure-notes/${id}`)
   },
 
+  getNotes(params = {}, { signal } = {}) {
+    return api.get('/notes', { params, signal })
+  },
+
+  getNote(id) {
+    return api.get(`/notes/${id}`)
+  },
+
+  createNote(data) {
+    return api.post('/notes', data)
+  },
+
+  updateNote(id, data) {
+    return api.put(`/notes/${id}`, data)
+  },
+
+  pinNote(id, pinned) {
+    return api.patch(`/notes/${id}/pin`, { pinned })
+  },
+
+  deleteNote(id) {
+    return api.delete(`/notes/${id}`)
+  },
+
+  uploadNoteAttachments(noteId, files) {
+    const formData = new FormData()
+    files.forEach(file => formData.append('files', file))
+    return api.post(`/notes/${noteId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000  // 单个附件上限 10MB，弱网下 60s 不够
+    })
+  },
+
+  // _silent：删附件是保存流程的一环，失败与否由调用方汇总提示，
+  // 不让拦截器对每个附件单独弹一次错
+  deleteNoteAttachment(noteId, attachmentId) {
+    return api.delete(`/notes/${noteId}/attachments/${attachmentId}`, { _silent: true })
+  },
+
+  // 附件走 ?token=，因为 <img src> 和新标签页带不了 Authorization 头
+  getNoteAttachmentUrl(noteId, attachmentId, { download = false } = {}) {
+    const token = localStorage.getItem(TOKEN_KEY)
+    const baseURL = api.defaults.baseURL
+    const suffix = download ? '&download=1' : ''
+    return `${baseURL}/notes/${noteId}/attachments/${attachmentId}/file?token=${token}${suffix}`
+  },
+
   getCountdowns() {
     return api.get('/countdowns')
   },

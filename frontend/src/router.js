@@ -49,6 +49,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/notes',
+    name: 'Notes',
+    component: () => import('./views/Notes.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/secure-notes',
     name: 'SecureNotes',
     component: () => import('./views/SecureNotes.vue'),
