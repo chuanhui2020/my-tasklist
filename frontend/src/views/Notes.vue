@@ -2,7 +2,7 @@
   <div class="notes-page">
     <header class="page-header">
       <div class="page-heading">
-        <h2 class="page-title">笔记本</h2>
+        <h2 class="page-title">死亡笔记</h2>
         <p class="page-subtitle">把重要的事和文件放在一处，随时找得到</p>
       </div>
       <div v-if="!loading && total" class="page-stats">
