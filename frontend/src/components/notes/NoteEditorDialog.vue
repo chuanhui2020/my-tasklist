@@ -312,6 +312,24 @@ const handleCancel = async () => {
   if (await confirmDiscard()) emit('close')
 }
 
+// 逐个删，删掉一个就从待删列表移除。整批 Promise.all 的话，
+// 重试会对已经删掉的 id 再删一次、拿到 404，把整个保存流程卡死。
+// 返回没删成功的数量，交给调用方提示。
+const removeMarkedAttachments = async (noteId) => {
+  if (!removedFileIds.value.length) return 0
+  const stillPending = []
+  for (const id of removedFileIds.value) {
+    try {
+      await api.deleteNoteAttachment(noteId, id)
+    } catch (error) {
+      // 404 = 服务端已经没有这条记录了，视作删除成功，不再重试
+      if (error?.response?.status !== 404) stillPending.push(id)
+    }
+  }
+  removedFileIds.value = stillPending
+  return stillPending.length
+}
+
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -324,11 +342,10 @@ const handleSubmit = async () => {
       tags: form.value.tags,
     }
 
+    // 顺序不能调换：正文必须先落库。反过来先删附件的话，正文保存失败时
+    // 文件已经被永久删掉，用户看到「保存失败」但东西已经没了。
     let noteId
     if (isEdit.value) {
-      if (removedFileIds.value.length) {
-        await Promise.all(removedFileIds.value.map(id => api.deleteNoteAttachment(props.note.id, id)))
-      }
       await api.updateNote(props.note.id, payload)
       noteId = props.note.id
     } else {
@@ -336,13 +353,21 @@ const handleSubmit = async () => {
       noteId = data.id
     }
 
+    // 删除放在上传之前：反过来可能瞬间超出「每条最多 10 个附件」被后端拒掉
+    const failedDeletes = await removeMarkedAttachments(noteId)
+
     if (pendingFiles.value.length) {
       await api.uploadNoteAttachments(noteId, pendingFiles.value)
+      pendingFiles.value = []
     }
 
     // 附件是分开写的，回读一次拿到最终状态，避免列表显示滞后
     const { data: saved } = await api.getNote(noteId)
-    ElMessage.success(isEdit.value ? '笔记已保存' : '笔记已创建')
+    if (failedDeletes) {
+      ElMessage.warning(`笔记已保存，但有 ${failedDeletes} 个附件没能删除，可以再试一次`)
+    } else {
+      ElMessage.success(isEdit.value ? '笔记已保存' : '笔记已创建')
+    }
     snapshot.value = serialize()
     emit('saved', saved)
     emit('close')

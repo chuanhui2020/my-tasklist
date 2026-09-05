@@ -12,6 +12,7 @@ const MAX_TAGS = 8
 const MAX_TAG_LENGTH = 20
 const MAX_TITLE_LENGTH = 120
 const MAX_CONTENT_LENGTH = 50000
+const DEFAULT_PAGE_SIZE = 24
 
 // 允许的附件类型 → 扩展名。SVG / HTML 故意不在列内：附件按原始 MIME 回源，
 // 放行可内联执行脚本的类型等于给自己开一个 XSS 入口。
@@ -215,10 +216,21 @@ noteRoutes.get('/', async (c) => {
     conditions.push(sql`(',' || ${notes.tags} || ',') LIKE ${`%,${escapeLike(tag)},%`} ESCAPE '\\'`)
   }
 
+  // 分页：正文可能很长，一次全量返回会把 D1 查询、Worker 内存和响应体一起撑大。
+  // parseInt 失败得到 NaN，Math.max(1, NaN) 还是 NaN，所以要用 || 兜一层默认值。
+  const page = Math.max(1, parseInt(c.req.query('page') || '', 10) || 1)
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query('page_size') || '', 10) || DEFAULT_PAGE_SIZE))
+  const where = and(...conditions)
+
+  const [{ count }] = await query('count notes', (db) =>
+    db.select({ count: sql<number>`count(*)` }).from(notes).where(where)
+  )
+
   const items = await query('list notes', (db) =>
     db.select().from(notes)
-      .where(and(...conditions))
+      .where(where)
       .orderBy(desc(notes.pinned), desc(notes.updated_at), desc(notes.id))
+      .limit(pageSize).offset((page - 1) * pageSize)
   )
 
   const tagRows = await query('list note tags', (db) =>
@@ -239,7 +251,9 @@ noteRoutes.get('/', async (c) => {
 
   return c.json({
     items: items.map(n => noteToDict(n, attachmentsMap[n.id] || [])),
-    total: items.length,
+    total: count,
+    page,
+    page_size: pageSize,
     all_tags: [...tagCounts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
   })
 })
@@ -466,16 +480,23 @@ noteRoutes.post('/:id/attachments', async (c) => {
       httpMetadata: { contentType: mime },
     })
 
-    const [record] = await query('create attachment record', (db) =>
-      db.insert(noteAttachments).values({
-        note_id: noteId,
-        user_id: user.id,
-        r2_key: r2Key,
-        filename: file.name.slice(0, 200),
-        mime_type: mime,
-        size: file.size,
-      }).returning()
-    )
+    let record: AttachmentRow
+    try {
+      [record] = await query('create attachment record', (db) =>
+        db.insert(noteAttachments).values({
+          note_id: noteId,
+          user_id: user.id,
+          r2_key: r2Key,
+          filename: file.name.slice(0, 200),
+          mime_type: mime,
+          size: file.size,
+        }).returning()
+      )
+    } catch (e) {
+      // R2 已经写进去了但 D1 没记上，不回滚就会留下永远无人引用的孤儿文件
+      await c.env.IMAGES_BUCKET.delete(r2Key).catch(() => {})
+      throw e
+    }
 
     results.push(attachmentToDict(record))
   }

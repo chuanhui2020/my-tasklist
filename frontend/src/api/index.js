@@ -267,8 +267,10 @@ export default {
     })
   },
 
+  // _silent：删附件是保存流程的一环，失败与否由调用方汇总提示，
+  // 不让拦截器对每个附件单独弹一次错
   deleteNoteAttachment(noteId, attachmentId) {
-    return api.delete(`/notes/${noteId}/attachments/${attachmentId}`)
+    return api.delete(`/notes/${noteId}/attachments/${attachmentId}`, { _silent: true })
   },
 
   // 附件走 ?token=，因为 <img src> 和新标签页带不了 Authorization 头
