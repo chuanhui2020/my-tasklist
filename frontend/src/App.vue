@@ -79,7 +79,7 @@ const navLinks = [
   { to: '/tasks', label: '任务列表', icon: List },
   { to: '/countdown', label: '疯狂倒计时', icon: AlarmClock },
   { to: '/fortune', label: '灵签占卜', icon: MagicStick },
-  { to: '/bmi', label: 'BMI管理', icon: DataLine },
+  { to: '/bmi', label: '健康管理', icon: DataLine },
   { to: '/notes', label: '死亡笔记', icon: Notebook },
   { to: '/secure-notes', label: '密钥盒子', icon: Key },
 ]

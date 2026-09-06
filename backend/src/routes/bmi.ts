@@ -10,6 +10,40 @@ export const bmiRoutes = new Hono<Env>()
 
 const MAX_ITEM_CHARS = 20
 
+const BODY_FAT_RANGE = { min: 3, max: 60 }
+const MUSCLE_RANGE = { min: 10, max: 80 }
+
+type MetricParse =
+  | { ok: true; value: number | null | undefined }
+  | { ok: false; error: string }
+
+/**
+ * 解析可选的身体成分指标。
+ * 字段缺省(undefined) = 保持原值不动，显式 null/'' = 清空。
+ * 「今日体重」快捷按钮只发 weight，不能因此抹掉当天已录的成分数据。
+ */
+function parseOptionalMetric(raw: unknown, label: string, range: { min: number; max: number }): MetricParse {
+  if (raw === undefined) return { ok: true, value: undefined }
+  if (raw === null || raw === '') return { ok: true, value: null }
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return { ok: false, error: `${label}格式错误` }
+  if (value < range.min || value > range.max) {
+    return { ok: false, error: `${label}需在 ${range.min}-${range.max} 之间` }
+  }
+  return { ok: true, value: Math.round(value * 10) / 10 }
+}
+
+function serializeRecord(r: typeof weightRecords.$inferSelect) {
+  return {
+    id: r.id,
+    weight: r.weight,
+    body_fat: r.body_fat,
+    skeletal_muscle: r.skeletal_muscle,
+    date: r.date,
+    created_at: r.created_at,
+  }
+}
+
 function buildBmiPrompt(age: number, height: number, weight: number, bmi: number): string {
   return (
     '你是一位健康管理助手。根据以下数据给出3条最重要的健康建议，聚焦饮食、运动、作息。\n' +
@@ -109,49 +143,94 @@ bmiRoutes.get('/profile', authMiddleware, async (c) => {
   if (!profile) {
     return c.json({ success: true, data: null })
   }
-  return c.json({ success: true, data: { gender: profile.gender, age: profile.age, height: profile.height, weight: profile.weight } })
+  return c.json({
+    success: true,
+    data: {
+      gender: profile.gender,
+      age: profile.age,
+      height: profile.height,
+      weight: profile.weight,
+      body_fat: profile.body_fat,
+      skeletal_muscle: profile.skeletal_muscle,
+    },
+  })
 })
 
 // PUT /profile
 bmiRoutes.put('/profile', authMiddleware, async (c) => {
   const user = c.get('user')
   const { query } = createDB(c.env.DB, 'bmi')
-  const body = await c.req.json<{ gender?: string; age?: number; height?: number; weight?: number }>()
+  const body = await c.req.json<{
+    gender?: string
+    age?: number
+    height?: number
+    weight?: number
+    body_fat?: number | null
+    skeletal_muscle?: number | null
+  }>()
 
   const gender = body.gender || 'male'
   const age = Number(body.age ?? 28)
   const height = Number(body.height ?? 170)
   const weight = Number(body.weight ?? 65)
 
+  const bodyFat = parseOptionalMetric(body.body_fat, '体脂率', BODY_FAT_RANGE)
+  if (!bodyFat.ok) return c.json({ error: bodyFat.error }, 400)
+  const muscle = parseOptionalMetric(body.skeletal_muscle, '骨骼肌量', MUSCLE_RANGE)
+  if (!muscle.ok) return c.json({ error: muscle.error }, 400)
+
   const [existing] = await query('check profile exists', (db) =>
     db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
   )
+
+  const nextBodyFat = bodyFat.value !== undefined ? bodyFat.value : (existing?.body_fat ?? null)
+  const nextMuscle = muscle.value !== undefined ? muscle.value : (existing?.skeletal_muscle ?? null)
+
   if (existing) {
     await query('update profile', (db) =>
       db.update(bmiProfiles).set({
         gender, age, height, weight,
+        body_fat: nextBodyFat,
+        skeletal_muscle: nextMuscle,
         updated_at: beijingDatetime(),
       }).where(eq(bmiProfiles.user_id, user.id))
     )
   } else {
     await query('create profile', (db) =>
-      db.insert(bmiProfiles).values({ user_id: user.id, gender, age, height, weight })
+      db.insert(bmiProfiles).values({
+        user_id: user.id, gender, age, height, weight,
+        body_fat: nextBodyFat,
+        skeletal_muscle: nextMuscle,
+      })
     )
   }
 
-  return c.json({ success: true, data: { gender, age, height, weight } })
+  return c.json({
+    success: true,
+    data: { gender, age, height, weight, body_fat: nextBodyFat, skeletal_muscle: nextMuscle },
+  })
 })
 
 // POST /weight
 bmiRoutes.post('/weight', authMiddleware, async (c) => {
   const user = c.get('user')
   const { query } = createDB(c.env.DB, 'bmi')
-  const body = await c.req.json<{ weight?: number; date?: string }>()
+  const body = await c.req.json<{
+    weight?: number
+    date?: string
+    body_fat?: number | null
+    skeletal_muscle?: number | null
+  }>()
 
   const weight = Number(body.weight || 0)
   if (isNaN(weight) || weight < 30 || weight > 300) {
     return c.json({ error: '体重数据无效，请输入30-300kg之间的值' }, 400)
   }
+
+  const bodyFat = parseOptionalMetric(body.body_fat, '体脂率', BODY_FAT_RANGE)
+  if (!bodyFat.ok) return c.json({ error: bodyFat.error }, 400)
+  const muscle = parseOptionalMetric(body.skeletal_muscle, '骨骼肌量', MUSCLE_RANGE)
+  if (!muscle.ok) return c.json({ error: muscle.error }, 400)
 
   const today = beijingDate()
   let recordDate = today
@@ -178,13 +257,19 @@ bmiRoutes.post('/weight', authMiddleware, async (c) => {
   // 允许修改：已有记录则更新，否则新增（去掉每日仅可记录一次的限制）
   const record = existing
     ? (await query('update weight', (db) =>
-        db.update(weightRecords).set({ weight })
+        db.update(weightRecords).set({
+          weight,
+          ...(bodyFat.value !== undefined ? { body_fat: bodyFat.value } : {}),
+          ...(muscle.value !== undefined ? { skeletal_muscle: muscle.value } : {}),
+        })
           .where(and(eq(weightRecords.user_id, user.id), eq(weightRecords.date, recordDate)))
           .returning()
       ))[0]
     : (await query('insert weight', (db) =>
         db.insert(weightRecords).values({
           user_id: user.id, weight, date: recordDate,
+          body_fat: bodyFat.value ?? null,
+          skeletal_muscle: muscle.value ?? null,
         }).returning()
       ))[0]
 
@@ -194,8 +279,13 @@ bmiRoutes.post('/weight', authMiddleware, async (c) => {
         db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
       )
       if (profile) {
+        // 以合并后的记录为准，profile 始终镜像今日记录
         await query('sync profile weight', (db) =>
-          db.update(bmiProfiles).set({ weight }).where(eq(bmiProfiles.user_id, user.id))
+          db.update(bmiProfiles).set({
+            weight: record.weight,
+            body_fat: record.body_fat,
+            skeletal_muscle: record.skeletal_muscle,
+          }).where(eq(bmiProfiles.user_id, user.id))
         )
       }
     } catch (e) {
@@ -203,7 +293,7 @@ bmiRoutes.post('/weight', authMiddleware, async (c) => {
     }
   }
 
-  return c.json({ success: true, data: { id: record.id, weight: record.weight, date: record.date, created_at: record.created_at } })
+  return c.json({ success: true, data: serializeRecord(record) })
 })
 
 // GET /weight/today
@@ -219,7 +309,7 @@ bmiRoutes.get('/weight/today', authMiddleware, async (c) => {
   )
 
   if (record) {
-    return c.json({ recorded: true, data: { id: record.id, weight: record.weight, date: record.date, created_at: record.created_at } })
+    return c.json({ recorded: true, data: serializeRecord(record) })
   }
   return c.json({ recorded: false, data: null })
 })
@@ -239,7 +329,7 @@ bmiRoutes.get('/weight/history', authMiddleware, async (c) => {
 
   return c.json({
     success: true,
-    data: records.map(r => ({ id: r.id, weight: r.weight, date: r.date, created_at: r.created_at })),
+    data: records.map(serializeRecord),
   })
 })
 
