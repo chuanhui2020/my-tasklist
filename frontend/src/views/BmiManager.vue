@@ -10,8 +10,8 @@
       <div class="title-block">
         <div class="title-icon"><el-icon><DataLine /></el-icon></div>
         <div>
-          <h2 class="bmi-title">BMI管理</h2>
-          <p class="bmi-subtitle">输入基础信息，实时测算体重指数与健康区间</p>
+          <h2 class="bmi-title">健康管理</h2>
+          <p class="bmi-subtitle">记录体重与身体成分，看清每一次变化的构成</p>
         </div>
       </div>
       <div class="bmi-status" :class="bmiLevel.key">
@@ -61,14 +61,41 @@
               <span class="unit-label">kg</span>
             </div>
           </el-form-item>
+
+          <div class="form-divider">
+            <span>身体成分</span>
+            <em>选填</em>
+          </div>
+
+          <el-form-item label="体脂率" class="form-item-full">
+            <div class="input-with-unit">
+              <el-input-number v-model="form.body_fat" :min="3" :max="60" :precision="1" :step="0.5"
+                :value-on-clear="null" placeholder="留空" controls-position="right" />
+              <span class="unit-label">%</span>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="骨骼肌" class="form-item-full">
+            <div class="input-with-unit">
+              <el-input-number v-model="muscleDisplay" :min="muscleRange.min" :max="muscleRange.max"
+                :precision="1" :step="muscleRange.step" :value-on-clear="null" placeholder="留空"
+                :disabled="muscleUnit === 'pct' && !form.weight" controls-position="right"
+                @change="onMuscleInput" />
+              <el-radio-group v-model="muscleUnit" size="small" @change="onMuscleUnitChange">
+                <el-radio-button value="kg">kg</el-radio-button>
+                <el-radio-button value="pct">%</el-radio-button>
+              </el-radio-group>
+            </div>
+            <div class="field-hint">{{ muscleHint }}</div>
+          </el-form-item>
         </el-form>
 
         <div class="form-actions">
           <div class="form-actions-left">
             <el-button type="primary" :disabled="todayWeightRecorded" @click="showWeightDialog">
-              {{ todayWeightRecorded ? '今日已记录' : '📝 今日体重' }}
+              {{ todayWeightRecorded ? '今日已记录' : '📝 今日记录' }}
             </el-button>
-            <el-button @click="showBackfillDialog">✏️ 修改体重</el-button>
+            <el-button @click="showBackfillDialog">✏️ 修改记录</el-button>
           </div>
           <span class="form-note">BMI = 体重(kg) ÷ 身高(m)²</span>
         </div>
@@ -125,6 +152,53 @@
             </div>
           </div>
 
+          <div class="composition-section">
+            <div class="composition-head">
+              <span class="composition-title">身体成分</span>
+              <span v-if="hasBodyFat" class="status-chip" :class="bodyFatLevel.key">
+                体脂率 {{ form.body_fat }}% · {{ bodyFatLevel.label }}
+              </span>
+            </div>
+
+            <template v-if="hasComposition">
+              <div v-if="hasBodyFat" class="scale-section">
+                <div class="scale-bar" :style="bodyFatBarStyle">
+                  <div class="scale-pointer" :style="{ left: bodyFatPointerLeft }">
+                    <span class="pointer-dot"></span>
+                  </div>
+                </div>
+                <div class="scale-labels">
+                  <span>偏低</span>
+                  <span>理想</span>
+                  <span>偏高</span>
+                  <span>超标</span>
+                </div>
+                <div class="scale-marks">
+                  <span v-for="mark in bodyFatMarks" :key="mark.value" class="scale-mark"
+                    :style="{ left: mark.left }">{{ mark.label }}</span>
+                </div>
+              </div>
+
+              <div class="metrics-grid">
+                <div v-for="item in compositionMetrics" :key="item.label" class="metric-item">
+                  <span class="metric-label">{{ item.label }}</span>
+                  <span class="metric-value">
+                    {{ item.value }}
+                    <em v-if="item.tag" class="metric-tag">{{ item.tag }}</em>
+                  </span>
+                </div>
+              </div>
+
+              <p class="composition-note">
+                体脂秤的生物电阻抗算法差异较大，同一个人在两台秤上能差 3-5 个百分点。
+                固定同一台秤、晨起空腹测量，趋势才有参考价值。
+              </p>
+            </template>
+            <div v-else class="composition-empty">
+              填写体脂率即可解锁体脂量、去脂体重、FFMI 与基础代谢
+            </div>
+          </div>
+
           <div class="advice-section">
             <div class="advice-title">
               <span>健康建议</span>
@@ -165,14 +239,28 @@
 
     <WeightChart ref="weightChartRef" @record="showWeightDialog" />
 
+    <BodyCompositionDelta :history="analysisHistory" />
+
     <WeightAnalysis :history="analysisHistory" :bmi-level="bmiLevel" />
 
-    <el-dialog v-model="weightDialogVisible" title="记录今日体重" width="420px" :close-on-click-modal="false">
+    <el-dialog v-model="weightDialogVisible" title="记录今日数据" width="420px" :close-on-click-modal="false">
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
-        确认将当前体重记录为今日体重，记录后可通过「修改体重」随时调整。
+        确认将左侧填写的数据记录为今日记录，之后可通过「修改记录」随时调整。
       </el-alert>
       <div class="weight-confirm-value">
-        当前体重: <strong>{{ form.weight }} kg</strong>
+        <div class="confirm-row">
+          <span>体重</span><strong>{{ form.weight }} kg</strong>
+        </div>
+        <div class="confirm-row">
+          <span>体脂率</span>
+          <strong :class="{ 'is-empty': !form.body_fat }">{{ form.body_fat ? `${form.body_fat}%` : '未填写' }}</strong>
+        </div>
+        <div class="confirm-row">
+          <span>骨骼肌</span>
+          <strong :class="{ 'is-empty': !form.skeletal_muscle }">
+            {{ form.skeletal_muscle ? `${form.skeletal_muscle} kg` : '未填写' }}
+          </strong>
+        </div>
       </div>
       <template #footer>
         <el-button @click="weightDialogVisible = false">取消</el-button>
@@ -182,7 +270,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="backfillDialogVisible" title="修改体重" width="420px" :close-on-click-modal="false">
+    <el-dialog v-model="backfillDialogVisible" title="修改记录" width="440px" :close-on-click-modal="false">
       <el-form label-position="top">
         <el-form-item label="日期">
           <el-date-picker
@@ -203,12 +291,30 @@
             </template>
           </el-date-picker>
           <div class="wr-legend">
-            <span><i class="wr-dot has-record"></i>已记录</span>
+            <span><i class="wr-dot has-full"></i>含体脂</span>
+            <span><i class="wr-dot has-record"></i>仅体重</span>
             <span><i class="wr-dot no-record"></i>未记录</span>
           </div>
         </el-form-item>
         <el-form-item label="体重 (kg)">
           <el-input-number v-model="backfillWeight" :min="30" :max="200" :precision="1" :step="0.5" controls-position="right" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="体脂率 (%)">
+          <el-input-number v-model="backfillBodyFat" :min="3" :max="60" :precision="1" :step="0.5"
+            :value-on-clear="null" placeholder="留空表示无数据" controls-position="right" style="width: 100%" />
+        </el-form-item>
+        <el-form-item :label="`骨骼肌 (${muscleUnit === 'pct' ? '%' : 'kg'})`">
+          <div class="backfill-muscle">
+            <el-input-number v-model="backfillMuscleDisplay" :min="muscleRange.min" :max="muscleRange.max"
+              :precision="1" :step="muscleRange.step" :value-on-clear="null" placeholder="留空表示无数据"
+              :disabled="muscleUnit === 'pct' && !backfillWeight" controls-position="right"
+              @change="onBackfillMuscleInput" />
+            <el-radio-group v-model="muscleUnit" size="small" @change="onMuscleUnitChange">
+              <el-radio-button value="kg">kg</el-radio-button>
+              <el-radio-button value="pct">%</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div v-if="backfillMuscle" class="field-hint">≈ {{ backfillMuscle }} kg</div>
         </el-form-item>
       </el-form>
       <div v-if="backfillDate" class="wr-status" :class="selectedDateHasRecord ? 'is-update' : 'is-new'">
@@ -234,6 +340,12 @@ import { DataLine, EditPen, CirclePlus } from '@element-plus/icons-vue'
 import api from '@/api'
 import WeightChart from '@/components/bmi/WeightChart.vue'
 import WeightAnalysis from '@/components/bmi/WeightAnalysis.vue'
+import BodyCompositionDelta from '@/components/bmi/BodyCompositionDelta.vue'
+import {
+  fatMass, leanMass, musclePercent, ffmi, bmr,
+  getBodyFatLevel, getBodyFatScale, getFfmiLevel, getMusclePctLevel,
+  muscleKgToDisplay, muscleDisplayToKg, MUSCLE_INPUT_RANGE
+} from '@/utils/bodyComposition'
 
 const weightChartRef = ref(null)
 
@@ -241,7 +353,10 @@ const FORM_DEFAULTS = {
   gender: 'male',
   age: 28,
   height: 170,
-  weight: 65
+  weight: 65,
+  // 成分指标默认无数据：用户可能只有普通体重秤
+  body_fat: null,
+  skeletal_muscle: null
 }
 
 const form = reactive({ ...FORM_DEFAULTS })
@@ -257,13 +372,16 @@ const loadProfile = async () => {
         gender: data.gender || FORM_DEFAULTS.gender,
         age: data.age || FORM_DEFAULTS.age,
         height: data.height || FORM_DEFAULTS.height,
-        weight: data.weight || FORM_DEFAULTS.weight
+        weight: data.weight || FORM_DEFAULTS.weight,
+        body_fat: data.body_fat ?? null,
+        skeletal_muscle: data.skeletal_muscle ?? null
       })
     }
   } catch (e) {
-    console.error('加载 BMI 档案失败:', e)
+    console.error('加载健康档案失败:', e)
   } finally {
     profileLoaded = true
+    syncMuscleDisplay()
   }
 }
 
@@ -276,13 +394,62 @@ const saveProfile = () => {
         gender: form.gender,
         age: form.age,
         height: form.height,
-        weight: form.weight
+        weight: form.weight,
+        body_fat: form.body_fat ?? null,
+        skeletal_muscle: form.skeletal_muscle ?? null
       })
     } catch (e) {
-      console.error('保存 BMI 档案失败:', e)
+      console.error('保存健康档案失败:', e)
     }
   }, 400)
 }
+
+// --- 骨骼肌单位切换 ---------------------------------------------------------
+// 库里统一存 kg。部分体脂秤只显示骨骼肌率(%)，换算在录入时完成。
+// 显示值单独用 ref 而不是 computed：% → kg → % 会有 0.1 的舍入抖动，
+// 用 computed 的话用户刚输完的数字会自己跳一下。
+const MUSCLE_UNIT_KEY = 'bmi_muscle_unit'
+
+const readMuscleUnit = () => {
+  try {
+    return localStorage.getItem(MUSCLE_UNIT_KEY) === 'pct' ? 'pct' : 'kg'
+  } catch {
+    return 'kg'
+  }
+}
+
+const muscleUnit = ref(readMuscleUnit())
+const muscleDisplay = ref(null)
+const muscleRange = computed(() => MUSCLE_INPUT_RANGE[muscleUnit.value])
+
+const syncMuscleDisplay = () => {
+  muscleDisplay.value = muscleKgToDisplay(form.skeletal_muscle, form.weight, muscleUnit.value)
+}
+
+const onMuscleInput = () => {
+  form.skeletal_muscle = muscleDisplayToKg(muscleDisplay.value, form.weight, muscleUnit.value)
+}
+
+const onMuscleUnitChange = () => {
+  try {
+    localStorage.setItem(MUSCLE_UNIT_KEY, muscleUnit.value)
+  } catch { /* 隐私模式下写不进去，忽略即可 */ }
+  syncMuscleDisplay()
+  syncBackfillMuscleDisplay()
+}
+
+const muscleHint = computed(() => {
+  if (muscleUnit.value === 'pct' && !form.weight) return '请先填写体重才能按百分比录入'
+  if (!form.skeletal_muscle) return '部分体脂秤显示骨骼肌率(%)，可切换单位录入'
+  return muscleUnit.value === 'pct'
+    ? `≈ ${form.skeletal_muscle} kg`
+    : `≈ ${musclePctValue.value}%`
+})
+
+// 订正体重不改已存的 kg —— 肌肉量不该因为体重记录的订正而变化，变的是百分比
+watch(() => form.weight, () => {
+  if (muscleUnit.value === 'pct') syncMuscleDisplay()
+})
 
 onMounted(async () => {
   await loadProfile()
@@ -413,6 +580,70 @@ const scaleMarks = computed(() => {
   })
 })
 
+// --- 身体成分派生指标 -------------------------------------------------------
+
+const fatMassValue = computed(() => fatMass(form.weight, form.body_fat))
+const leanMassValue = computed(() => leanMass(form.weight, form.body_fat))
+const musclePctValue = computed(() => musclePercent(form.weight, form.skeletal_muscle))
+const ffmiValue = computed(() => ffmi(form.weight, form.body_fat, form.height))
+const bmrValue = computed(() => bmr(form.weight, form.body_fat))
+
+const hasBodyFat = computed(() => fatMassValue.value !== null)
+const hasComposition = computed(() => hasBodyFat.value || musclePctValue.value !== null)
+
+const bodyFatLevel = computed(() => getBodyFatLevel(form.body_fat, form.gender))
+const ffmiLevel = computed(() => getFfmiLevel(ffmiValue.value, form.gender))
+const musclePctLevel = computed(() => getMusclePctLevel(musclePctValue.value, form.gender))
+
+const bodyFatScale = computed(() => getBodyFatScale(form.gender))
+
+const bodyFatPercent = (value) => {
+  const { min, max } = bodyFatScale.value
+  const clamped = Math.min(max, Math.max(min, value))
+  return ((clamped - min) / (max - min)) * 100
+}
+
+// 分档位置随性别变化，渐变色停靠点只能在运行时算
+const bodyFatBarStyle = computed(() => {
+  const [a, b, c] = bodyFatScale.value.stops.map(bodyFatPercent)
+  return {
+    background: `linear-gradient(90deg,
+      rgba(96, 165, 250, 0.9) 0%, rgba(96, 165, 250, 0.9) ${a}%,
+      rgba(16, 185, 129, 0.9) ${a}%, rgba(16, 185, 129, 0.9) ${b}%,
+      rgba(245, 158, 11, 0.9) ${b}%, rgba(245, 158, 11, 0.9) ${c}%,
+      rgba(239, 68, 68, 0.9) ${c}%, rgba(239, 68, 68, 0.9) 100%)`
+  }
+})
+
+const bodyFatPointerLeft = computed(() =>
+  hasBodyFat.value ? `${bodyFatPercent(form.body_fat)}%` : '0%'
+)
+
+const bodyFatMarks = computed(() =>
+  bodyFatScale.value.stops.map(value => ({
+    value,
+    label: `${value}%`,
+    left: `${bodyFatPercent(value)}%`
+  }))
+)
+
+const compositionMetrics = computed(() => [
+  { label: '体脂量', value: fatMassValue.value === null ? '--' : `${fatMassValue.value} kg` },
+  { label: '去脂体重', value: leanMassValue.value === null ? '--' : `${leanMassValue.value} kg` },
+  { label: '基础代谢', value: bmrValue.value === null ? '--' : `${bmrValue.value} kcal` },
+  {
+    label: 'FFMI',
+    value: ffmiValue.value === null ? '--' : String(ffmiValue.value),
+    tag: ffmiValue.value === null ? '' : ffmiLevel.value.label
+  },
+  { label: '骨骼肌', value: form.skeletal_muscle ? `${form.skeletal_muscle} kg` : '--' },
+  {
+    label: '骨骼肌率',
+    value: musclePctValue.value === null ? '--' : `${musclePctValue.value}%`,
+    tag: musclePctValue.value === null ? '' : musclePctLevel.value.label
+  }
+])
+
 const fallbackAdviceList = computed(() => adviceMap[bmiLevel.value.key] || [])
 
 const bmiPayload = computed(() => ({
@@ -470,7 +701,14 @@ const requestAdvice = async () => {
 
 watch(bmiPayload, scheduleAdviceRequest, { immediate: true, deep: true })
 
-watch(() => ({ gender: form.gender, age: form.age, height: form.height, weight: form.weight }), saveProfile, { deep: true })
+watch(() => ({
+  gender: form.gender,
+  age: form.age,
+  height: form.height,
+  weight: form.weight,
+  body_fat: form.body_fat,
+  skeletal_muscle: form.skeletal_muscle
+}), saveProfile, { deep: true })
 
 // Weight tracking state
 const todayWeightRecorded = ref(false)
@@ -479,8 +717,23 @@ const recordingWeight = ref(false)
 const backfillDialogVisible = ref(false)
 const backfillDate = ref('')
 const backfillWeight = ref(65)
+const backfillBodyFat = ref(null)
+const backfillMuscle = ref(null)
+const backfillMuscleDisplay = ref(null)
 const recordingBackfill = ref(false)
 const analysisHistory = ref([])
+
+const syncBackfillMuscleDisplay = () => {
+  backfillMuscleDisplay.value = muscleKgToDisplay(backfillMuscle.value, backfillWeight.value, muscleUnit.value)
+}
+
+const onBackfillMuscleInput = () => {
+  backfillMuscle.value = muscleDisplayToKg(backfillMuscleDisplay.value, backfillWeight.value, muscleUnit.value)
+}
+
+watch(backfillWeight, () => {
+  if (muscleUnit.value === 'pct') syncBackfillMuscleDisplay()
+})
 
 const checkTodayWeight = async () => {
   try {
@@ -498,10 +751,15 @@ const showWeightDialog = () => {
 const confirmRecordWeight = async () => {
   recordingWeight.value = true
   try {
-    await api.recordWeight({ weight: form.weight })
+    // 显式传 null：表单是今日记录的唯一来源，清空即代表这天没有该项数据
+    await api.recordWeight({
+      weight: form.weight,
+      body_fat: form.body_fat ?? null,
+      skeletal_muscle: form.skeletal_muscle ?? null
+    })
     todayWeightRecorded.value = true
     weightDialogVisible.value = false
-    ElMessage.success('今日体重已记录')
+    ElMessage.success('今日数据已记录')
     weightChartRef.value?.reload()
     loadAnalysisHistory()
   } catch (e) {
@@ -516,6 +774,11 @@ const confirmRecordWeight = async () => {
 
 // 已记录日期集合（用于日历特殊显示 + 判断新增/覆盖）
 const recordedDateSet = computed(() => new Set(analysisHistory.value.map(r => r.date)))
+
+// 带体脂率的日期单独标色，一眼看出哪几天的数据是完整的
+const fullRecordDateSet = computed(() =>
+  new Set(analysisHistory.value.filter(r => Number.isFinite(r.body_fat)).map(r => r.date))
+)
 
 const formatLocalDate = (d) => {
   const y = d.getFullYear()
@@ -540,7 +803,10 @@ const cellClass = (cell) => {
   if (cell?.type === 'today') classes.push('is-today')
   const d = cell?.date
   if (d && !disableBackfillDate(d)) {
-    classes.push(recordedDateSet.value.has(formatLocalDate(d)) ? 'has-record' : 'no-record')
+    const ymd = formatLocalDate(d)
+    if (fullRecordDateSet.value.has(ymd)) classes.push('has-full')
+    else if (recordedDateSet.value.has(ymd)) classes.push('has-record')
+    else classes.push('no-record')
   }
   return classes
 }
@@ -548,6 +814,9 @@ const cellClass = (cell) => {
 const showBackfillDialog = async () => {
   backfillDate.value = ''
   backfillWeight.value = form.weight
+  backfillBodyFat.value = form.body_fat
+  backfillMuscle.value = form.skeletal_muscle
+  syncBackfillMuscleDisplay()
   backfillDialogVisible.value = true
   await loadAnalysisHistory()
 }
@@ -560,11 +829,15 @@ const disableBackfillDate = (d) => {
   return d > today || d < earliest
 }
 
-// 选中已记录的日期时，自动带出已有体重值方便修改
+// 选中已记录的日期时，自动带出已有数据方便修改
 const onBackfillDateChange = (val) => {
   if (!val) return
   const rec = analysisHistory.value.find(r => r.date === val)
-  if (rec) backfillWeight.value = rec.weight
+  if (!rec) return
+  backfillWeight.value = rec.weight
+  backfillBodyFat.value = rec.body_fat ?? null
+  backfillMuscle.value = rec.skeletal_muscle ?? null
+  syncBackfillMuscleDisplay()
 }
 
 const confirmBackfillWeight = async () => {
@@ -575,12 +848,20 @@ const confirmBackfillWeight = async () => {
   const isUpdate = selectedDateHasRecord.value
   recordingBackfill.value = true
   try {
-    await api.recordWeight({ weight: backfillWeight.value, date: backfillDate.value })
+    await api.recordWeight({
+      weight: backfillWeight.value,
+      date: backfillDate.value,
+      body_fat: backfillBodyFat.value ?? null,
+      skeletal_muscle: backfillMuscle.value ?? null
+    })
     backfillDialogVisible.value = false
-    ElMessage.success(`${backfillDate.value} 体重已${isUpdate ? '更新' : '保存'}`)
-    // 修改的是今天：同步主表单体重，让 BMI/当前体重立即刷新（后端也已同步 profile）
+    ElMessage.success(`${backfillDate.value} 记录已${isUpdate ? '更新' : '保存'}`)
+    // 修改的是今天：同步主表单，让测算结果立即刷新（后端也已同步 profile）
     if (backfillDate.value === formatLocalDate(new Date())) {
       form.weight = backfillWeight.value
+      form.body_fat = backfillBodyFat.value ?? null
+      form.skeletal_muscle = backfillMuscle.value ?? null
+      syncMuscleDisplay()
     }
     weightChartRef.value?.reload()
     await loadAnalysisHistory()
@@ -823,6 +1104,35 @@ const loadAnalysisHistory = async () => {
   color: var(--text-muted);
 }
 
+.form-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.form-divider em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 400;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .form-actions {
   display: flex;
   align-items: center;
@@ -965,6 +1275,55 @@ const loadAnalysisHistory = async () => {
   color: var(--text-primary);
 }
 
+.composition-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--glass-border);
+}
+
+.composition-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.composition-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metric-tag {
+  font-style: normal;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.composition-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.composition-empty {
+  padding: 14px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .advice-section {
   padding: 16px;
   border-radius: 16px;
@@ -1015,10 +1374,49 @@ const loadAnalysisHistory = async () => {
 }
 
 .weight-confirm-value {
-  text-align: center;
-  font-size: 18px;
-  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0 4px;
   color: var(--text-primary);
+}
+
+.confirm-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--glass-border);
+  font-size: 14px;
+}
+
+.confirm-row span {
+  color: var(--text-secondary);
+}
+
+.confirm-row strong {
+  font-size: 17px;
+}
+
+.confirm-row strong.is-empty {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.backfill-muscle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.backfill-muscle :deep(.el-input-number) {
+  flex: 1;
+  min-width: 0;
 }
 
 /* 修改体重日历：单元格自定义内容（选中/今天需自行着色） */
@@ -1062,8 +1460,12 @@ const loadAnalysisHistory = async () => {
   box-sizing: border-box;
 }
 
-.wr-cell.has-record .wr-cell-dot {
+.wr-cell.has-full .wr-cell-dot {
   background: #10b981;
+}
+
+.wr-cell.has-record .wr-cell-dot {
+  background: #06b6d4;
 }
 
 .wr-cell.no-record .wr-cell-dot {
@@ -1091,8 +1493,12 @@ const loadAnalysisHistory = async () => {
   box-sizing: border-box;
 }
 
-.wr-dot.has-record {
+.wr-dot.has-full {
   background: #10b981;
+}
+
+.wr-dot.has-record {
+  background: #06b6d4;
 }
 
 .wr-dot.no-record {

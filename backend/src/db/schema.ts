@@ -31,6 +31,9 @@ export const bmiProfiles = sqliteTable('bmi_profiles', {
   age: integer('age').notNull().default(28),
   height: integer('height').notNull().default(170),
   weight: real('weight').notNull().default(65.0),
+  // 身体成分：可空，用户可能只有普通体重秤
+  body_fat: real('body_fat'),
+  skeletal_muscle: real('skeletal_muscle'),
   updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
 })
 
@@ -65,6 +68,9 @@ export const weightRecords = sqliteTable('weight_records', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   user_id: integer('user_id').notNull().references(() => users.id),
   weight: real('weight').notNull(),
+  // 体脂率(%) 与 骨骼肌量(kg)，可空；骨骼肌统一以 kg 入库，百分比在前端换算
+  body_fat: real('body_fat'),
+  skeletal_muscle: real('skeletal_muscle'),
   date: text('date').notNull(),
   created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
 }, (table) => [
