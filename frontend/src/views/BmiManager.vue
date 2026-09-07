@@ -842,9 +842,10 @@ const onBackfillDateChange = (val) => {
     backfillBodyFat.value = rec.body_fat ?? null
     backfillMuscle.value = rec.skeletal_muscle ?? null
   } else {
-    // 换到没有记录的日期：成分必须清空。体重沿用种子值没问题——它是必填项，
-    // 显眼且一定会被改；但体脂率沿用上一个日期的值，等于往健康记录里写一个
-    // 从没测过的数，还会直接污染成分变化分解的计算。
+    // 换到没有记录的日期：三项都不能沿用上一个日期的值，那是另一天的实测
+    // 结果，直接保存就成了这天从没测过的数，还会污染成分变化分解的计算。
+    // 体重回到开对话框时的种子值（profile 里的当前体重），成分清空。
+    backfillWeight.value = form.weight
     backfillBodyFat.value = null
     backfillMuscle.value = null
   }
