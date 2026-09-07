@@ -11,7 +11,10 @@ export const bmiRoutes = new Hono<Env>()
 const MAX_ITEM_CHARS = 20
 
 const BODY_FAT_RANGE = { min: 3, max: 60 }
-const MUSCLE_RANGE = { min: 10, max: 80 }
+// 下限取 5 而非 10：表单体重下限是 30kg，30kg × 25% = 7.5kg 是正常值。
+// 前端百分比输入框的边界由这个区间推导，改这里要同步改
+// frontend/src/utils/bodyComposition.js 的 MUSCLE_KG_RANGE。
+const MUSCLE_RANGE = { min: 5, max: 80 }
 
 type MetricParse =
   | { ok: true; value: number | null | undefined }
