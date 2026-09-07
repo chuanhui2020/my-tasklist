@@ -305,8 +305,8 @@
         </el-form-item>
         <el-form-item :label="`骨骼肌 (${muscleUnit === 'pct' ? '%' : 'kg'})`">
           <div class="backfill-muscle">
-            <el-input-number v-model="backfillMuscleDisplay" :min="muscleRange.min" :max="muscleRange.max"
-              :precision="1" :step="muscleRange.step" :value-on-clear="null" placeholder="留空表示无数据"
+            <el-input-number v-model="backfillMuscleDisplay" :min="backfillMuscleRange.min" :max="backfillMuscleRange.max"
+              :precision="1" :step="backfillMuscleRange.step" :value-on-clear="null" placeholder="留空表示无数据"
               :disabled="muscleUnit === 'pct' && !backfillWeight" controls-position="right"
               @change="onBackfillMuscleInput" />
             <el-radio-group v-model="muscleUnit" size="small" @change="onMuscleUnitChange">
@@ -344,7 +344,7 @@ import BodyCompositionDelta from '@/components/bmi/BodyCompositionDelta.vue'
 import {
   fatMass, leanMass, musclePercent, ffmi, bmr,
   getBodyFatLevel, getBodyFatScale, getFfmiLevel, getMusclePctLevel,
-  muscleKgToDisplay, muscleDisplayToKg, MUSCLE_INPUT_RANGE
+  muscleKgToDisplay, muscleDisplayToKg, muscleInputRange
 } from '@/utils/bodyComposition'
 
 const weightChartRef = ref(null)
@@ -420,7 +420,8 @@ const readMuscleUnit = () => {
 
 const muscleUnit = ref(readMuscleUnit())
 const muscleDisplay = ref(null)
-const muscleRange = computed(() => MUSCLE_INPUT_RANGE[muscleUnit.value])
+// 边界随体重变化：百分比模式下由 kg 区间反推，保证输入框放行的值后端一定收
+const muscleRange = computed(() => muscleInputRange(muscleUnit.value, form.weight))
 
 const syncMuscleDisplay = () => {
   muscleDisplay.value = muscleKgToDisplay(form.skeletal_muscle, form.weight, muscleUnit.value)
@@ -723,6 +724,9 @@ const backfillMuscleDisplay = ref(null)
 const recordingBackfill = ref(false)
 const analysisHistory = ref([])
 
+// 对话框有自己的体重，边界不能复用主表单的
+const backfillMuscleRange = computed(() => muscleInputRange(muscleUnit.value, backfillWeight.value))
+
 const syncBackfillMuscleDisplay = () => {
   backfillMuscleDisplay.value = muscleKgToDisplay(backfillMuscle.value, backfillWeight.value, muscleUnit.value)
 }
@@ -833,10 +837,17 @@ const disableBackfillDate = (d) => {
 const onBackfillDateChange = (val) => {
   if (!val) return
   const rec = analysisHistory.value.find(r => r.date === val)
-  if (!rec) return
-  backfillWeight.value = rec.weight
-  backfillBodyFat.value = rec.body_fat ?? null
-  backfillMuscle.value = rec.skeletal_muscle ?? null
+  if (rec) {
+    backfillWeight.value = rec.weight
+    backfillBodyFat.value = rec.body_fat ?? null
+    backfillMuscle.value = rec.skeletal_muscle ?? null
+  } else {
+    // 换到没有记录的日期：成分必须清空。体重沿用种子值没问题——它是必填项，
+    // 显眼且一定会被改；但体脂率沿用上一个日期的值，等于往健康记录里写一个
+    // 从没测过的数，还会直接污染成分变化分解的计算。
+    backfillBodyFat.value = null
+    backfillMuscle.value = null
+  }
   syncBackfillMuscleDisplay()
 }
 

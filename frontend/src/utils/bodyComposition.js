@@ -143,9 +143,34 @@ export function getMusclePctLevel(value, gender) {
 // 因为肌肉量不该因为体重记录的订正而变化，变的是展示出来的百分比。
 // ---------------------------------------------------------------------------
 
-export const MUSCLE_INPUT_RANGE = {
-  kg: { min: 10, max: 80, step: 0.5 },
-  pct: { min: 15, max: 60, step: 0.5 },
+// 与后端 MUSCLE_RANGE 保持一致，改这里必须同步改 backend/src/routes/bmi.ts
+export const MUSCLE_KG_RANGE = { min: 5, max: 80 }
+
+// 骨骼肌率的生理常识范围
+const PCT_SANITY = { min: 15, max: 60 }
+
+/**
+ * 骨骼肌输入框的上下界。
+ *
+ * 百分比的边界必须由 kg 边界和当前体重推导出来，不能写死：写死的话
+ * 50kg 用户输入前端允许的 15% 会换算成 7.5kg，被后端拒掉——而 profile
+ * 的防抖自动保存是静默 catch 的，用户根本看不出没存上。
+ * 推导之后，凡是输入框放行的值，换算结果一定落在后端能接受的区间内。
+ */
+export function muscleInputRange(unit, weight) {
+  if (unit !== 'pct') return { ...MUSCLE_KG_RANGE, step: 0.5 }
+  // 没有体重时百分比模式本来就是禁用的，给个生理范围占位
+  if (!isNum(weight) || weight <= 0) return { ...PCT_SANITY, step: 0.5 }
+
+  const derivedMin = Math.ceil(MUSCLE_KG_RANGE.min / weight * 1000) / 10
+  const derivedMax = Math.floor(MUSCLE_KG_RANGE.max / weight * 1000) / 10
+  // 两边都收紧只会让前端比后端更严，不会放行后端拒绝的值
+  const min = Math.max(PCT_SANITY.min, derivedMin)
+  const max = Math.min(PCT_SANITY.max, derivedMax)
+  // 极端体重下两界可能交叉，此时以「后端能接受」为准
+  return max >= min
+    ? { min, max, step: 0.5 }
+    : { min: derivedMin, max: derivedMax, step: 0.5 }
 }
 
 export function muscleKgToDisplay(kg, weight, unit) {
