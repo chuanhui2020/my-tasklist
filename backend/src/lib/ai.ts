@@ -107,7 +107,10 @@ export async function generateImage(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-image-2',
+          // gpt-image-2.5 系列（2026-09-08 发布）：sunburst 精度更高但更慢，flare 是低延迟款。
+          // 2.5 上线次日 gpt-image-2 全量失败，网关报 503 "No available compatible accounts"
+          // —— 不是参数问题，是上游账号池不再供给旧模型。换新模型名即恢复，实测约 70s 出图。
+          model: 'gpt-image-2.5-sunburst',
           prompt,
           n: 1,
           size,
