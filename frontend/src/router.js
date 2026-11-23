@@ -99,6 +99,8 @@ router.beforeEach((to, from, next) => {
 const CHUNK_LOAD_ERROR = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 router.onError((error, to) => {
+  // 注册 onError 后 Vue Router 不再打印默认错误日志，这里补上，避免导航失败无从排查
+  console.error('[router] navigation error:', error)
   if (!CHUNK_LOAD_ERROR.test(String(error?.message || error))) return
   const key = `chunk-reload:${to.fullPath}`
   const last = Number(sessionStorage.getItem(key) || 0)
