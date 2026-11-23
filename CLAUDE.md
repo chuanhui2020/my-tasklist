@@ -288,11 +288,16 @@ app.route('/api/your-feature', yourRoutes)
 
 **Codex CLI 版本已锁死，不会自动升级。**
 
-`code-review.yml` 的 `npm install -g @openai/codex@<version>` 固定了版本。想升级就手动改那一行的版本号，但**升级前务必确认 `codex exec` 的参数没变** —— 2026-08 升到 `0.147.0` 时 `exec` 移除了 `--full-auto`，`codex exec` 直接报 `unexpected argument` 秒退，review 长期静默失效（当时未锁版本，每次自动装 latest）。
+`code-review.yml` 的 `npm install -g @openai/codex@<version>` 固定了版本（当前 `0.171.0`）。想升级就手动改那一行的版本号，但**升级前务必确认 `codex exec` 的参数和 config.toml 键名没变** —— 2026-08 升到 `0.147.0` 时 `exec` 移除了 `--full-auto`，`codex exec` 直接报 `unexpected argument` 秒退，review 长期静默失效（当时未锁版本，每次自动装 latest）。
 
-配套的两道防线（改 workflow 时别拆掉）：
+升级检查方法：本地装新版本，把 workflow 里的 config.toml 抠出来放进临时 `CODEX_HOME`（base_url 指向本机关闭端口，不连外网），跑 `codex exec --strict-config ...`，看配置能否加载、启动头里的 `sandbox` / `reasoning effort` 是否符合预期。2026-11 升 `0.171.0` 时就是这样查出旧的 `sandbox` / `reasoning_effort` 是无效键（一直被静默忽略），正确键名是 `sandbox_mode` / `model_reasoning_effort`。
+
+配套的防线（改 workflow 时别拆掉）：
 
 - **空输出 = job 变红**：review 无有效输出时会走 `Fail on empty review` 步骤 `exit 1`。此前这种情况 job 仍是绿灯、只打 `needs-fix` 标签，故障要翻 PR 才看得见。该步骤**必须排在评论和打标签之后**，否则 PR 上不会留下任何线索。
+- **只从 `-o` 文件解析 review 和 VERDICT**：`codex exec` 的原始输出会回显整段 PROMPT（含 `===REVIEW_START===` 标记和 `VERDICT: PASS` 模板），从原始输出解析会在模型失败时把模板当成 review。
+- **`--strict-config`**：config.toml 写错键名直接报错退出（进而触发上一条变红），不再静默忽略。
+- **`timeout 540` 包住 `codex exec`**：网关不通时 codex 会无限重连，必须在步骤超时（10 min）前退出，后续评论/打标签/变红才能执行。
 - **原始输出进日志**：`codex exec` 的 stdout/stderr 会 tail 进 job log。定位 review 失败先看这段，别猜。
 
 Codex 以 `--sandbox read-only` + `approval_policy = "never"` 运行：审查只需读代码和跑 `git diff`，不给写盘和联网权限，避免仓库内容做提示注入后窃取 `GH_TOKEN` / `OPENAI_API_KEY`。沙箱只约束模型生成的命令，codex 自身访问模型 API 不受影响。
