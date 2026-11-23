@@ -53,7 +53,7 @@ cd backend && npx wrangler d1 migrations list tasklist_db --remote   # 先看待
 cd backend && npm run db:migrate:prod                                # 再执行
 ```
 
-> **迁移文件不要再用 `d1 execute --file` 手动跑**：线上库 2026-11-23 起改由 wrangler 迁移管理（`wrangler.jsonc` 的 `migrations_dir: "drizzle"`），0000–0011 已补录为已执行。手动跑的文件不会记进 `d1_migrations`，下次 `db:migrate:prod` 会再跑一遍而失败（`table ... already exists` / `duplicate column`）。
+> **迁移文件不要再用 `d1 execute --file` 手动跑**：线上库 2026-11-23 起改由 wrangler 迁移管理（`wrangler.jsonc` 的 `migrations_dir: "drizzle"`），0000–0011 已补录为已执行，0012 当天通过 `db:migrate:prod` 正常执行。手动跑的文件不会记进 `d1_migrations`，下次 `db:migrate:prod` 会再跑一遍而失败（`table ... already exists` / `duplicate column`）。
 
 ### Local Development
 
@@ -95,7 +95,7 @@ backend/
 │       ├── token.ts            # JWT 生成/验证 (jose)
 │       ├── ai.ts               # AI API 调用 (fetch)
 │       └── db.ts               # createDB (drizzle + query 重试封装) + 北京时间助手 + D1Error
-├── drizzle/                    # D1 迁移 SQL (0000_initial.sql … 0011_body_composition.sql)，wrangler migrations 管理
+├── drizzle/                    # D1 迁移 SQL (0000_initial.sql … 0012_task_images_r2_key_unique.sql)，wrangler migrations 管理
 └── scripts/
     ├── export_data.py          # MySQL → JSON 导出 (迁移用)
     └── import-to-d1.ts         # JSON → D1 SQL 导入 (迁移用)
@@ -105,9 +105,15 @@ backend/
 
 1. **Authentication System:**
    - JWT via `jose` library (HS256, Web Crypto API)
-   - Token payload: `{user_id: number, role: string}`
+   - Token payload: `{user_id: number, role: string, session_version: string}`；`verifyToken` 限定 HS256 并校验字段类型
    - Tokens expire after 24 hours
-   - Protected routes use `authMiddleware`，admin 路由额外加 `adminMiddleware`
+   - **会话失效**：`users.token_invalid_before` 存会话版本号，改密码/重置密码时轮换为新 UUID，旧 token 立即失效。
+     无 `session_version` 的历史 token 按旧规则（`iat` 晚于该时间戳）兼容到自然过期
+   - Protected routes use `authMiddleware`，admin 路由额外加 `adminMiddleware`；两者都用 `createMiddleware<Env>` 声明
+     （普通函数签名会让后续 handler 的 `c.req.param()` 被推断成 `string | undefined`）
+   - 文件直链（`<img src>` / 新标签页）用 `fileAuthMiddleware`，额外接受 `?token=`；普通接口不接受 query token
+   - 密码策略：新建用户/改密码要求至少 6 位且含大小写字母、数字、特殊字符（已有密码不受影响）；
+     管理员重置密码生成随机临时密码并在前端展示
    - Current user via `c.get('user')` (Hono context variable)
 
 2. **Database Access:**
@@ -143,11 +149,18 @@ backend/
    - Key derivation: PBKDF2-SHA256, 100,000 iterations
 
 7. **Task Images (R2 Storage):**
-   - Images stored in R2 bucket `tasklist-images`, key format: `tasks/{user_id}/{task_id}/{uuid}.{ext}`
+   - Images stored in R2 bucket `tasklist-images`, key format: `tasks/{user_id}/{task_id}/{uuid}.{ext}`；
+     带 `upload_id` 时为 `tasks/{user_id}/{task_id}/{upload_id}-{uuid}.{ext}`（每个请求独有对象，并发互不覆盖）
    - Supported formats: JPEG, PNG, WebP; max 5MB per file, max 10 per task
-   - Image file serving endpoint supports `?token=JWT` query param for `<img src>` usage (before authMiddleware)
-   - Upload/delete endpoints use standard authMiddleware
-   - Task deletion cascades: deletes R2 objects + DB rows
+   - **幂等上传**：前端为每个待传文件生成 `upload_id`（UUID，重试复用），单文件上传时随表单提交；同一 `upload_id`
+     库内最多一条，重试命中已有记录返回 200（元数据不一致返回 409）
+   - **并发控制在数据库内完成**：张数上限、任务归属、upload_id 去重、`sort_order` 都在同一条原子
+     `INSERT ... SELECT ... WHERE` 中判定；未插入时清理本请求的 R2 对象，按原因返回 200/400/404/409。
+     注意 `query()` 失败会自动重试一次，「插入其实已提交」时库里那条就是自己的，不能当成并发落败去删对象
+   - Image file serving endpoint supports `?token=JWT` query param for `<img src>` usage (`fileAuthMiddleware`)
+   - 删除任务：图片记录与任务在同一个 D1 batch 事务中删除，再按实际删掉的记录清理 R2；
+     删除图片：先删记录（RETURNING key）再删对象——最坏只残留无引用对象，不会出现记录在、图片 404
+   - `task_images.r2_key` 有唯一索引（迁移 0012）
 
 ### Frontend Structure
 
@@ -203,8 +216,14 @@ frontend/src/
 - `vars.CORS_ORIGINS`: Allowed frontend origins (comma-separated)
 - `vars.AI_BASE_URL`: AI 服务地址（橙云网关）
 - `vars.AI_IMAGE_BASE_URL`: AI 生图直连地址（灰云直连，绕过 100s 超时）
-- `vars.AI_MODEL`: AI model name
-- Secrets (via `wrangler secret put`): `SECRET_KEY`, `AI_API_KEY`
+- `vars.AI_MODEL`: 业务 AI 模型（当前 `gpt-6.2-sol`：BMI 建议、体重分析、求签、菜单识别）
+- `vars.AI_REASONING_EFFORT`: 全局推理档位（当前 `xhigh`），`callAI` 未显式传 `reasoning_effort` 时使用。
+  xhigh 较慢（求签类约 30s），各调用的 `max_completion_tokens` 已按此放宽；菜单识别若超出直连 nginx 的 180s 上限，
+  可在 `menu.ts` 显式传 `reasoning_effort: 'high'` 回退
+- 生图模型写在 `lib/ai.ts`（当前 `gpt-image-2.6-sunburst`，无推理档位参数）
+- Code Review 模型在 `.github/workflows/code-review.yml` 的 `AI_MODEL`（当前 `gpt-6.2-astra`，Codex `model_reasoning_effort = "xhigh"`）
+- Secrets (via `wrangler secret put`): `SECRET_KEY`, `AI_API_KEY`（GitHub Actions 另有同名 secret `AI_API_KEY`，换 key 时两处都要换）
+- Rate limit binding: `BMI_ADVICE_LIMITER`（`/api/bmi/advice` 按用户 10 次/分钟）
 - D1 binding: `DB` → `tasklist_db`
 - R2 binding: `IMAGES_BUCKET` → `tasklist-images`
 - Queue binding: `FORTUNE_IMAGE_QUEUE` → `fortune-image-queue`（占卜生图异步，producer + consumer）
@@ -217,6 +236,8 @@ frontend/src/
 - Cloudflare Workers static asset deployment
 - SPA routing via `not_found_handling: "single-page-application"`
 - Auto-build & deploy on `git push` to master
+- 注意：SPA 回退会把缺失的旧 chunk 返回成 index.html（200 + text/html）。部署后已打开的旧页面切换到按需加载的路由会失败，
+  `router.js` 的 `router.onError` 会捕获并整页跳转到目标地址加载新版本（同一目标 10 秒内只重载一次）
 
 ## Common Patterns
 
@@ -249,7 +270,7 @@ app.route('/api/your-feature', yourRoutes)
 ### Adding a New Database Table
 
 1. Define table in `src/db/schema.ts` using Drizzle syntax
-2. Write migration SQL in `drizzle/` directory，文件名用下一个序号（如 `0012_xxx.sql`），wrangler 按文件名排序执行
+2. Write migration SQL in `drizzle/` directory，文件名用下一个序号（如 `0013_xxx.sql`），wrangler 按文件名排序执行
 3. Execute: `cd backend && npm run db:migrate:prod`（只执行未记录的迁移；本地开发用 `npm run db:migrate`）
 4. Import and use in route handlers
 
@@ -272,7 +293,7 @@ app.route('/api/your-feature', yourRoutes)
 
 **Admin User:**
 - Username: `admin`
-- Password: `123456`
+- Password: `123456`（初始密码；新密码策略只约束之后新建/修改的密码）
 - Role: `admin`
 
 ## Git 工作流：提交 → Review → 修复
