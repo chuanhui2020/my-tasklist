@@ -325,27 +325,34 @@ taskRoutes.post('/:id/images', async (c) => {
     return c.json({ error: '请选择要上传的图片' }, 400)
   }
 
-  // 幂等上传：客户端为单个文件附带 upload_id（UUID）并直接用作 R2 key。
-  // 「已入库但响应丢失」后的重试命中同一 key 时返回原记录，不重复入库、不重复占用张数限额。
+  // 幂等上传：客户端为单个文件附带 upload_id（UUID），同一文件的所有重试复用同一个值。
+  // - 去重按 upload_id：R2 key 形如「{upload_id 前缀}{随机后缀}.ext」，库里同前缀最多一条（原子插入保证）
+  // - 每个请求写自己独有的 R2 对象：并发请求之间永远不会覆盖彼此的图片内容
+  // 「已入库但响应丢失」后的重试命中已有记录直接返回，不重复入库、不重复占用张数限额。
   const uploadIdRaw = formData.get('upload_id')
   const uploadId = typeof uploadIdRaw === 'string' && UPLOAD_ID_PATTERN.test(uploadIdRaw) ? uploadIdRaw.toLowerCase() : null
   if (uploadIdRaw !== null && (!uploadId || files.length !== 1)) {
     return c.json({ error: 'upload_id 无效或与文件数量不匹配' }, 400)
   }
-  const findByKey = async (r2Key: string) => {
-    const [row] = await query('find image by r2_key', (db) =>
+  const toImageDict = (r: typeof taskImages.$inferSelect) =>
+    ({ id: r.id, filename: r.filename, mime_type: r.mime_type, size: r.size, sort_order: r.sort_order })
+  const uploadPrefix = uploadId ? `tasks/${user.id}/${taskId}/${uploadId}-` : null
+  const findByUpload = async (prefix: string) => {
+    const [row] = await query('find image by upload_id', (db) =>
       db.select().from(taskImages)
-        .where(and(eq(taskImages.task_id, taskId), eq(taskImages.r2_key, r2Key)))
+        .where(and(eq(taskImages.task_id, taskId), sql`substr(${taskImages.r2_key}, 1, ${prefix.length}) = ${prefix}`))
         .limit(1)
     )
     return row
   }
-  const toImageDict = (r: typeof taskImages.$inferSelect) =>
-    ({ id: r.id, filename: r.filename, mime_type: r.mime_type, size: r.size, sort_order: r.sort_order })
-  const uploadKey = uploadId ? `tasks/${user.id}/${taskId}/${uploadId}.${EXT_MAP[files[0].type] || 'jpg'}` : null
-  if (uploadKey) {
-    const dup = await findByKey(uploadKey)
-    if (dup) return c.json([toImageDict(dup)], 200)
+  // 已有同 upload_id 的记录：元数据一致即同一文件的重试（200）；不一致说明 upload_id 被复用于别的图片（409）
+  const replyExisting = (row: typeof taskImages.$inferSelect, file: File) =>
+    row.filename === file.name && row.size === file.size && row.mime_type === file.type
+      ? c.json([toImageDict(row)], 200)
+      : c.json({ error: '该上传标识已用于其他图片，请重新选择文件上传' }, 409)
+  if (uploadPrefix) {
+    const dup = await findByUpload(uploadPrefix)
+    if (dup) return replyExisting(dup, files[0])
   }
 
   const existing = await query('count existing images', (db) =>
@@ -357,8 +364,8 @@ taskRoutes.post('/:id/images', async (c) => {
 
   if (existingCount + files.length > MAX_IMAGES_PER_TASK) {
     // 并发重试可能在上面查重之后、计数之前被原请求入库（占满第 10 张）：超限前按同一 upload_id 复查
-    const dup = uploadKey ? await findByKey(uploadKey) : undefined
-    if (dup) return c.json([toImageDict(dup)], 200)
+    const dup = uploadPrefix ? await findByUpload(uploadPrefix) : undefined
+    if (dup) return replyExisting(dup, files[0])
     return c.json({ error: `每个任务最多 ${MAX_IMAGES_PER_TASK} 张图片，当前已有 ${existingCount} 张` }, 400)
   }
 
@@ -372,40 +379,45 @@ taskRoutes.post('/:id/images', async (c) => {
   }
 
   const results = []
-  let deduped = false
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
     const ext = EXT_MAP[file.type] || 'jpg'
-    const uuid = uploadId ?? crypto.randomUUID()
-    const r2Key = `tasks/${user.id}/${taskId}/${uuid}.${ext}`
+    // 每个请求的 R2 key 都带独有随机部分：同 upload_id 的并发请求写不同对象，互不覆盖
+    const r2Key = uploadPrefix
+      ? `${uploadPrefix}${crypto.randomUUID()}.${ext}`
+      : `tasks/${user.id}/${taskId}/${crypto.randomUUID()}.${ext}`
 
     const arrayBuffer = await file.arrayBuffer()
     await c.env.IMAGES_BUCKET.put(r2Key, arrayBuffer, {
       httpMetadata: { contentType: file.type },
     })
 
-    // 查重与插入合成一条语句：D1 单条语句原子执行，同 r2_key 的并发请求只有一个能插入，
-    // 因此即使唯一索引（0012）尚未建立也不会产生共享 R2 对象的重复记录（不依赖迁移/部署先后）。
-    // ON CONFLICT DO NOTHING 是索引存在时的第二道防线；落空的一方读回已有记录返回
+    // 查重与插入合成一条语句：D1 单条语句原子执行，同一 upload_id 的并发请求只有一个能插入，
+    // 不依赖唯一索引或迁移/部署先后。ON CONFLICT DO NOTHING 是 r2_key 唯一索引存在时的第二道防线
+    const dedupe = uploadPrefix
+      ? sql`substr(r2_key, 1, ${uploadPrefix.length}) = ${uploadPrefix}`
+      : sql`r2_key = ${r2Key}`
     const inserted = await query(`upload image ${i}`, (db) =>
       db.all<typeof taskImages.$inferSelect>(sql`
         INSERT INTO task_images (task_id, user_id, r2_key, filename, mime_type, size, sort_order)
         SELECT ${taskId}, ${user.id}, ${r2Key}, ${file.name}, ${file.type}, ${file.size}, ${existingCount + i}
-        WHERE NOT EXISTS (SELECT 1 FROM task_images WHERE r2_key = ${r2Key})
+        WHERE NOT EXISTS (SELECT 1 FROM task_images WHERE task_id = ${taskId} AND ${dedupe})
         ON CONFLICT DO NOTHING
         RETURNING *`)
     )
-    let record = inserted[0]
+    const record = inserted[0]
     if (!record) {
-      deduped = true
-      record = await findByKey(r2Key)
-      if (!record) throw new Error(`image record missing after conflict: ${r2Key}`)
+      // 并发中落败：删掉本请求独有的对象（获胜方的对象 key 不同，不受影响），再按 upload_id 返回已有记录
+      await c.env.IMAGES_BUCKET.delete(r2Key)
+      const winner = uploadPrefix ? await findByUpload(uploadPrefix) : undefined
+      if (!winner) throw new Error(`image record missing after conflict: ${r2Key}`)
+      return replyExisting(winner, file) // 带 upload_id 时必为单文件
     }
 
     results.push(toImageDict(record))
   }
 
-  return c.json(results, deduped ? 200 : 201)
+  return c.json(results, 201)
 })
 
 // DELETE /:id/images/:imageId

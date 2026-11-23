@@ -100,7 +100,7 @@ export const taskImages = sqliteTable('task_images', {
   created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
 }, (table) => [
   index('idx_task_images_task_id').on(table.task_id),
-  // 幂等上传的兜底：同一 upload_id 的并发请求只能落一条记录（见 drizzle/0012）
+  // 一个 R2 对象只对应一条记录（见 drizzle/0012）。upload_id 去重由上传接口的原子插入保证
   uniqueIndex('idx_task_images_r2_key').on(table.r2_key),
 ])
 
