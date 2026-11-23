@@ -370,6 +370,8 @@ const profileLoaded = ref(false)
 const loadFailed = ref(false)
 const saveFailed = ref(false)
 let savedProfile = {}
+// 保存失败字段的基线占位：任何表单值都不等于它，保证这些字段下次必定重发
+const UNKNOWN_ON_SERVER = Symbol('unknown-on-server')
 let saving = false
 let saveTimer = null
 
@@ -404,7 +406,7 @@ const changedFields = () => Object.fromEntries(
 const persistProfile = async () => {
   if (saving) return
   const changes = changedFields()
-  // 无差异（含失败后用户把字段改回原值）说明已与服务端一致，清掉「尚未保存」提示
+  // 无差异说明与服务端已知状态一致，清掉「尚未保存」提示（失败字段的基线是占位符，不会走到这里）
   if (!Object.keys(changes).length) {
     saveFailed.value = false
     return
@@ -416,9 +418,10 @@ const persistProfile = async () => {
     Object.assign(savedProfile, changes)
   } catch {
     saveFailed.value = true
-    // 请求可能已在服务端生效、只是响应丢失：服务端状态未知。清空基线后下次保存提交整份表单，
-    // 用户之后无论怎么改（包括改回原值）都会写回服务端，提示也只在真正保存成功后才清除
-    savedProfile = {}
+    // 请求可能已在服务端生效、只是响应丢失：仅把本次请求涉及的字段标为「服务端状态未知」，
+    // 下次必定重发（含用户改回原值的情况）。其余字段保持原基线、不重发，
+    // 避免用本页旧值覆盖其他页面已保存的数据
+    for (const key of Object.keys(changes)) savedProfile[key] = UNKNOWN_ON_SERVER
   } finally {
     saving = false
   }
