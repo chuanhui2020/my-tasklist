@@ -13,6 +13,8 @@ const EXT_MAP: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 }
+// 严格限定 UUID 格式：upload_id 会拼进 R2 key，不能放任意字符串（防路径穿越）
+const UPLOAD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const taskRoutes = new Hono<Env>()
 
@@ -310,13 +312,6 @@ taskRoutes.post('/:id/images', async (c) => {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const existing = await query('count existing images', (db) =>
-    db.select({ id: taskImages.id }).from(taskImages)
-      .where(eq(taskImages.task_id, taskId))
-  )
-
-  const existingCount = existing.length
-
   const formData = await c.req.formData()
   const entries = formData.getAll('images')
   const files: File[] = []
@@ -330,7 +325,55 @@ taskRoutes.post('/:id/images', async (c) => {
     return c.json({ error: '请选择要上传的图片' }, 400)
   }
 
+  // 幂等上传：客户端为单个文件附带 upload_id（UUID），同一文件的所有重试复用同一个值。
+  // - 去重按 upload_id：R2 key 形如「{upload_id 前缀}{随机后缀}.ext」，库里同前缀最多一条（原子插入保证）
+  // - 每个请求写自己独有的 R2 对象：并发请求之间永远不会覆盖彼此的图片内容
+  // 「已入库但响应丢失」后的重试命中已有记录直接返回，不重复入库、不重复占用张数限额。
+  const uploadIdRaw = formData.get('upload_id')
+  const uploadId = typeof uploadIdRaw === 'string' && UPLOAD_ID_PATTERN.test(uploadIdRaw) ? uploadIdRaw.toLowerCase() : null
+  if (uploadIdRaw !== null && (!uploadId || files.length !== 1)) {
+    return c.json({ error: 'upload_id 无效或与文件数量不匹配' }, 400)
+  }
+  const toImageDict = (r: typeof taskImages.$inferSelect) =>
+    ({ id: r.id, filename: r.filename, mime_type: r.mime_type, size: r.size, sort_order: r.sort_order })
+  const uploadPrefix = uploadId ? `tasks/${user.id}/${taskId}/${uploadId}-` : null
+  const findByUpload = async (prefix: string) => {
+    const [row] = await query('find image by upload_id', (db) =>
+      db.select().from(taskImages)
+        .where(and(eq(taskImages.task_id, taskId), sql`substr(${taskImages.r2_key}, 1, ${prefix.length}) = ${prefix}`))
+        .limit(1)
+    )
+    return row
+  }
+  const findByKey = async (r2Key: string) => {
+    const [row] = await query('find image by r2_key', (db) =>
+      db.select().from(taskImages)
+        .where(and(eq(taskImages.task_id, taskId), eq(taskImages.r2_key, r2Key)))
+        .limit(1)
+    )
+    return row
+  }
+  // 已有同 upload_id 的记录：元数据一致即同一文件的重试（200）；不一致说明 upload_id 被复用于别的图片（409）
+  const replyExisting = (row: typeof taskImages.$inferSelect, file: File) =>
+    row.filename === file.name && row.size === file.size && row.mime_type === file.type
+      ? c.json([toImageDict(row)], 200)
+      : c.json({ error: '该上传标识已用于其他图片，请重新选择文件上传' }, 409)
+  if (uploadPrefix) {
+    const dup = await findByUpload(uploadPrefix)
+    if (dup) return replyExisting(dup, files[0])
+  }
+
+  const existing = await query('count existing images', (db) =>
+    db.select({ id: taskImages.id }).from(taskImages)
+      .where(eq(taskImages.task_id, taskId))
+  )
+
+  const existingCount = existing.length
+
   if (existingCount + files.length > MAX_IMAGES_PER_TASK) {
+    // 并发重试可能在上面查重之后、计数之前被原请求入库（占满第 10 张）：超限前按同一 upload_id 复查
+    const dup = uploadPrefix ? await findByUpload(uploadPrefix) : undefined
+    if (dup) return replyExisting(dup, files[0])
     return c.json({ error: `每个任务最多 ${MAX_IMAGES_PER_TASK} 张图片，当前已有 ${existingCount} 张` }, 400)
   }
 
@@ -347,33 +390,59 @@ taskRoutes.post('/:id/images', async (c) => {
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
     const ext = EXT_MAP[file.type] || 'jpg'
-    const uuid = crypto.randomUUID()
-    const r2Key = `tasks/${user.id}/${taskId}/${uuid}.${ext}`
+    // 每个请求的 R2 key 都带独有随机部分：同 upload_id 的并发请求写不同对象，互不覆盖
+    const r2Key = uploadPrefix
+      ? `${uploadPrefix}${crypto.randomUUID()}.${ext}`
+      : `tasks/${user.id}/${taskId}/${crypto.randomUUID()}.${ext}`
 
     const arrayBuffer = await file.arrayBuffer()
     await c.env.IMAGES_BUCKET.put(r2Key, arrayBuffer, {
       httpMetadata: { contentType: file.type },
     })
 
-    const [record] = await query(`upload image ${i}`, (db) =>
-      db.insert(taskImages).values({
-        task_id: taskId,
-        user_id: user.id,
-        r2_key: r2Key,
-        filename: file.name,
-        mime_type: file.type,
-        size: file.size,
-        sort_order: existingCount + i,
-      }).returning()
-    )
+    // 查重与插入合成一条语句：D1 单条语句原子执行，同一 upload_id 的并发请求只有一个能插入，
+    // 不依赖唯一索引或迁移/部署先后。ON CONFLICT DO NOTHING 是 r2_key 唯一索引存在时的第二道防线
+    const dedupe = uploadPrefix
+      ? sql`substr(r2_key, 1, ${uploadPrefix.length}) = ${uploadPrefix}`
+      : sql`r2_key = ${r2Key}`
+    let inserted: (typeof taskImages.$inferSelect)[]
+    try {
+      inserted = await query(`upload image ${i}`, (db) =>
+        db.all<typeof taskImages.$inferSelect>(sql`
+          INSERT INTO task_images (task_id, user_id, r2_key, filename, mime_type, size, sort_order)
+          SELECT ${taskId}, ${user.id}, ${r2Key}, ${file.name}, ${file.type}, ${file.size}, ${existingCount + i}
+          WHERE NOT EXISTS (SELECT 1 FROM task_images WHERE task_id = ${taskId} AND ${dedupe})
+          ON CONFLICT DO NOTHING
+          RETURNING *`)
+      )
+    } catch (e) {
+      // 插入（含 query 自带的一次重试）都失败：确认库里没有记录引用本对象才清理，避免残留；
+      // 回查也失败时无法确认插入是否其实已提交，宁可保留对象也不误删已入库的图片
+      const own = await findByKey(r2Key).catch(() => null)
+      if (own === undefined) await c.env.IMAGES_BUCKET.delete(r2Key).catch(() => {})
+      throw e
+    }
+    let record = inserted[0]
+    if (!record) {
+      // 没插进去有两种情况，先查出已有记录再区分：
+      // (1) query() 失败重试，而上一次插入其实已提交（响应丢失）→ 已有记录的 r2_key 就是本请求的，按成功处理
+      // (2) 并发中落败 → 已有记录属于获胜方（r2_key 不同），此时才删除本请求独有的对象
+      const existing = uploadPrefix ? await findByUpload(uploadPrefix) : await findByKey(r2Key)
+      if (!existing) {
+        // 跳过插入后、回查前，已有记录又被删除（如用户刚删掉获胜方那张图）：
+        // 本请求的对象没有任何记录引用，清理掉并返回 409，由客户端重试
+        await c.env.IMAGES_BUCKET.delete(r2Key)
+        return c.json({ error: '图片上传冲突，请重试' }, 409)
+      }
+      if (existing.r2_key === r2Key) {
+        record = existing
+      } else {
+        await c.env.IMAGES_BUCKET.delete(r2Key)
+        return replyExisting(existing, file) // 带 upload_id 时必为单文件
+      }
+    }
 
-    results.push({
-      id: record.id,
-      filename: record.filename,
-      mime_type: record.mime_type,
-      size: record.size,
-      sort_order: record.sort_order,
-    })
+    results.push(toImageDict(record))
   }
 
   return c.json(results, 201)

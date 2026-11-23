@@ -115,9 +115,11 @@ export default {
     return api.delete(`/tasks/${id}`)
   },
 
-  uploadTaskImages(taskId, files) {
+  uploadTaskImages(taskId, files, uploadId) {
     const formData = new FormData()
     files.forEach(file => formData.append('images', file))
+    // 幂等标识：仅单文件上传时有效，重试同一文件时传同一个值
+    if (uploadId) formData.append('upload_id', uploadId)
     return api.post(`/tasks/${taskId}/images`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
