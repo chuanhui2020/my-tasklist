@@ -99,6 +99,17 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 
+// crypto.randomUUID 仅在安全上下文（HTTPS / localhost）可用，局域网 HTTP 调试时不存在；
+// 回退到任何上下文都可用的 getRandomValues 生成 v4 UUID（格式需符合后端 upload_id 校验）
+const newUploadId = () => {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const b = crypto.getRandomValues(new Uint8Array(16))
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+
 export default {
   name: 'TaskForm',
   props: {
@@ -165,7 +176,7 @@ export default {
         pendingFiles.value.push({
           raw: file,
           // 同一文件的所有重试共用此标识，服务端据此去重（见后端 upload_id）
-          uploadId: crypto.randomUUID(),
+          uploadId: newUploadId(),
           preview: URL.createObjectURL(file)
         })
       }
