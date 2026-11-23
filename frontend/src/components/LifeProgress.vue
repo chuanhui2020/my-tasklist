@@ -158,6 +158,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Odometer, Setting, MagicStick } from '@element-plus/icons-vue'
 import api from '@/api'
+import { beijingClock, calendarDay } from '@/utils/chinaCalendar'
 
 const emit = defineEmits(['switch-mode'])
 
@@ -316,25 +317,11 @@ const WORK_START = 9
 const WORK_END = 20.5  // 上海时间 20:30
 const PAYDAY = 5
 
-// 中国法定节假日（数据来源：国务院办公厅）
-const HOLIDAYS = [
-  { name: '元旦', start: '2025-01-01', end: '2025-01-01' },
-  { name: '春节', start: '2025-01-28', end: '2025-02-04' },
-  { name: '清明节', start: '2025-04-04', end: '2025-04-06' },
-  { name: '劳动节', start: '2025-05-01', end: '2025-05-05' },
-  { name: '端午节', start: '2025-06-27', end: '2025-06-29' },
-  { name: '中秋节+国庆节', start: '2025-10-01', end: '2025-10-08' },
-  { name: '元旦', start: '2026-01-01', end: '2026-01-03' },
-  { name: '春节', start: '2026-02-15', end: '2026-02-23' },
-  { name: '清明节', start: '2026-04-04', end: '2026-04-06' },
-  { name: '劳动节', start: '2026-05-01', end: '2026-05-05' },
-  { name: '端午节', start: '2026-06-19', end: '2026-06-21' },
-  { name: '中秋节', start: '2026-09-25', end: '2026-09-27' },
-  { name: '国庆节', start: '2026-10-01', end: '2026-10-07' },
-]
-
 // --- 响应式状态 ---
 const now = ref(new Date())
+const clock = computed(() => beijingClock(now.value))
+const dateKey = computed(() => clock.value.toISOString().slice(0, 10))
+const calendar = computed(() => calendarDay(dateKey.value))
 const defaultRetireDate = '2065-01'
 const retireDate = ref(localStorage.getItem('life_progress_retire_date') || defaultRetireDate)
 const showSettings = ref(false)
@@ -470,17 +457,7 @@ const bars = computed(() => {
     ...getBarStyle(yearPct, false, false),
   })
 
-  // 判断今天是否在假期中
-  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate())
-  let currentHoliday = null
-  for (const h of HOLIDAYS) {
-    const start = new Date(h.start + 'T00:00:00')
-    const end = new Date(h.end + 'T00:00:00')
-    if (today >= start && today <= end) {
-      currentHoliday = h
-      break
-    }
-  }
+  const { holiday: currentHoliday, nextHoliday, daysToHoliday, daysToWeekend, isWorkday } = calendar.value
 
   const holidayWorkQuips = [
     '放假中，老板找不到你的~',
@@ -498,12 +475,16 @@ const bars = computed(() => {
   ]
 
   // 3. 距离下班
-  const curHour = n.getHours() + n.getMinutes() / 60 + n.getSeconds() / 3600
+  const curHour = clock.value.getUTCHours() + clock.value.getUTCMinutes() / 60 + clock.value.getUTCSeconds() / 3600
   let workPct, workDisplay, workOff
   if (currentHoliday) {
     workPct = 100
     workOff = true
     workDisplay = holidayWorkQuips[n.getDate() % holidayWorkQuips.length]
+  } else if (!isWorkday) {
+    workPct = 100
+    workOff = true
+    workDisplay = '周末休息中'
   } else {
     workOff = curHour < WORK_START || curHour >= WORK_END
     if (workOff) {
@@ -527,22 +508,19 @@ const bars = computed(() => {
   })
 
   // 4. 距离周末
-  const dayOfWeek = n.getDay() // 0=周日, 6=周六
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   let weekendDisplay, weekendPct, weekendDone
   if (currentHoliday) {
     weekendPct = 100
     weekendDone = true
     weekendDisplay = holidayWeekendQuips[n.getDate() % holidayWeekendQuips.length]
-  } else if (isWeekend) {
+  } else if (daysToWeekend === 0) {
     weekendPct = 100
     weekendDone = true
     weekendDisplay = '周末快乐！但周一在逼近...'
   } else {
     weekendDone = false
-    // 周一=1 到 周五=5，距离周六还有 (6 - dayOfWeek) 天
-    const daysLeft = 6 - dayOfWeek
-    weekendPct = ((5 - daysLeft) / 5) * 100
+    const daysLeft = daysToWeekend
+    weekendPct = Math.max(0, ((5 - daysLeft) / 5) * 100)
     if (daysLeft === 1) {
       weekendDisplay = '明天就周末了，再撑撑!'
     } else {
@@ -663,30 +641,15 @@ const bars = computed(() => {
   })
 
   // 6. 距离下次放假
-  let nextHoliday = null
-  let inHoliday = !!currentHoliday
-  if (inHoliday) {
-    nextHoliday = currentHoliday
-  } else {
-    for (const h of HOLIDAYS) {
-      const start = new Date(h.start + 'T00:00:00')
-      if (start > today) {
-        nextHoliday = h
-        break
-      }
-    }
-  }
+  // calendarDay 保证 nextHoliday 必有值（数据用尽时兜底到下一年元旦），假期中 nextHoliday 即当前假期
+  const inHoliday = !!currentHoliday
   let holidayDisplay, holidayPct
   if (inHoliday) {
-    holidayDisplay = `${nextHoliday.name} 放假中，快乐!`
+    holidayDisplay = `${currentHoliday.name} 放假中，快乐!`
     holidayPct = 100
-  } else if (nextHoliday) {
-    const daysUntil = Math.ceil((new Date(nextHoliday.start + 'T00:00:00') - today) / 86400000)
-    holidayPct = Math.max((1 - daysUntil / 90) * 100, 0)
-    holidayDisplay = `${nextHoliday.name} 还有 ${daysUntil} 天`
   } else {
-    holidayDisplay = '暂无假期数据'
-    holidayPct = 0
+    holidayPct = Math.max((1 - daysToHoliday / 90) * 100, 0)
+    holidayDisplay = `${nextHoliday.name} 还有 ${daysToHoliday} 天`
   }
   list.push({
     id: 'holiday',
@@ -754,7 +717,7 @@ const holidayAlerts = [
 ]
 
 let pendingAlertType = null
-let lastMenuDateKey = now.value.toDateString()
+let lastMenuDateKey = dateKey.value
 
 // 每日一次的提醒用 sessionStorage 记录日期，防止重复
 const alertedOffWork = ref(sessionStorage.getItem('lp_alerted_offwork') || '')
@@ -773,7 +736,7 @@ function triggerAlert(type) {
 
 function dismissAlert() {
   alertVisible.value = false
-  const todayKey = new Date().toDateString()
+  const todayKey = dateKey.value
   if (pendingAlertType === 'offwork') {
     alertedOffWork.value = todayKey
     sessionStorage.setItem('lp_alerted_offwork', todayKey)
@@ -794,9 +757,9 @@ onMounted(() => {
   loadTodayMenu()
   timer = setInterval(() => {
     now.value = new Date()
-    const curH = now.value.getHours()
-    const curM = now.value.getMinutes()
-    const currentDateKey = now.value.toDateString()
+    const curH = clock.value.getUTCHours()
+    const curM = clock.value.getUTCMinutes()
+    const currentDateKey = dateKey.value
 
     if (currentDateKey !== lastMenuDateKey) {
       lastMenuDateKey = currentDateKey
@@ -806,34 +769,17 @@ onMounted(() => {
     // 下班提醒：20:30 后5分钟内触发，每天一次
     const curHourDec = curH + curM / 60
     if (curHourDec >= WORK_END && curHourDec < WORK_END + 0.1 && alertedOffWork.value !== currentDateKey && !alertVisible.value) {
-      // 排除假期和周末（假期/周末不需要下班提醒）
-      const todayDate = new Date(now.value.getFullYear(), now.value.getMonth(), now.value.getDate())
-      const dayOfWeek = now.value.getDay()
-      const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6
-      let isHolidayDay = false
-      for (const h of HOLIDAYS) {
-        const hs = new Date(h.start + 'T00:00:00')
-        const he = new Date(h.end + 'T00:00:00')
-        if (todayDate >= hs && todayDate <= he) { isHolidayDay = true; break }
-      }
-      if (!isWeekendDay && !isHolidayDay) {
+      if (calendar.value.isWorkday) {
         triggerAlert('offwork')
       }
     }
     // 发薪日提醒：每月5号，9点后触发，每天一次
-    if (now.value.getDate() === PAYDAY && curH >= 9 && alertedPayday.value !== currentDateKey && !alertVisible.value) {
+    if (clock.value.getUTCDate() === PAYDAY && curH >= 9 && alertedPayday.value !== currentDateKey && !alertVisible.value) {
       triggerAlert('payday')
     }
     // 放假提醒：假期第一天，9点后触发，每天一次
     if (curH >= 9 && alertedHoliday.value !== currentDateKey && !alertVisible.value) {
-      const todayDate = new Date(now.value.getFullYear(), now.value.getMonth(), now.value.getDate())
-      for (const h of HOLIDAYS) {
-        const hs = new Date(h.start + 'T00:00:00')
-        if (todayDate.getTime() === hs.getTime()) {
-          triggerAlert('holiday')
-          break
-        }
-      }
+      if (calendar.value.holiday?.start === currentDateKey) triggerAlert('holiday')
     }
   }, 1000)
 })
