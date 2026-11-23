@@ -164,6 +164,8 @@ export default {
         }
         pendingFiles.value.push({
           raw: file,
+          // 同一文件的所有重试共用此标识，服务端据此去重（见后端 upload_id）
+          uploadId: crypto.randomUUID(),
           preview: URL.createObjectURL(file)
         })
       }
@@ -239,7 +241,8 @@ export default {
           removedImageIds.value.shift()
         }
         while (pendingFiles.value.length) {
-          const response = await api.uploadTaskImages(taskId, [pendingFiles.value[0].raw])
+          const { raw, uploadId } = pendingFiles.value[0]
+          const response = await api.uploadTaskImages(taskId, [raw], uploadId)
           existingImages.value.push(...response.data)
           removePendingFile(0)
         }

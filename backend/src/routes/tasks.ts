@@ -13,6 +13,8 @@ const EXT_MAP: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 }
+// 严格限定 UUID 格式：upload_id 会拼进 R2 key，不能放任意字符串（防路径穿越）
+const UPLOAD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const taskRoutes = new Hono<Env>()
 
@@ -310,13 +312,6 @@ taskRoutes.post('/:id/images', async (c) => {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const existing = await query('count existing images', (db) =>
-    db.select({ id: taskImages.id }).from(taskImages)
-      .where(eq(taskImages.task_id, taskId))
-  )
-
-  const existingCount = existing.length
-
   const formData = await c.req.formData()
   const entries = formData.getAll('images')
   const files: File[] = []
@@ -329,6 +324,34 @@ taskRoutes.post('/:id/images', async (c) => {
   if (!files.length) {
     return c.json({ error: '请选择要上传的图片' }, 400)
   }
+
+  // 幂等上传：客户端为单个文件附带 upload_id（UUID）并直接用作 R2 key。
+  // 「已入库但响应丢失」后的重试命中同一 key 时返回原记录，不重复入库、不重复占用张数限额。
+  const uploadIdRaw = formData.get('upload_id')
+  const uploadId = typeof uploadIdRaw === 'string' && UPLOAD_ID_PATTERN.test(uploadIdRaw) ? uploadIdRaw.toLowerCase() : null
+  if (uploadIdRaw !== null && (!uploadId || files.length !== 1)) {
+    return c.json({ error: 'upload_id 无效或与文件数量不匹配' }, 400)
+  }
+  if (uploadId) {
+    const r2Key = `tasks/${user.id}/${taskId}/${uploadId}.${EXT_MAP[files[0].type] || 'jpg'}`
+    const [dup] = await query('find image by upload_id', (db) =>
+      db.select().from(taskImages)
+        .where(and(eq(taskImages.task_id, taskId), eq(taskImages.r2_key, r2Key)))
+        .limit(1)
+    )
+    if (dup) {
+      return c.json([{
+        id: dup.id, filename: dup.filename, mime_type: dup.mime_type, size: dup.size, sort_order: dup.sort_order,
+      }], 200)
+    }
+  }
+
+  const existing = await query('count existing images', (db) =>
+    db.select({ id: taskImages.id }).from(taskImages)
+      .where(eq(taskImages.task_id, taskId))
+  )
+
+  const existingCount = existing.length
 
   if (existingCount + files.length > MAX_IMAGES_PER_TASK) {
     return c.json({ error: `每个任务最多 ${MAX_IMAGES_PER_TASK} 张图片，当前已有 ${existingCount} 张` }, 400)
@@ -347,7 +370,7 @@ taskRoutes.post('/:id/images', async (c) => {
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
     const ext = EXT_MAP[file.type] || 'jpg'
-    const uuid = crypto.randomUUID()
+    const uuid = uploadId ?? crypto.randomUUID()
     const r2Key = `tasks/${user.id}/${taskId}/${uuid}.${ext}`
 
     const arrayBuffer = await file.arrayBuffer()

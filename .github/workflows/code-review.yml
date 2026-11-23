@@ -208,11 +208,18 @@ jobs:
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          # 只看模型最终回复：raw 里有 PROMPT 回显的 VERDICT 模板，不能参与判定
-          CODEX_OUTPUT=$(cat /tmp/codex_last.txt 2>/dev/null || true)
-          VERDICT=$(echo "$CODEX_OUTPUT" | grep -oE 'VERDICT: (PASS|FAIL)' | tail -1 || true)
+          # 只看模型最终回复：raw 里有 PROMPT 回显的 VERDICT 模板，不能参与判定。
+          # 且只认「最后一个完整审查块」（START…END 都在）里唯一的判定行：
+          # 回复被截断缺结束标记、或块内出现多个判定 → 一律不合并，按 needs-fix 处理
+          BLOCK=$(awk '/===REVIEW_START===/{buf=""; done=""; capture=1; next} /===REVIEW_END===/{if(capture) done=buf; capture=0; next} capture{buf=buf $0 "\n"} END{printf "%s", done}' /tmp/codex_last.txt 2>/dev/null || true)
+          VERDICTS=$(printf '%s' "$BLOCK" | grep -oE 'VERDICT: (PASS|FAIL)' || true)
+          VERDICT=""
+          if [ "$(printf '%s' "$VERDICTS" | grep -c '^VERDICT')" = "1" ]; then VERDICT="$VERDICTS"; fi
+          echo "verdict: '${VERDICT:-<none>}'"
 
           if [ "$VERDICT" = "VERDICT: PASS" ]; then
+            # 清掉此前轮次留下的 needs-fix，避免已合并的 PR 挂着过期标签
+            gh issue edit "$PR_NUMBER" --remove-label "needs-fix" 2>/dev/null || true
             gh pr merge "$PR_NUMBER" --merge --delete-branch=false || \
               gh issue comment "$PR_NUMBER" --body "⚠️ 自动合并失败，请手动处理。"
           else

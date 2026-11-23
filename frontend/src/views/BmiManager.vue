@@ -404,7 +404,11 @@ const changedFields = () => Object.fromEntries(
 const persistProfile = async () => {
   if (saving) return
   const changes = changedFields()
-  if (!Object.keys(changes).length) return
+  // 无差异（含失败后用户把字段改回原值）说明已与服务端一致，清掉「尚未保存」提示
+  if (!Object.keys(changes).length) {
+    saveFailed.value = false
+    return
+  }
   saving = true
   saveFailed.value = false
   try {
