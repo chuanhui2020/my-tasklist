@@ -367,6 +367,7 @@ taskRoutes.post('/:id/images', async (c) => {
   }
 
   const results = []
+  let deduped = false
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
     const ext = EXT_MAP[file.type] || 'jpg'
@@ -378,7 +379,9 @@ taskRoutes.post('/:id/images', async (c) => {
       httpMetadata: { contentType: file.type },
     })
 
-    const [record] = await query(`upload image ${i}`, (db) =>
+    // 不带冲突目标的 DO NOTHING：唯一索引（0012）未建时照常插入，建了之后同 key 的并发请求只落一条；
+    // 落空的一方读回已有记录返回。与迁移执行先后无关，不会因缺索引报错
+    let [record] = await query(`upload image ${i}`, (db) =>
       db.insert(taskImages).values({
         task_id: taskId,
         user_id: user.id,
@@ -387,8 +390,17 @@ taskRoutes.post('/:id/images', async (c) => {
         mime_type: file.type,
         size: file.size,
         sort_order: existingCount + i,
-      }).returning()
+      }).onConflictDoNothing().returning()
     )
+    if (!record) {
+      deduped = true
+      ;[record] = await query('get image after conflict', (db) =>
+        db.select().from(taskImages)
+          .where(and(eq(taskImages.task_id, taskId), eq(taskImages.r2_key, r2Key)))
+          .limit(1)
+      )
+      if (!record) throw new Error(`image record missing after conflict: ${r2Key}`)
+    }
 
     results.push({
       id: record.id,
@@ -399,7 +411,7 @@ taskRoutes.post('/:id/images', async (c) => {
     })
   }
 
-  return c.json(results, 201)
+  return c.json(results, deduped ? 200 : 201)
 })
 
 // DELETE /:id/images/:imageId
