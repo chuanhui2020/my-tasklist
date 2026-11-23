@@ -300,7 +300,7 @@ app.route('/api/your-feature', yourRoutes)
 - **空输出 = job 变红**：review 无有效输出时会走 `Fail on empty review` 步骤 `exit 1`。此前这种情况 job 仍是绿灯、只打 `needs-fix` 标签，故障要翻 PR 才看得见。该步骤**必须排在评论和打标签之后**，否则 PR 上不会留下任何线索。
 - **只从 `-o` 文件解析 review 和 VERDICT**：`codex exec` 的原始输出会回显整段 PROMPT（含 `===REVIEW_START===` 标记和 `VERDICT: PASS` 模板），从原始输出解析会在模型失败时把模板当成 review。
 - **`--strict-config`**：config.toml 写错键名直接报错退出（进而触发上一条变红），不再静默忽略。
-- **`timeout 540` 包住 `codex exec`**：网关不通时 codex 会无限重连，必须在步骤超时（10 min）前退出，后续评论/打标签/变红才能执行。
+- **`timeout 1080` 包住 `codex exec`**：网关不通时 codex 会无限重连，必须在步骤超时（20 min，xhigh 档审查较慢）前退出，后续评论/打标签/变红才能执行。
 - **原始输出进日志**：`codex exec` 的 stdout/stderr 会 tail 进 job log。定位 review 失败先看这段，别猜。
 
 Codex 以 `--sandbox read-only` + `approval_policy = "never"` 运行：审查只需读代码和跑 `git diff`，不给写盘和联网权限，避免仓库内容做提示注入后窃取 `GH_TOKEN` / `OPENAI_API_KEY`。沙箱只约束模型生成的命令，codex 自身访问模型 API 不受影响。

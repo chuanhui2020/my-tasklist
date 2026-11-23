@@ -10,14 +10,14 @@ export class AIError extends Error {
 }
 
 export async function callAI(
-  env: { AI_API_KEY: string; AI_BASE_URL: string; AI_IMAGE_BASE_URL?: string; AI_MODEL: string },
+  env: { AI_API_KEY: string; AI_BASE_URL: string; AI_IMAGE_BASE_URL?: string; AI_MODEL: string; AI_REASONING_EFFORT?: string },
   messages: { role: string; content: string | { type: string; [key: string]: unknown }[] }[],
   options: {
     max_completion_tokens?: number
     deadlineMs?: number
     direct?: boolean
     model?: string
-    /** 推理档位，仅在显式传入时下发（不传则用服务端默认，避免影响其他调用方） */
+    /** 推理档位；不传时用全局配置 env.AI_REASONING_EFFORT，两者都没有才用服务端默认 */
     reasoning_effort?: string
   } = {}
 ): Promise<string> {
@@ -26,7 +26,9 @@ export async function callAI(
   //   给少了会把预算全烧在推理上、content 返回空，所以各调用方要按「期望输出 + 推理余量」给值
   // - 不支持 temperature（GPT-6.2 官方要求省略 temperature/top_p/logprobs），故不再下发
   // - GPT-6.2 Astra/Sol 仍支持 Chat Completions；只有 tool calling 必须走 Responses API，本项目未用
-  const { max_completion_tokens = 4000, deadlineMs = 170000, direct = false, model, reasoning_effort } = options
+  const { max_completion_tokens = 4000, deadlineMs = 170000, direct = false, model } = options
+  // xhigh 推理开销大：实测求签类请求约 30s、推理 ~800 token，各调用方的 max_completion_tokens 需留足余量
+  const reasoning_effort = options.reasoning_effort ?? env.AI_REASONING_EFFORT
   // direct=true 走灰云直连 api-direct（DNS-only，nginx proxy_read_timeout 180s），
   // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（菜单 OCR）常 >100s，必须直连。
   const baseUrl = direct ? (env.AI_IMAGE_BASE_URL || env.AI_BASE_URL) : env.AI_BASE_URL

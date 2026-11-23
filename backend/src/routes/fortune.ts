@@ -237,7 +237,7 @@ fortuneRoutes.post('/generate', async (c) => {
     const content = await callAI(c.env, [
       { role: 'system', content: '你是一位精通周易与传统占卜的老法师，输出必须是纯 JSON 格式，所有内容使用简体中文。' },
       { role: 'user', content: prompt },
-    ], { max_completion_tokens: 6000 })
+    ], { max_completion_tokens: 12000 }) // xhigh 推理余量
 
     const cleaned = stripCodeFences(content)
     fortuneData = JSON.parse(cleaned)

@@ -130,7 +130,7 @@ bmiRoutes.post('/advice', authMiddleware, async (c) => {
     const content = await callAI(c.env, [
       { role: 'system', content: '你是一位简洁的健康管理助手，输出必须是纯 JSON。' },
       { role: 'user', content: prompt },
-    ], { max_completion_tokens: 2000 })
+    ], { max_completion_tokens: 6000 }) // xhigh 推理余量：JSON 建议本身很短，主要是推理开销
     advice = extractAdvice(content, fallback)
   } catch {
     advice = fallback
@@ -389,7 +389,7 @@ ${dataLines}
     const content = await callAI(c.env, [
       { role: 'system', content: '你是一位专业的健康管理顾问。输出必须是自然中文段落，不要 JSON，不要 Markdown，不要代码块。' },
       { role: 'user', content: prompt },
-    ], { max_completion_tokens: 6000 })
+    ], { max_completion_tokens: 12000 }) // xhigh 推理余量
 
     analysis = stripCodeFences(content) || fallback
   } catch {
