@@ -278,21 +278,18 @@ taskRoutes.delete('/:id', async (c) => {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const images = await query('get images for delete', (db) =>
-    db.select().from(taskImages)
-      .where(eq(taskImages.task_id, taskId))
+  // 图片记录与任务在同一个 batch（D1 事务）里删除，再按实际删掉的记录清理 R2。
+  // 与并发上传的关系：上传要么在事务前入库（随事务一起删除，其对象在下方被清理），
+  // 要么在事务后执行（任务已不存在，原子插入被跳过，上传方自行清理对象）——不会留下孤儿记录或对象，
+  // 也不会因外键约束导致删除任务失败
+  const [deletedImages] = await query('delete task with images', (db) =>
+    db.batch([
+      db.delete(taskImages).where(eq(taskImages.task_id, taskId)).returning({ r2_key: taskImages.r2_key }),
+      db.delete(tasks).where(and(eq(tasks.id, taskId), eq(tasks.user_id, user.id))),
+    ])
   )
-
-  if (images.length > 0) {
-    await Promise.all(images.map(img => c.env.IMAGES_BUCKET.delete(img.r2_key)))
-    await query('delete task images', (db) =>
-      db.delete(taskImages).where(eq(taskImages.task_id, taskId))
-    )
-  }
-
-  await query('delete task', (db) =>
-    db.delete(tasks).where(eq(tasks.id, taskId))
-  )
+  // 记录已删，对象清理失败只会留下不可见的残留，不影响任务删除结果
+  await Promise.all(deletedImages.map(img => c.env.IMAGES_BUCKET.delete(img.r2_key).catch(() => {})))
   return c.json({ message: '任务已删除' })
 })
 
@@ -358,6 +355,19 @@ taskRoutes.post('/:id/images', async (c) => {
     row.filename === file.name && row.size === file.size && row.mime_type === file.type
       ? c.json([toImageDict(row)], 200)
       : c.json({ error: '该上传标识已用于其他图片，请重新选择文件上传' }, 409)
+  // 原子插入被跳过、且库里没有可返回的记录时，按当前状态给出准确原因
+  const rejectSkipped = async () => {
+    const [state] = await query('check state after skipped insert', (db) =>
+      db.all<{ task_exists: number; n: number }>(sql`
+        SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ${taskId} AND user_id = ${user.id}) AS task_exists,
+               (SELECT COUNT(*) FROM task_images WHERE task_id = ${taskId}) AS n`)
+    )
+    if (!state?.task_exists) return c.json({ error: '任务不存在' }, 404)
+    if (state.n >= MAX_IMAGES_PER_TASK) {
+      return c.json({ error: `每个任务最多 ${MAX_IMAGES_PER_TASK} 张图片，当前已有 ${state.n} 张` }, 400)
+    }
+    return c.json({ error: '图片上传冲突，请重试' }, 409)
+  }
   if (uploadPrefix) {
     const dup = await findByUpload(uploadPrefix)
     if (dup) return replyExisting(dup, files[0])
@@ -370,6 +380,7 @@ taskRoutes.post('/:id/images', async (c) => {
 
   const existingCount = existing.length
 
+  // 快速失败：明显超限时不必先传 R2。真正的上限由下方原子插入在数据库内判定（并发上传不会超过上限）
   if (existingCount + files.length > MAX_IMAGES_PER_TASK) {
     // 并发重试可能在上面查重之后、计数之前被原请求入库（占满第 10 张）：超限前按同一 upload_id 复查
     const dup = uploadPrefix ? await findByUpload(uploadPrefix) : undefined
@@ -400,8 +411,12 @@ taskRoutes.post('/:id/images', async (c) => {
       httpMetadata: { contentType: file.type },
     })
 
-    // 查重与插入合成一条语句：D1 单条语句原子执行，同一 upload_id 的并发请求只有一个能插入，
-    // 不依赖唯一索引或迁移/部署先后。ON CONFLICT DO NOTHING 是 r2_key 唯一索引存在时的第二道防线
+    // 所有并发相关的判定合成一条语句，由 D1 原子执行（单条语句期间不会插入其他写入）：
+    // - 任务仍存在且属于当前用户（与删除任务并发时，任务删除后不会再插入孤儿记录）
+    // - 同一 upload_id 尚无记录（并发重试只有一个能插入；不依赖唯一索引或迁移/部署先后）
+    // - 当前张数 < 上限（并发上传不会突破上限）
+    // - sort_order 取当前最大值 + 1（并发上传不会拿到相同序号）
+    // ON CONFLICT DO NOTHING 是 r2_key 唯一索引存在时的第二道防线
     const dedupe = uploadPrefix
       ? sql`substr(r2_key, 1, ${uploadPrefix.length}) = ${uploadPrefix}`
       : sql`r2_key = ${r2Key}`
@@ -410,8 +425,11 @@ taskRoutes.post('/:id/images', async (c) => {
       inserted = await query(`upload image ${i}`, (db) =>
         db.all<typeof taskImages.$inferSelect>(sql`
           INSERT INTO task_images (task_id, user_id, r2_key, filename, mime_type, size, sort_order)
-          SELECT ${taskId}, ${user.id}, ${r2Key}, ${file.name}, ${file.type}, ${file.size}, ${existingCount + i}
-          WHERE NOT EXISTS (SELECT 1 FROM task_images WHERE task_id = ${taskId} AND ${dedupe})
+          SELECT ${taskId}, ${user.id}, ${r2Key}, ${file.name}, ${file.type}, ${file.size},
+                 (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM task_images WHERE task_id = ${taskId})
+          WHERE EXISTS (SELECT 1 FROM tasks WHERE id = ${taskId} AND user_id = ${user.id})
+            AND NOT EXISTS (SELECT 1 FROM task_images WHERE task_id = ${taskId} AND ${dedupe})
+            AND (SELECT COUNT(*) FROM task_images WHERE task_id = ${taskId}) < ${MAX_IMAGES_PER_TASK}
           ON CONFLICT DO NOTHING
           RETURNING *`)
       )
@@ -424,21 +442,17 @@ taskRoutes.post('/:id/images', async (c) => {
     }
     let record = inserted[0]
     if (!record) {
-      // 没插进去有两种情况，先查出已有记录再区分：
+      // 没插进去，先查出已有记录再区分原因：
       // (1) query() 失败重试，而上一次插入其实已提交（响应丢失）→ 已有记录的 r2_key 就是本请求的，按成功处理
-      // (2) 并发中落败 → 已有记录属于获胜方（r2_key 不同），此时才删除本请求独有的对象
+      // (2) 同 upload_id 并发落败 → 已有记录属于获胜方（r2_key 不同）
+      // (3) 无可返回记录：任务已删除 / 已达上限 / 获胜方记录在回查前被删除
+      // (2)(3) 时本请求的对象没有任何记录引用，先清理再应答（获胜方的对象 key 不同，不受影响）
       const existing = uploadPrefix ? await findByUpload(uploadPrefix) : await findByKey(r2Key)
-      if (!existing) {
-        // 跳过插入后、回查前，已有记录又被删除（如用户刚删掉获胜方那张图）：
-        // 本请求的对象没有任何记录引用，清理掉并返回 409，由客户端重试
-        await c.env.IMAGES_BUCKET.delete(r2Key)
-        return c.json({ error: '图片上传冲突，请重试' }, 409)
-      }
-      if (existing.r2_key === r2Key) {
+      if (existing?.r2_key === r2Key) {
         record = existing
       } else {
         await c.env.IMAGES_BUCKET.delete(r2Key)
-        return replyExisting(existing, file) // 带 upload_id 时必为单文件
+        return existing ? replyExisting(existing, file) : rejectSkipped() // 带 upload_id 时必为单文件
       }
     }
 
@@ -465,20 +479,19 @@ taskRoutes.delete('/:id/images/:imageId', async (c) => {
     return c.json({ error: '任务不存在' }, 404)
   }
 
-  const [image] = await query('get image for delete', (db) =>
-    db.select().from(taskImages)
+  // 先删记录（RETURNING 拿到 key）再删对象：最坏只残留一个无记录引用的对象，
+  // 不会出现「记录还在、对象已删」导致图片 404。并发重复删除时只有一个能删到记录，另一个返回 404
+  const [image] = await query('delete image record', (db) =>
+    db.delete(taskImages)
       .where(and(eq(taskImages.id, imageId), eq(taskImages.task_id, taskId)))
-      .limit(1)
+      .returning({ r2_key: taskImages.r2_key })
   )
 
   if (!image) {
     return c.json({ error: '图片不存在' }, 404)
   }
 
-  await c.env.IMAGES_BUCKET.delete(image.r2_key)
-  await query('delete image record', (db) =>
-    db.delete(taskImages).where(eq(taskImages.id, imageId))
-  )
+  await c.env.IMAGES_BUCKET.delete(image.r2_key).catch(() => {})
 
   return c.json({ message: '图片已删除' })
 })
