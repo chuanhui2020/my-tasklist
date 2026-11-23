@@ -332,18 +332,20 @@ taskRoutes.post('/:id/images', async (c) => {
   if (uploadIdRaw !== null && (!uploadId || files.length !== 1)) {
     return c.json({ error: 'upload_id 无效或与文件数量不匹配' }, 400)
   }
-  if (uploadId) {
-    const r2Key = `tasks/${user.id}/${taskId}/${uploadId}.${EXT_MAP[files[0].type] || 'jpg'}`
-    const [dup] = await query('find image by upload_id', (db) =>
+  const findByKey = async (r2Key: string) => {
+    const [row] = await query('find image by r2_key', (db) =>
       db.select().from(taskImages)
         .where(and(eq(taskImages.task_id, taskId), eq(taskImages.r2_key, r2Key)))
         .limit(1)
     )
-    if (dup) {
-      return c.json([{
-        id: dup.id, filename: dup.filename, mime_type: dup.mime_type, size: dup.size, sort_order: dup.sort_order,
-      }], 200)
-    }
+    return row
+  }
+  const toImageDict = (r: typeof taskImages.$inferSelect) =>
+    ({ id: r.id, filename: r.filename, mime_type: r.mime_type, size: r.size, sort_order: r.sort_order })
+  const uploadKey = uploadId ? `tasks/${user.id}/${taskId}/${uploadId}.${EXT_MAP[files[0].type] || 'jpg'}` : null
+  if (uploadKey) {
+    const dup = await findByKey(uploadKey)
+    if (dup) return c.json([toImageDict(dup)], 200)
   }
 
   const existing = await query('count existing images', (db) =>
@@ -354,6 +356,9 @@ taskRoutes.post('/:id/images', async (c) => {
   const existingCount = existing.length
 
   if (existingCount + files.length > MAX_IMAGES_PER_TASK) {
+    // 并发重试可能在上面查重之后、计数之前被原请求入库（占满第 10 张）：超限前按同一 upload_id 复查
+    const dup = uploadKey ? await findByKey(uploadKey) : undefined
+    if (dup) return c.json([toImageDict(dup)], 200)
     return c.json({ error: `每个任务最多 ${MAX_IMAGES_PER_TASK} 张图片，当前已有 ${existingCount} 张` }, 400)
   }
 
@@ -379,36 +384,25 @@ taskRoutes.post('/:id/images', async (c) => {
       httpMetadata: { contentType: file.type },
     })
 
-    // 不带冲突目标的 DO NOTHING：唯一索引（0012）未建时照常插入，建了之后同 key 的并发请求只落一条；
-    // 落空的一方读回已有记录返回。与迁移执行先后无关，不会因缺索引报错
-    let [record] = await query(`upload image ${i}`, (db) =>
-      db.insert(taskImages).values({
-        task_id: taskId,
-        user_id: user.id,
-        r2_key: r2Key,
-        filename: file.name,
-        mime_type: file.type,
-        size: file.size,
-        sort_order: existingCount + i,
-      }).onConflictDoNothing().returning()
+    // 查重与插入合成一条语句：D1 单条语句原子执行，同 r2_key 的并发请求只有一个能插入，
+    // 因此即使唯一索引（0012）尚未建立也不会产生共享 R2 对象的重复记录（不依赖迁移/部署先后）。
+    // ON CONFLICT DO NOTHING 是索引存在时的第二道防线；落空的一方读回已有记录返回
+    const inserted = await query(`upload image ${i}`, (db) =>
+      db.all<typeof taskImages.$inferSelect>(sql`
+        INSERT INTO task_images (task_id, user_id, r2_key, filename, mime_type, size, sort_order)
+        SELECT ${taskId}, ${user.id}, ${r2Key}, ${file.name}, ${file.type}, ${file.size}, ${existingCount + i}
+        WHERE NOT EXISTS (SELECT 1 FROM task_images WHERE r2_key = ${r2Key})
+        ON CONFLICT DO NOTHING
+        RETURNING *`)
     )
+    let record = inserted[0]
     if (!record) {
       deduped = true
-      ;[record] = await query('get image after conflict', (db) =>
-        db.select().from(taskImages)
-          .where(and(eq(taskImages.task_id, taskId), eq(taskImages.r2_key, r2Key)))
-          .limit(1)
-      )
+      record = await findByKey(r2Key)
       if (!record) throw new Error(`image record missing after conflict: ${r2Key}`)
     }
 
-    results.push({
-      id: record.id,
-      filename: record.filename,
-      mime_type: record.mime_type,
-      size: record.size,
-      sort_order: record.sort_order,
-    })
+    results.push(toImageDict(record))
   }
 
   return c.json(results, deduped ? 200 : 201)

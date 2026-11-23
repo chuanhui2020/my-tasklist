@@ -416,6 +416,9 @@ const persistProfile = async () => {
     Object.assign(savedProfile, changes)
   } catch {
     saveFailed.value = true
+    // 请求可能已在服务端生效、只是响应丢失：服务端状态未知。清空基线后下次保存提交整份表单，
+    // 用户之后无论怎么改（包括改回原值）都会写回服务端，提示也只在真正保存成功后才清除
+    savedProfile = {}
   } finally {
     saving = false
   }
