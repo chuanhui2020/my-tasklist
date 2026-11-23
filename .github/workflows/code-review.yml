@@ -17,7 +17,7 @@ concurrency:
 
 env:
   AI_BASE_URL: https://api.ch-tools.org
-  AI_MODEL: gpt-5.6
+  AI_MODEL: gpt-6.2-astra
 
 jobs:
   lint:
@@ -69,8 +69,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          # 锁定版本：避免上游 breaking release 静默打断 review（0.147.0 = 2026-08-10 最新稳定版）
-          npm install -g @openai/codex@0.147.0
+          # 锁定版本：避免上游 breaking release 静默打断 review（0.171.0 = 2026-11-20 最新稳定版）
+          npm install -g @openai/codex@0.171.0
           codex --version
 
       - name: Find or create PR
@@ -100,10 +100,12 @@ jobs:
           # 审查只需读代码 + git diff：沙箱设为 read-only，模型生成的命令不能写盘/联网，
           # 避免仓库内容做提示注入后窃取 GH_TOKEN / OPENAI_API_KEY。
           # （沙箱只约束模型生成的命令，codex 自身访问模型 API 不受影响）
-          sandbox = "read-only"
+          # 键名必须是 sandbox_mode / model_reasoning_effort：旧写法 sandbox / reasoning_effort
+          # 是无效键，会被静默忽略（high 档从未生效）。下方 exec 加了 --strict-config，写错键会直接报错
+          sandbox_mode = "read-only"
           # 非交互 CI：审批一律拒绝，避免模型请求提权时卡住
           approval_policy = "never"
-          reasoning_effort = "high"
+          model_reasoning_effort = "high"
 
           [model_providers.proxy]
           name = "Custom Proxy"
@@ -129,18 +131,26 @@ jobs:
           Use VERDICT: FAIL only for confirmed runtime errors or data loss bugs.'
 
           # 0.147.0 已移除 exec 的 --full-auto，用显式 --sandbox 替代（与 config.toml 保持一致）
-          codex exec --sandbox read-only "$PROMPT" > /tmp/codex_raw.txt 2>&1 || true
+          # -o 只落模型最终回复：raw 输出会回显整段 PROMPT（含 REVIEW 标记和 VERDICT 模板），
+          #   从 raw 里解析会在模型失败时把模板当成 review。raw 只用于日志排障。
+          # timeout 540 < 步骤 timeout-minutes(10)：网关不通时 codex 会无限重连，
+          #   必须让它先退出，后续评论/打标签/Fail on empty review 才能执行
+          # </dev/null：新版 exec 在 stdin 非 TTY 时会读 stdin 拼进 prompt，显式关掉
+          rm -f /tmp/codex_last.txt
+          timeout 540 codex exec --strict-config --sandbox read-only -o /tmp/codex_last.txt "$PROMPT" \
+            < /dev/null > /tmp/codex_raw.txt 2>&1 || true
+          touch /tmp/codex_last.txt
 
           # 把原始输出打进 job log：失败时 codex_raw.txt 不落盘也不上传，报错会彻底丢失
           echo "===== codex raw output (tail 4000B) ====="
           tail -c 4000 /tmp/codex_raw.txt || echo "(codex_raw.txt 为空或不存在)"
           echo "===== end codex raw output ====="
 
-          # Extract content between markers (take the LAST block only)
-          if grep -q "===REVIEW_START===" /tmp/codex_raw.txt; then
-            awk '/===REVIEW_START===/{buf=""; capture=1; next} /===REVIEW_END===/{capture=0} capture{buf=buf $0 "\n"} END{printf "%s", buf}' /tmp/codex_raw.txt > /tmp/codex_output.txt
-          elif grep -q "VERDICT" /tmp/codex_raw.txt; then
-            grep -B50 "VERDICT" /tmp/codex_raw.txt | grep -v "^exec\|^codex\|^ succeeded\|^--------\|^workdir\|^model\|^provider\|^approval\|^sandbox\|^reasoning\|^session\|^user" | tail -20 > /tmp/codex_output.txt
+          # 只从模型最终回复（codex_last.txt）里解析，取最后一个标记块
+          if grep -q "===REVIEW_START===" /tmp/codex_last.txt; then
+            awk '/===REVIEW_START===/{buf=""; capture=1; next} /===REVIEW_END===/{capture=0} capture{buf=buf $0 "\n"} END{printf "%s", buf}' /tmp/codex_last.txt > /tmp/codex_output.txt
+          elif grep -q "VERDICT" /tmp/codex_last.txt; then
+            tail -20 /tmp/codex_last.txt > /tmp/codex_output.txt
           else
             echo "Review 未能生成有效输出" > /tmp/codex_output.txt
             # 标记失败，交给最后一步 fail job；不在这里 exit，否则评论/标签都不会执行
@@ -154,10 +164,11 @@ jobs:
         run: |
           COMMITS=$(git log origin/master..HEAD --pretty=format:"%h %s")
 
+          # GPT-6.2 是推理模型：不接受 temperature；输出上限用 max_completion_tokens（含推理 token）
           PAYLOAD=$(jq -n \
             --arg model "$AI_MODEL" \
             --arg content "Based on these git commit messages, generate a changelog in Chinese using Keep a Changelog format (Added/Fixed/Changed sections). Only include relevant sections.\n\nCommit messages:\n$COMMITS\n\nReturn ONLY the changelog content in Markdown." \
-            '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.3, max_tokens: 4000}')
+            '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 4000}')
 
           CHANGELOG=$(curl -s "${AI_BASE_URL}/v1/chat/completions" \
             -H "Authorization: Bearer $AI_API_KEY" \
@@ -197,7 +208,8 @@ jobs:
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          CODEX_OUTPUT=$(cat /tmp/codex_raw.txt)
+          # 只看模型最终回复：raw 里有 PROMPT 回显的 VERDICT 模板，不能参与判定
+          CODEX_OUTPUT=$(cat /tmp/codex_last.txt 2>/dev/null || true)
           VERDICT=$(echo "$CODEX_OUTPUT" | grep -oE 'VERDICT: (PASS|FAIL)' | tail -1 || true)
 
           if [ "$VERDICT" = "VERDICT: PASS" ]; then

@@ -1,5 +1,6 @@
 export type Env = {
   Bindings: {
+    BMI_ADVICE_LIMITER: RateLimit
     DB: D1Database
     IMAGES_BUCKET: R2Bucket
     SECRET_KEY: string

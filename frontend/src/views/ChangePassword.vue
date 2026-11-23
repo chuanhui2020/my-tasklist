@@ -59,8 +59,10 @@ import { reactive, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Lock, Key, CircleCheck } from '@element-plus/icons-vue'
-import api, { authStorage } from '@/api'
+import api from '@/api'
+import { useAuth } from '@/composables/useAuth'
 
+const { clearAuth } = useAuth()
 const router = useRouter()
 const formRef = ref(null)
 const loading = ref(false)
@@ -147,11 +149,8 @@ const handleSubmit = () => {
         duration: 2000
       })
 
-      // Clear auth and redirect to login after 1.5 seconds
-      setTimeout(() => {
-        authStorage.clear()
-        router.replace('/login')
-      }, 1500)
+      clearAuth()
+      await router.replace('/login')
 
     } catch (_error) {
       // Error message is handled by interceptor

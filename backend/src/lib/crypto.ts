@@ -83,8 +83,12 @@ export async function encryptContent(content: string, password: string): Promise
   combined.set(iv)
   combined.set(new Uint8Array(ciphertext), iv.length)
 
+  let binary = ''
+  for (let offset = 0; offset < combined.length; offset += 8192) {
+    binary += String.fromCharCode(...combined.subarray(offset, offset + 8192))
+  }
   return {
-    encrypted: 'aesgcm$' + btoa(String.fromCharCode(...combined)),
+    encrypted: 'aesgcm$' + btoa(binary),
     salt: toHex(salt),
   }
 }

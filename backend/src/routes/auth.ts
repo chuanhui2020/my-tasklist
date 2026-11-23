@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { users } from '../db/schema'
 import { hashPassword, verifyPassword } from '../lib/crypto'
 import { generateToken } from '../lib/token'
@@ -8,6 +8,9 @@ import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import type { Env } from '../types'
 
 export const authRoutes = new Hono<Env>()
+
+const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])[A-Za-z\d\W_]{6,}$/
+const passwordHint = "密码至少 6 位，需包含大小写字母、数字和特殊字符"
 
 // POST /login
 authRoutes.post('/login', async (c) => {
@@ -27,7 +30,7 @@ authRoutes.post('/login', async (c) => {
     return c.json({ error: '用户名或密码错误' }, 401)
   }
 
-  const token = await generateToken({ user_id: user.id, role: user.role }, c.env.SECRET_KEY)
+  const token = await generateToken({ user_id: user.id, role: user.role, session_version: user.token_invalid_before ?? '' }, c.env.SECRET_KEY)
   const [updated] = await query('update last_login_at', (db) =>
     db.update(users).set({ last_login_at: sql`(datetime('now'))` }).where(eq(users.id, user.id)).returning({ last_login_at: users.last_login_at })
   )
@@ -70,6 +73,7 @@ authRoutes.post('/users', authMiddleware, adminMiddleware, async (c) => {
   if (!username || !password) {
     return c.json({ error: '用户名和密码不能为空' }, 400)
   }
+  if (!passwordPattern.test(password)) return c.json({ error: passwordHint }, 400)
   if (role !== 'admin' && role !== 'user') {
     return c.json({ error: '角色无效' }, 400)
   }
@@ -106,12 +110,14 @@ authRoutes.put('/users/:id/reset-password', authMiddleware, adminMiddleware, asy
     return c.json({ error: '用户不存在' }, 404)
   }
 
-  const password_hash = await hashPassword('123456')
+  const temporaryPassword = 'Aa1!' + crypto.randomUUID().replaceAll('-', '')
+  const password_hash = await hashPassword(temporaryPassword)
   await query('reset password', (db) =>
-    db.update(users).set({ password_hash, token_invalid_before: sql`(datetime('now'))` }).where(eq(users.id, id))
+    db.update(users).set({ password_hash, token_invalid_before: crypto.randomUUID() }).where(eq(users.id, id))
   )
 
-  return c.json({ message: `用户 ${user.username} 的密码已重置` })
+  c.header('Cache-Control', 'no-store')
+  return c.json({ message: `用户 ${user.username} 的密码已重置`, temporary_password: temporaryPassword })
 })
 
 // POST /change-password
@@ -123,6 +129,7 @@ authRoutes.post('/change-password', authMiddleware, async (c) => {
   if (!old_password || !new_password) {
     return c.json({ error: '原密码和新密码不能为空' }, 400)
   }
+  if (!passwordPattern.test(new_password)) return c.json({ error: passwordHint }, 400)
   if (old_password === new_password) {
     return c.json({ error: '新密码不能与原密码相同' }, 400)
   }
@@ -138,9 +145,11 @@ authRoutes.post('/change-password', authMiddleware, async (c) => {
   }
 
   const password_hash = await hashPassword(new_password)
-  await query('update password', (db) =>
-    db.update(users).set({ password_hash }).where(eq(users.id, u.id))
+  const [changed] = await query('update password', (db) =>
+    db.update(users).set({ password_hash, token_invalid_before: crypto.randomUUID() })
+      .where(and(eq(users.id, u.id), eq(users.password_hash, user.password_hash))).returning({ id: users.id })
   )
+  if (!changed) return c.json({ error: '密码已变更，请重新登录' }, 409)
 
   return c.json({ message: '密码修改成功' })
 })

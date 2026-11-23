@@ -3,10 +3,12 @@
     :model-value="visible"
     :title="isEdit ? '编辑任务' : '新建任务'"
     width="600px"
+    :before-close="done => { if (!submitting) done() }"
     @close="handleClose"
   >
     <el-form
       ref="formRef"
+      :inert="submitting"
       :model="form"
       :rules="rules"
       label-width="80px"
@@ -73,7 +75,7 @@
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="handleClose">取消</el-button>
+        <el-button :disabled="submitting" @click="handleClose">取消</el-button>
         <el-button
           type="primary"
           :loading="submitting"
@@ -124,6 +126,7 @@ export default {
     }
 
     const form = ref({ ...defaultForm })
+    const savedTaskId = ref(null)
     const existingImages = ref([])
     const pendingFiles = ref([])
     const removedImageIds = ref([])
@@ -139,12 +142,7 @@ export default {
 
     const isEdit = computed(() => !!props.task)
 
-    const getImageUrl = (img) => {
-      if (isEdit.value && props.task) {
-        return api.getTaskImageUrl(props.task.id, img.id)
-      }
-      return ''
-    }
+    const getImageUrl = img => api.getTaskImageUrl(props.task?.id ?? savedTaskId.value, img.id)
 
     const triggerFileInput = () => {
       imageInputRef.value?.click()
@@ -195,6 +193,7 @@ export default {
 
     const resetForm = () => {
       form.value = { ...defaultForm }
+      savedTaskId.value = null
       cleanupPreviews()
       existingImages.value = []
       pendingFiles.value = []
@@ -205,15 +204,17 @@ export default {
     }
 
     const handleClose = () => {
+      if (submitting.value) return
+      if (savedTaskId.value) emit('submit')
       resetForm()
       emit('close')
     }
 
     const handleSubmit = async () => {
+      if (submitting.value) return
+      submitting.value = true
       try {
-        await formRef.value.validate()
-
-        submitting.value = true
+        if (!await formRef.value.validate().catch(() => false)) return
 
         const data = {
           title: form.value.title.trim(),
@@ -221,33 +222,35 @@ export default {
           due_date: form.value.due_date
         }
 
-        let taskId
-
-        if (isEdit.value) {
-          // Delete removed images
-          if (removedImageIds.value.length > 0) {
-            await Promise.all(
-              removedImageIds.value.map(imgId => api.deleteTaskImage(props.task.id, imgId))
-            )
-          }
-          await api.updateTask(props.task.id, data)
-          taskId = props.task.id
+        let taskId = props.task?.id ?? savedTaskId.value
+        if (taskId) {
+          await api.updateTask(taskId, data)
         } else {
           const res = await api.createTask(data)
           taskId = res.data.id
         }
-
-        // Upload new images
-        if (pendingFiles.value.length > 0) {
-          const rawFiles = pendingFiles.value.map(f => f.raw)
-          await api.uploadTaskImages(taskId, rawFiles)
+        savedTaskId.value = taskId
+        while (removedImageIds.value.length) {
+          try {
+            await api.deleteTaskImage(taskId, removedImageIds.value[0])
+          } catch (error) {
+            if (error.response?.status !== 404) throw error
+          }
+          removedImageIds.value.shift()
+        }
+        while (pendingFiles.value.length) {
+          const response = await api.uploadTaskImages(taskId, [pendingFiles.value[0].raw])
+          existingImages.value.push(...response.data)
+          removePendingFile(0)
         }
 
         // Fetch final task state with images
         const finalRes = await api.getTask(taskId)
         ElMessage.success(isEdit.value ? '任务更新成功' : '任务创建成功')
+        savedTaskId.value = null
         emit('submit', { action: isEdit.value ? 'update' : 'create', task: finalRes.data })
-        handleClose()
+        resetForm()
+        emit('close')
 
       } catch (error) {
         if (error.errors) {
@@ -260,45 +263,14 @@ export default {
       }
     }
 
-    // Watch props.task to populate form
-    watch(() => props.task, (newTask) => {
-      if (newTask) {
-        form.value = {
-          title: newTask.title,
-          description: newTask.description || '',
-          due_date: newTask.due_date
-        }
-        existingImages.value = newTask.images ? [...newTask.images] : []
-      } else {
-        resetForm()
+    watch([() => props.visible, () => props.task], ([visible, task]) => {
+      if (!visible) return
+      resetForm()
+      if (task) {
+        form.value = { title: task.title, description: task.description || '', due_date: task.due_date }
+        existingImages.value = [...(task.images || [])]
       }
     }, { immediate: true })
-
-    // Reset on dialog close, populate on open
-    let resetTimer = null
-    watch(() => props.visible, (visible) => {
-      if (visible) {
-        if (resetTimer) {
-          clearTimeout(resetTimer)
-          resetTimer = null
-        }
-        // Always populate form when dialog opens
-        if (props.task) {
-          form.value = {
-            title: props.task.title,
-            description: props.task.description || '',
-            due_date: props.task.due_date
-          }
-          existingImages.value = props.task.images ? [...props.task.images] : []
-          removedImageIds.value = []
-          pendingFiles.value = []
-        }
-      } else {
-        resetTimer = setTimeout(() => {
-          resetForm()
-        }, 200)
-      }
-    })
 
     return {
       formRef,

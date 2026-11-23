@@ -103,7 +103,7 @@ function stripCodeFences(content: string): string {
 
 function toItemArray(raw: unknown): string[] {
   const arr = Array.isArray(raw) ? raw : raw ? [raw] : []
-  return arr.map(i => String(i).trim()).filter(Boolean)
+  return arr.filter((i): i is string => typeof i === 'string').map(i => i.trim()).filter(Boolean)
 }
 
 function normalizeDayMenu(payload: Record<string, unknown>, path: string, dropped: string[]) {
@@ -299,6 +299,9 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
     const cleaned = stripCodeFences(content)
     const parsed = JSON.parse(cleaned)
     menuPayload = normalizeMenuPayload(parsed)
+    if (!Object.values(menuPayload).some(days => Object.keys(days).length > 0)) {
+      return c.json({ error: '未识别出菜品，原菜单已保留。请检查图片后重试' }, 422)
+    }
   } catch {
     return c.json({ error: '菜单识别结果格式无效，请重新上传更清晰的图片' }, 422)
   }

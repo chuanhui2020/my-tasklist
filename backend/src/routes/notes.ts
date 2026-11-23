@@ -1,8 +1,7 @@
 import { Hono } from 'hono'
 import { eq, and, or, sql, asc, desc, inArray } from 'drizzle-orm'
 import { notes, noteAttachments } from '../db/schema'
-import { authMiddleware } from '../middleware/auth'
-import { verifyToken } from '../lib/token'
+import { authMiddleware, fileAuthMiddleware } from '../middleware/auth'
 import { createDB, beijingDatetime } from '../lib/db'
 import type { Env } from '../types'
 
@@ -105,27 +104,8 @@ export const noteRoutes = new Hono<Env>()
 
 // 附件下载/预览 —— 必须放在 authMiddleware 之前：<img src> / 新标签页打开带不了
 // Authorization 头，这里额外支持 ?token=
-noteRoutes.get('/:id/attachments/:attachmentId/file', async (c) => {
-  let userId: number | null = null
-
-  const authHeader = c.req.header('Authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const payload = await verifyToken(authHeader.substring(7), c.env.SECRET_KEY)
-    if (payload) userId = payload.user_id
-  }
-
-  if (!userId) {
-    const tokenParam = c.req.query('token')
-    if (tokenParam) {
-      const payload = await verifyToken(tokenParam, c.env.SECRET_KEY)
-      if (payload) userId = payload.user_id
-    }
-  }
-
-  if (!userId) {
-    return c.json({ error: '未登录或凭证无效' }, 401)
-  }
-
+noteRoutes.get('/:id/attachments/:attachmentId/file', fileAuthMiddleware, async (c) => {
+  const userId = c.get('user').id
   const { query } = createDB(c.env.DB, 'notes')
   const noteId = parseInt(c.req.param('id'), 10)
   const attachmentId = parseInt(c.req.param('attachmentId'), 10)
@@ -135,7 +115,7 @@ noteRoutes.get('/:id/attachments/:attachmentId/file', async (c) => {
       .where(and(
         eq(noteAttachments.id, attachmentId),
         eq(noteAttachments.note_id, noteId),
-        eq(noteAttachments.user_id, userId!),
+        eq(noteAttachments.user_id, userId),
       ))
       .limit(1)
   )
@@ -157,7 +137,7 @@ noteRoutes.get('/:id/attachments/:attachmentId/file', async (c) => {
       'Content-Type': attachment.mime_type,
       'Content-Disposition': contentDisposition(kind, attachment.filename),
       'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'private, max-age=3600',
+      'Cache-Control': 'private, no-store',
     },
   })
 })

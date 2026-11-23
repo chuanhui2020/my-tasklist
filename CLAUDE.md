@@ -46,11 +46,14 @@ echo "value" | npx wrangler secret put AI_API_KEY    # AI 服务密钥
 
 **D1 数据库操作：**
 ```bash
-# 执行 SQL
+# 执行 SQL（查询/临时修数）
 npx wrangler d1 execute tasklist_db --remote --command="SELECT * FROM users"
-# 执行 SQL 文件
-npx wrangler d1 execute tasklist_db --remote --file=drizzle/0000_initial.sql
+# schema 迁移：只跑 drizzle/ 下尚未执行的文件，并记入 d1_migrations 表
+cd backend && npx wrangler d1 migrations list tasklist_db --remote   # 先看待执行列表
+cd backend && npm run db:migrate:prod                                # 再执行
 ```
+
+> **迁移文件不要再用 `d1 execute --file` 手动跑**：线上库 2026-11-23 起改由 wrangler 迁移管理（`wrangler.jsonc` 的 `migrations_dir: "drizzle"`），0000–0011 已补录为已执行。手动跑的文件不会记进 `d1_migrations`，下次 `db:migrate:prod` 会再跑一遍而失败（`table ... already exists` / `duplicate column`）。
 
 ### Local Development
 
@@ -92,7 +95,7 @@ backend/
 │       ├── token.ts            # JWT 生成/验证 (jose)
 │       ├── ai.ts               # AI API 调用 (fetch)
 │       └── db.ts               # createDB (drizzle + query 重试封装) + 北京时间助手 + D1Error
-├── drizzle/                    # D1 迁移 SQL (0000_initial.sql … 0008_fortune_image_status.sql)
+├── drizzle/                    # D1 迁移 SQL (0000_initial.sql … 0011_body_composition.sql)，wrangler migrations 管理
 └── scripts/
     ├── export_data.py          # MySQL → JSON 导出 (迁移用)
     └── import-to-d1.ts         # JSON → D1 SQL 导入 (迁移用)
@@ -113,7 +116,7 @@ backend/
    - 北京时间助手：`beijingNow() / beijingDate() / beijingDatetime()`（业务按东八区取日期）
    - Schema 定义在 `src/db/schema.ts`
    - D1 基于 SQLite：无 ENUM（用 TEXT + Drizzle enum），日期存 TEXT (ISO 8601)
-   - 无自动迁移，schema 变更需手动写 SQL 并执行
+   - 无自动迁移（deploy 不会跑迁移），schema 变更写 SQL 到 `drizzle/` 后用 `npm run db:migrate:prod` 执行
 
 3. **Models (`db/schema.ts`):**
    - `users`: username, password_hash, role (admin/user), last_login_at, token_invalid_before
@@ -246,8 +249,8 @@ app.route('/api/your-feature', yourRoutes)
 ### Adding a New Database Table
 
 1. Define table in `src/db/schema.ts` using Drizzle syntax
-2. Write migration SQL in `drizzle/` directory
-3. Execute: `npx wrangler d1 execute tasklist_db --remote --file=drizzle/xxxx.sql`
+2. Write migration SQL in `drizzle/` directory，文件名用下一个序号（如 `0012_xxx.sql`），wrangler 按文件名排序执行
+3. Execute: `cd backend && npm run db:migrate:prod`（只执行未记录的迁移；本地开发用 `npm run db:migrate`）
 4. Import and use in route handlers
 
 ### Adding a New Frontend Route
@@ -288,11 +291,16 @@ app.route('/api/your-feature', yourRoutes)
 
 **Codex CLI 版本已锁死，不会自动升级。**
 
-`code-review.yml` 的 `npm install -g @openai/codex@<version>` 固定了版本。想升级就手动改那一行的版本号，但**升级前务必确认 `codex exec` 的参数没变** —— 2026-08 升到 `0.147.0` 时 `exec` 移除了 `--full-auto`，`codex exec` 直接报 `unexpected argument` 秒退，review 长期静默失效（当时未锁版本，每次自动装 latest）。
+`code-review.yml` 的 `npm install -g @openai/codex@<version>` 固定了版本（当前 `0.171.0`）。想升级就手动改那一行的版本号，但**升级前务必确认 `codex exec` 的参数和 config.toml 键名没变** —— 2026-08 升到 `0.147.0` 时 `exec` 移除了 `--full-auto`，`codex exec` 直接报 `unexpected argument` 秒退，review 长期静默失效（当时未锁版本，每次自动装 latest）。
 
-配套的两道防线（改 workflow 时别拆掉）：
+升级检查方法：本地装新版本，把 workflow 里的 config.toml 抠出来放进临时 `CODEX_HOME`（base_url 指向本机关闭端口，不连外网），跑 `codex exec --strict-config ...`，看配置能否加载、启动头里的 `sandbox` / `reasoning effort` 是否符合预期。2026-11 升 `0.171.0` 时就是这样查出旧的 `sandbox` / `reasoning_effort` 是无效键（一直被静默忽略），正确键名是 `sandbox_mode` / `model_reasoning_effort`。
+
+配套的防线（改 workflow 时别拆掉）：
 
 - **空输出 = job 变红**：review 无有效输出时会走 `Fail on empty review` 步骤 `exit 1`。此前这种情况 job 仍是绿灯、只打 `needs-fix` 标签，故障要翻 PR 才看得见。该步骤**必须排在评论和打标签之后**，否则 PR 上不会留下任何线索。
+- **只从 `-o` 文件解析 review 和 VERDICT**：`codex exec` 的原始输出会回显整段 PROMPT（含 `===REVIEW_START===` 标记和 `VERDICT: PASS` 模板），从原始输出解析会在模型失败时把模板当成 review。
+- **`--strict-config`**：config.toml 写错键名直接报错退出（进而触发上一条变红），不再静默忽略。
+- **`timeout 540` 包住 `codex exec`**：网关不通时 codex 会无限重连，必须在步骤超时（10 min）前退出，后续评论/打标签/变红才能执行。
 - **原始输出进日志**：`codex exec` 的 stdout/stderr 会 tail 进 job log。定位 review 失败先看这段，别猜。
 
 Codex 以 `--sandbox read-only` + `approval_policy = "never"` 运行：审查只需读代码和跑 `git diff`，不给写盘和联网权限，避免仓库内容做提示注入后窃取 `GH_TOKEN` / `OPENAI_API_KEY`。沙箱只约束模型生成的命令，codex 自身访问模型 API 不受影响。

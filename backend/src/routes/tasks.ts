@@ -1,8 +1,7 @@
 import { Hono } from 'hono'
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm'
 import { tasks, taskImages } from '../db/schema'
-import { authMiddleware } from '../middleware/auth'
-import { verifyToken } from '../lib/token'
+import { authMiddleware, fileAuthMiddleware } from '../middleware/auth'
 import { createDB } from '../lib/db'
 import type { Env } from '../types'
 
@@ -18,34 +17,15 @@ const EXT_MAP: Record<string, string> = {
 export const taskRoutes = new Hono<Env>()
 
 // Image file serving - BEFORE auth middleware (uses custom auth with ?token= for <img src>)
-taskRoutes.get('/:id/images/:imageId/file', async (c) => {
-  let userId: number | null = null
-
-  const authHeader = c.req.header('Authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const payload = await verifyToken(authHeader.substring(7), c.env.SECRET_KEY)
-    if (payload) userId = payload.user_id
-  }
-
-  if (!userId) {
-    const tokenParam = c.req.query('token')
-    if (tokenParam) {
-      const payload = await verifyToken(tokenParam, c.env.SECRET_KEY)
-      if (payload) userId = payload.user_id
-    }
-  }
-
-  if (!userId) {
-    return c.json({ error: '未登录或凭证无效' }, 401)
-  }
-
+taskRoutes.get('/:id/images/:imageId/file', fileAuthMiddleware, async (c) => {
+  const userId = c.get('user').id
   const { query } = createDB(c.env.DB, 'tasks')
   const taskId = parseInt(c.req.param('id'), 10)
   const imageId = parseInt(c.req.param('imageId'), 10)
 
   const [task] = await query('get task for image', (db) =>
     db.select({ id: tasks.id }).from(tasks)
-      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, userId!)))
+      .where(and(eq(tasks.id, taskId), eq(tasks.user_id, userId)))
       .limit(1)
   )
 
@@ -71,7 +51,7 @@ taskRoutes.get('/:id/images/:imageId/file', async (c) => {
   return new Response(object.body, {
     headers: {
       'Content-Type': image.mime_type,
-      'Cache-Control': 'public, max-age=86400',
+      'Cache-Control': 'private, no-store',
     },
   })
 })

@@ -21,13 +21,14 @@ export async function callAI(
     reasoning_effort?: string
   } = {}
 ): Promise<string> {
-  // gpt-5.x 是推理模型：
+  // gpt-5.x / gpt-6.x 都是推理模型：
   // - 只认 max_completion_tokens（max_tokens 已废弃且不兼容），且该额度是「推理 token + 可见输出」合计，
   //   给少了会把预算全烧在推理上、content 返回空，所以各调用方要按「期望输出 + 推理余量」给值
-  // - 不支持 temperature，传了会被忽略或直接 400，故不再下发
+  // - 不支持 temperature（GPT-6.2 官方要求省略 temperature/top_p/logprobs），故不再下发
+  // - GPT-6.2 Astra/Sol 仍支持 Chat Completions；只有 tool calling 必须走 Responses API，本项目未用
   const { max_completion_tokens = 4000, deadlineMs = 170000, direct = false, model, reasoning_effort } = options
   // direct=true 走灰云直连 api-direct（DNS-only，nginx proxy_read_timeout 180s），
-  // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（gpt-5.6 OCR）常 >100s，必须直连。
+  // 绕过橙云 api.ch-tools.org 的 ~100s 边缘超时。视觉识别（菜单 OCR）常 >100s，必须直连。
   const baseUrl = direct ? (env.AI_IMAGE_BASE_URL || env.AI_BASE_URL) : env.AI_BASE_URL
   const usedModel = model || env.AI_MODEL
 
@@ -107,10 +108,10 @@ export async function generateImage(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // gpt-image-2.5 系列（2026-09-08 发布）：sunburst 精度更高但更慢，flare 是低延迟款。
-          // 2.5 上线次日 gpt-image-2 全量失败，网关报 503 "No available compatible accounts"
-          // —— 不是参数问题，是上游账号池不再供给旧模型。换新模型名即恢复，实测约 70s 出图。
-          model: 'gpt-image-2.5-sunburst',
+          // gpt-image-2.6 系列：sunburst 是旗舰（精细），flare 是低延迟款。
+          // 历史教训：新一代上线后网关账号池会停供旧模型（2.5 上线次日 gpt-image-2 全量 503
+          // "No available compatible accounts"）—— 不是参数问题，换新模型名即恢复。
+          model: 'gpt-image-2.6-sunburst',
           prompt,
           n: 1,
           size,
