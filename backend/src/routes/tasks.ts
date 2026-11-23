@@ -345,6 +345,14 @@ taskRoutes.post('/:id/images', async (c) => {
     )
     return row
   }
+  const findByKey = async (r2Key: string) => {
+    const [row] = await query('find image by r2_key', (db) =>
+      db.select().from(taskImages)
+        .where(and(eq(taskImages.task_id, taskId), eq(taskImages.r2_key, r2Key)))
+        .limit(1)
+    )
+    return row
+  }
   // 已有同 upload_id 的记录：元数据一致即同一文件的重试（200）；不一致说明 upload_id 被复用于别的图片（409）
   const replyExisting = (row: typeof taskImages.$inferSelect, file: File) =>
     row.filename === file.name && row.size === file.size && row.mime_type === file.type
@@ -405,13 +413,19 @@ taskRoutes.post('/:id/images', async (c) => {
         ON CONFLICT DO NOTHING
         RETURNING *`)
     )
-    const record = inserted[0]
+    let record = inserted[0]
     if (!record) {
-      // 并发中落败：删掉本请求独有的对象（获胜方的对象 key 不同，不受影响），再按 upload_id 返回已有记录
-      await c.env.IMAGES_BUCKET.delete(r2Key)
-      const winner = uploadPrefix ? await findByUpload(uploadPrefix) : undefined
-      if (!winner) throw new Error(`image record missing after conflict: ${r2Key}`)
-      return replyExisting(winner, file) // 带 upload_id 时必为单文件
+      // 没插进去有两种情况，先查出已有记录再区分：
+      // (1) query() 失败重试，而上一次插入其实已提交（响应丢失）→ 已有记录的 r2_key 就是本请求的，按成功处理
+      // (2) 并发中落败 → 已有记录属于获胜方（r2_key 不同），此时才删除本请求独有的对象
+      const existing = uploadPrefix ? await findByUpload(uploadPrefix) : await findByKey(r2Key)
+      if (!existing) throw new Error(`image record missing after conflict: ${r2Key}`)
+      if (existing.r2_key === r2Key) {
+        record = existing
+      } else {
+        await c.env.IMAGES_BUCKET.delete(r2Key)
+        return replyExisting(existing, file) // 带 upload_id 时必为单文件
+      }
     }
 
     results.push(toImageDict(record))
