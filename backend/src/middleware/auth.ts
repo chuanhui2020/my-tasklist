@@ -1,4 +1,5 @@
 import type { Context, Next } from 'hono'
+import { createMiddleware } from 'hono/factory'
 import { eq } from 'drizzle-orm'
 import { verifyToken } from '../lib/token'
 import { users } from '../db/schema'
@@ -18,13 +19,18 @@ declare module 'hono' {
   }
 }
 
-export async function authMiddleware(c: Context<Env>, next: Next) {
-  const authHeader = c.req.header('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return c.json({ error: '未登录或凭证无效' }, 401)
-  }
+// 用 createMiddleware 声明：普通函数签名 (c: Context<Env>) 会让 Hono 把同一路由后续 handler 的
+// c.req.param() 推断成 string | undefined
+export const authMiddleware = createMiddleware<Env>((c, next) => authenticate(c, next, false))
 
-  const token = authHeader.substring(7)
+// 仅用于文件直链（<img src> / 新标签页带不了 Authorization 头）：额外接受 ?token=
+export const fileAuthMiddleware = createMiddleware<Env>((c, next) => authenticate(c, next, true))
+
+async function authenticate(c: Context<Env>, next: Next, allowQueryToken: boolean) {
+  const header = c.req.header('Authorization')
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : allowQueryToken && c.req.query('token')
+  if (!token) return c.json({ error: '未登录或凭证无效' }, 401)
+
   const payload = await verifyToken(token, c.env.SECRET_KEY)
   if (!payload) {
     return c.json({ error: '登录状态无效，请重新登录' }, 401)
@@ -38,12 +44,12 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
     return c.json({ error: '登录状态无效，请重新登录' }, 401)
   }
 
-  if (user.token_invalid_before && payload.iat) {
-    const invalidBefore = Math.floor(new Date(user.token_invalid_before + 'Z').getTime() / 1000)
-    if (payload.iat < invalidBefore) {
-      return c.json({ error: '登录状态无效，请重新登录' }, 401)
-    }
-  }
+  const version = user.token_invalid_before ?? ''
+  // Legacy tokens have no version. Historical cutoffs are SQLite UTC timestamps.
+  const matchesVersion = payload.session_version === undefined
+    ? !version || (payload.iat ?? 0) > Date.parse(version + 'Z') / 1000
+    : payload.session_version === version
+  if (!matchesVersion) return c.json({ error: '登录状态无效，请重新登录' }, 401)
 
   c.set('user', { id: user.id, username: user.username, role: user.role })
   await next()

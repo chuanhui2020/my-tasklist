@@ -32,7 +32,13 @@
           </div>
         </template>
 
-        <el-form label-position="top" class="bmi-form">
+        <p v-if="loadFailed" role="alert">
+          健康档案加载失败。<el-button link type="primary" @click="loadProfile">重新加载</el-button>
+        </p>
+        <p v-if="saveFailed" role="alert">
+          更改尚未保存。<el-button link type="primary" @click="saveProfile">重试保存</el-button>
+        </p>
+        <el-form label-position="top" class="bmi-form" :disabled="!profileLoaded">
           <el-form-item label="性别" class="form-item-full">
             <el-radio-group v-model="form.gender" size="small">
               <el-radio-button value="male">男</el-radio-button>
@@ -92,10 +98,10 @@
 
         <div class="form-actions">
           <div class="form-actions-left">
-            <el-button type="primary" :disabled="todayWeightRecorded" @click="showWeightDialog">
+            <el-button type="primary" :disabled="!profileLoaded || todayWeightRecorded" @click="showWeightDialog">
               {{ todayWeightRecorded ? '今日已记录' : '📝 今日记录' }}
             </el-button>
-            <el-button @click="showBackfillDialog">✏️ 修改记录</el-button>
+            <el-button :disabled="!profileLoaded" @click="showBackfillDialog">✏️ 修改记录</el-button>
           </div>
           <span class="form-note">BMI = 体重(kg) ÷ 身高(m)²</span>
         </div>
@@ -360,10 +366,15 @@ const FORM_DEFAULTS = {
 }
 
 const form = reactive({ ...FORM_DEFAULTS })
-let profileLoaded = false
+const profileLoaded = ref(false)
+const loadFailed = ref(false)
+const saveFailed = ref(false)
+let savedProfile = {}
+let saving = false
 let saveTimer = null
 
 const loadProfile = async () => {
+  loadFailed.value = false
   try {
     const res = await api.getBmiProfile()
     const data = res?.data?.data
@@ -377,31 +388,40 @@ const loadProfile = async () => {
         skeletal_muscle: data.skeletal_muscle ?? null
       })
     }
-  } catch (e) {
-    console.error('加载健康档案失败:', e)
-  } finally {
-    profileLoaded = true
+    savedProfile = { ...form }
     syncMuscleDisplay()
+    profileLoaded.value = true
+  } catch (e) {
+    loadFailed.value = true
+    console.error('加载健康档案失败:', e)
   }
 }
 
+const changedFields = () => Object.fromEntries(
+  Object.entries(form).filter(([key, value]) => value !== undefined && value !== savedProfile[key])
+)
+
+const persistProfile = async () => {
+  if (saving) return
+  const changes = changedFields()
+  if (!Object.keys(changes).length) return
+  saving = true
+  saveFailed.value = false
+  try {
+    await api.saveBmiProfile(changes)
+    Object.assign(savedProfile, changes)
+  } catch {
+    saveFailed.value = true
+  } finally {
+    saving = false
+  }
+  if (!saveFailed.value && Object.keys(changedFields()).length) saveProfile()
+}
+
 const saveProfile = () => {
-  if (!profileLoaded) return
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(async () => {
-    try {
-      await api.saveBmiProfile({
-        gender: form.gender,
-        age: form.age,
-        height: form.height,
-        weight: form.weight,
-        body_fat: form.body_fat ?? null,
-        skeletal_muscle: form.skeletal_muscle ?? null
-      })
-    } catch (e) {
-      console.error('保存健康档案失败:', e)
-    }
-  }, 400)
+  if (!profileLoaded.value) return
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(persistProfile, 400)
 }
 
 // --- 骨骼肌单位切换 ---------------------------------------------------------
@@ -702,14 +722,7 @@ const requestAdvice = async () => {
 
 watch(bmiPayload, scheduleAdviceRequest, { immediate: true, deep: true })
 
-watch(() => ({
-  gender: form.gender,
-  age: form.age,
-  height: form.height,
-  weight: form.weight,
-  body_fat: form.body_fat,
-  skeletal_muscle: form.skeletal_muscle
-}), saveProfile, { deep: true })
+watch(form, saveProfile)
 
 // Weight tracking state
 const todayWeightRecorded = ref(false)

@@ -1,43 +1,23 @@
 import { Hono } from 'hono'
 import { eq, and, sql, desc } from 'drizzle-orm'
 import { fortuneRecords } from '../db/schema'
-import { authMiddleware } from '../middleware/auth'
+import { authMiddleware, fileAuthMiddleware } from '../middleware/auth'
 import { callAI, generateImage } from '../lib/ai'
-import { verifyToken } from '../lib/token'
 import { createDB, beijingNow, beijingDayUtcRange } from '../lib/db'
 import type { Env, FortuneImageJob } from '../types'
 
 export const fortuneRoutes = new Hono<Env>()
 
 // Image serving - BEFORE auth middleware (uses custom auth with ?token= for <img src>)
-fortuneRoutes.get('/:id/image', async (c) => {
-  let userId: number | null = null
-
-  const authHeader = c.req.header('Authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const payload = await verifyToken(authHeader.substring(7), c.env.SECRET_KEY)
-    if (payload) userId = payload.user_id
-  }
-
-  if (!userId) {
-    const tokenParam = c.req.query('token')
-    if (tokenParam) {
-      const payload = await verifyToken(tokenParam, c.env.SECRET_KEY)
-      if (payload) userId = payload.user_id
-    }
-  }
-
-  if (!userId) {
-    return c.json({ error: '未登录或凭证无效' }, 401)
-  }
-
+fortuneRoutes.get('/:id/image', fileAuthMiddleware, async (c) => {
+  const userId = c.get('user').id
   const id = parseInt(c.req.param('id'), 10)
   const { query } = createDB(c.env.DB, 'fortune')
 
   const [record] = await query('get fortune for image', (db) =>
     db.select({ user_id: fortuneRecords.user_id, image_r2_key: fortuneRecords.image_r2_key })
       .from(fortuneRecords)
-      .where(and(eq(fortuneRecords.id, id), eq(fortuneRecords.user_id, userId!)))
+      .where(and(eq(fortuneRecords.id, id), eq(fortuneRecords.user_id, userId)))
       .limit(1)
   )
 
@@ -53,7 +33,7 @@ fortuneRoutes.get('/:id/image', async (c) => {
   return new Response(object.body, {
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=604800',
+      'Cache-Control': 'private, no-store',
     },
   })
 })

@@ -112,7 +112,10 @@ const form = reactive({
 
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])[A-Za-z\d\W_]{6,}$/, message: '密码至少 6 位，需包含大小写字母、数字和特殊字符', trigger: 'blur' }
+  ]
 }
 
 const loadUsers = async () => {
@@ -155,7 +158,7 @@ const handleReset = () => {
 
 const handleResetPassword = async (u) => {
   try {
-    await ElMessageBox.confirm(`确定要重置用户 "${u.username}" 的密码为默认密码 123456 吗？`, '重置密码', {
+    await ElMessageBox.confirm(`确定要重置用户 "${u.username}" 的密码并使该用户的登录凭证失效吗？`, '重置密码', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning',
@@ -166,7 +169,7 @@ const handleResetPassword = async (u) => {
   resettingId.value = u.id
   try {
     const res = await api.resetUserPassword(u.id)
-    ElMessage.success(res.data.message || '密码已重置')
+    await ElMessageBox.alert(`新密码为 ${res.data.temporary_password}。请妥善交给该用户。`, '密码已重置', { confirmButtonText: '完成' })
   } catch (_error) {
     // 错误提示由拦截器处理
   } finally {

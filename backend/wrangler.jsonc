@@ -7,9 +7,13 @@
     "logs": { "enabled": true },
     "traces": { "enabled": true },
   },
+  "ratelimits": [
+    { "name": "BMI_ADVICE_LIMITER", "namespace_id": "1027", "simple": { "limit": 10, "period": 60 } }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
+      "migrations_dir": "drizzle",
       "database_name": "tasklist_db",
       "database_id": "79d5a4b0-8acc-4f83-be77-f0d6ebdf2496",
     },

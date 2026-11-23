@@ -94,8 +94,8 @@ function extractAdvice(content: string | null, fallback: string[]): string[] {
   return fallback
 }
 
-// POST /advice (no auth required)
-bmiRoutes.post('/advice', async (c) => {
+// POST /advice
+bmiRoutes.post('/advice', authMiddleware, async (c) => {
   let body: Record<string, unknown>
   try {
     body = await c.req.json()
@@ -114,6 +114,9 @@ bmiRoutes.post('/advice', async (c) => {
   if (age <= 0 || height <= 0 || weight <= 0) {
     return c.json({ success: false, error: '参数缺失' }, 400)
   }
+
+  const quota = await c.env.BMI_ADVICE_LIMITER.limit({ key: String(c.get('user').id) })
+  if (!quota.success) return c.json({ error: '建议请求过于频繁，请稍后再试' }, 429)
 
   const heightM = height / 100
   const calculatedBmi = Math.round(weight / (heightM * heightM) * 10) / 10
@@ -172,46 +175,29 @@ bmiRoutes.put('/profile', authMiddleware, async (c) => {
     skeletal_muscle?: number | null
   }>()
 
-  const gender = body.gender || 'male'
-  const age = Number(body.age ?? 28)
-  const height = Number(body.height ?? 170)
-  const weight = Number(body.weight ?? 65)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: '档案格式无效' }, 400)
+  const { gender, age, height, weight } = body
+  if ((gender !== undefined && !['male', 'female'].includes(gender)) ||
+      [age, height, weight].some(value => value !== undefined && (!Number.isFinite(value) || value <= 0))) {
+    return c.json({ error: '基础数据格式无效' }, 400)
+  }
 
   const bodyFat = parseOptionalMetric(body.body_fat, '体脂率', BODY_FAT_RANGE)
   if (!bodyFat.ok) return c.json({ error: bodyFat.error }, 400)
   const muscle = parseOptionalMetric(body.skeletal_muscle, '骨骼肌量', MUSCLE_RANGE)
   if (!muscle.ok) return c.json({ error: muscle.error }, 400)
 
-  const [existing] = await query('check profile exists', (db) =>
-    db.select().from(bmiProfiles).where(eq(bmiProfiles.user_id, user.id)).limit(1)
-  )
-
-  const nextBodyFat = bodyFat.value !== undefined ? bodyFat.value : (existing?.body_fat ?? null)
-  const nextMuscle = muscle.value !== undefined ? muscle.value : (existing?.skeletal_muscle ?? null)
-
-  if (existing) {
-    await query('update profile', (db) =>
-      db.update(bmiProfiles).set({
-        gender, age, height, weight,
-        body_fat: nextBodyFat,
-        skeletal_muscle: nextMuscle,
-        updated_at: beijingDatetime(),
-      }).where(eq(bmiProfiles.user_id, user.id))
-    )
-  } else {
-    await query('create profile', (db) =>
-      db.insert(bmiProfiles).values({
-        user_id: user.id, gender, age, height, weight,
-        body_fat: nextBodyFat,
-        skeletal_muscle: nextMuscle,
+  // Drizzle omits undefined values. Existing profiles retain fields omitted by the client.
+  const changes = { gender, age, height, weight, body_fat: bodyFat.value, skeletal_muscle: muscle.value }
+  const [data] = await query('save profile', db =>
+    db.insert(bmiProfiles).values({ user_id: user.id, ...changes })
+      .onConflictDoUpdate({ target: bmiProfiles.user_id, set: { ...changes, updated_at: beijingDatetime() } })
+      .returning({
+        gender: bmiProfiles.gender, age: bmiProfiles.age, height: bmiProfiles.height,
+        weight: bmiProfiles.weight, body_fat: bmiProfiles.body_fat, skeletal_muscle: bmiProfiles.skeletal_muscle,
       })
-    )
-  }
-
-  return c.json({
-    success: true,
-    data: { gender, age, height, weight, body_fat: nextBodyFat, skeletal_muscle: nextMuscle },
-  })
+  )
+  return c.json({ success: true, data })
 })
 
 // POST /weight
