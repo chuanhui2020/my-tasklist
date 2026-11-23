@@ -109,8 +109,9 @@ backend/
    - Tokens expire after 24 hours
    - **会话失效**：`users.token_invalid_before` 存会话版本号，改密码/重置密码时轮换为新 UUID，旧 token 立即失效。
      无 `session_version` 的历史 token 按旧规则（`iat` 晚于该时间戳）兼容到自然过期
-   - Protected routes use `authMiddleware`，admin 路由额外加 `adminMiddleware`；两者都用 `createMiddleware<Env>` 声明
-     （普通函数签名会让后续 handler 的 `c.req.param()` 被推断成 `string | undefined`）
+   - Protected routes use `authMiddleware`，admin 路由额外加 `adminMiddleware`。`authMiddleware` 和 `fileAuthMiddleware`
+     用 `createMiddleware<Env>` 声明（普通函数签名的中间件作为路由首个 handler 时，会让后续 handler 的
+     `c.req.param()` 被推断成 `string | undefined`）；`adminMiddleware` 仍是普通函数，只跟在 `authMiddleware` 之后使用
    - 文件直链（`<img src>` / 新标签页）用 `fileAuthMiddleware`，额外接受 `?token=`；普通接口不接受 query token
    - 密码策略：新建用户/改密码要求至少 6 位且含大小写字母、数字、特殊字符（已有密码不受影响）；
      管理员重置密码生成随机临时密码并在前端展示
@@ -152,8 +153,9 @@ backend/
    - Images stored in R2 bucket `tasklist-images`, key format: `tasks/{user_id}/{task_id}/{uuid}.{ext}`；
      带 `upload_id` 时为 `tasks/{user_id}/{task_id}/{upload_id}-{uuid}.{ext}`（每个请求独有对象，并发互不覆盖）
    - Supported formats: JPEG, PNG, WebP; max 5MB per file, max 10 per task
-   - **幂等上传**：前端为每个待传文件生成 `upload_id`（UUID，重试复用），单文件上传时随表单提交；同一 `upload_id`
-     库内最多一条，重试命中已有记录返回 200（元数据不一致返回 409）
+   - **幂等上传**：前端为每个待传文件生成 `upload_id`（UUID，重试复用），单文件上传时随表单提交；去重范围是
+     同一用户的同一任务（R2 key 前缀含 user_id/task_id），该范围内同一 `upload_id` 最多一条，
+     重试命中已有记录返回 200（元数据不一致返回 409）；不同任务复用同一 `upload_id` 互不影响
    - **并发控制在数据库内完成**：张数上限、任务归属、upload_id 去重、`sort_order` 都在同一条原子
      `INSERT ... SELECT ... WHERE` 中判定；未插入时清理本请求的 R2 对象，按原因返回 200/400/404/409。
      注意 `query()` 失败会自动重试一次，「插入其实已提交」时库里那条就是自己的，不能当成并发落败去删对象
