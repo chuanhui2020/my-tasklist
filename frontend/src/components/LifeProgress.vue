@@ -613,21 +613,18 @@ const bars = computed(() => {
     ...getBarStyle(mealPct, mealDone, false),
   })
 
-  // 5. 距离发薪
-  let nextPayday
-  if (n.getDate() < PAYDAY) {
-    nextPayday = new Date(n.getFullYear(), n.getMonth(), PAYDAY)
-  } else if (n.getDate() === PAYDAY) {
-    nextPayday = null // 今天就是发薪日
-  } else {
-    nextPayday = new Date(n.getFullYear(), n.getMonth() + 1, PAYDAY)
-  }
+  // 5. 距离发薪 —— 与发薪提醒一致按北京日期算（clock 是平移后的时钟，用 UTC 方法读取）
+  const bj = clock.value
+  const bjDay = bj.getUTCDate()
+  const nextPayday = bjDay === PAYDAY
+    ? null // 今天就是发薪日
+    : Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth() + (bjDay < PAYDAY ? 0 : 1), PAYDAY)
   let payDisplay, payPct
   if (!nextPayday) {
     payDisplay = '今天发薪！冲鸭!'
     payPct = 100
   } else {
-    const daysUntil = Math.ceil((nextPayday - n) / 86400000)
+    const daysUntil = Math.ceil((nextPayday - bj.getTime()) / 86400000)
     payPct = Math.max((1 - daysUntil / 30) * 100, 0)
     payDisplay = `还有 ${daysUntil} 天，坚持住!`
   }

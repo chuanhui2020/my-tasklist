@@ -48,7 +48,9 @@ function nextNewYearHoliday(dateKey) {
 
 export function calendarDay(dateKey) {
   const day = new Date(dateKey + 'T00:00:00Z')
+  // 数据用尽后至少保证元旦当天算假期（有数据的年份表里已含元旦，这里不会命中）
   const holiday = HOLIDAYS.find(h => h.start <= dateKey && dateKey <= h.end)
+    || (dateKey.endsWith('-01-01') ? { name: '元旦', start: dateKey, end: dateKey } : undefined)
   // 官方安排只发布到 2027 年，数据末尾后仍可计算下一年的元旦。
   const nextHoliday = holiday || HOLIDAYS.find(h => h.start > dateKey) || nextNewYearHoliday(dateKey)
   let daysToWeekend = 0

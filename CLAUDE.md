@@ -46,11 +46,14 @@ echo "value" | npx wrangler secret put AI_API_KEY    # AI 服务密钥
 
 **D1 数据库操作：**
 ```bash
-# 执行 SQL
+# 执行 SQL（查询/临时修数）
 npx wrangler d1 execute tasklist_db --remote --command="SELECT * FROM users"
-# 执行 SQL 文件
-npx wrangler d1 execute tasklist_db --remote --file=drizzle/0000_initial.sql
+# schema 迁移：只跑 drizzle/ 下尚未执行的文件，并记入 d1_migrations 表
+cd backend && npx wrangler d1 migrations list tasklist_db --remote   # 先看待执行列表
+cd backend && npm run db:migrate:prod                                # 再执行
 ```
+
+> **迁移文件不要再用 `d1 execute --file` 手动跑**：线上库 2026-11-23 起改由 wrangler 迁移管理（`wrangler.jsonc` 的 `migrations_dir: "drizzle"`），0000–0011 已补录为已执行。手动跑的文件不会记进 `d1_migrations`，下次 `db:migrate:prod` 会再跑一遍而失败（`table ... already exists` / `duplicate column`）。
 
 ### Local Development
 
@@ -92,7 +95,7 @@ backend/
 │       ├── token.ts            # JWT 生成/验证 (jose)
 │       ├── ai.ts               # AI API 调用 (fetch)
 │       └── db.ts               # createDB (drizzle + query 重试封装) + 北京时间助手 + D1Error
-├── drizzle/                    # D1 迁移 SQL (0000_initial.sql … 0008_fortune_image_status.sql)
+├── drizzle/                    # D1 迁移 SQL (0000_initial.sql … 0011_body_composition.sql)，wrangler migrations 管理
 └── scripts/
     ├── export_data.py          # MySQL → JSON 导出 (迁移用)
     └── import-to-d1.ts         # JSON → D1 SQL 导入 (迁移用)
@@ -113,7 +116,7 @@ backend/
    - 北京时间助手：`beijingNow() / beijingDate() / beijingDatetime()`（业务按东八区取日期）
    - Schema 定义在 `src/db/schema.ts`
    - D1 基于 SQLite：无 ENUM（用 TEXT + Drizzle enum），日期存 TEXT (ISO 8601)
-   - 无自动迁移，schema 变更需手动写 SQL 并执行
+   - 无自动迁移（deploy 不会跑迁移），schema 变更写 SQL 到 `drizzle/` 后用 `npm run db:migrate:prod` 执行
 
 3. **Models (`db/schema.ts`):**
    - `users`: username, password_hash, role (admin/user), last_login_at, token_invalid_before
@@ -246,8 +249,8 @@ app.route('/api/your-feature', yourRoutes)
 ### Adding a New Database Table
 
 1. Define table in `src/db/schema.ts` using Drizzle syntax
-2. Write migration SQL in `drizzle/` directory
-3. Execute: `npx wrangler d1 execute tasklist_db --remote --file=drizzle/xxxx.sql`
+2. Write migration SQL in `drizzle/` directory，文件名用下一个序号（如 `0012_xxx.sql`），wrangler 按文件名排序执行
+3. Execute: `cd backend && npm run db:migrate:prod`（只执行未记录的迁移；本地开发用 `npm run db:migrate`）
 4. Import and use in route handlers
 
 ### Adding a New Frontend Route
