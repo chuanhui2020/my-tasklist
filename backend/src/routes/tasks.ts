@@ -405,21 +405,35 @@ taskRoutes.post('/:id/images', async (c) => {
     const dedupe = uploadPrefix
       ? sql`substr(r2_key, 1, ${uploadPrefix.length}) = ${uploadPrefix}`
       : sql`r2_key = ${r2Key}`
-    const inserted = await query(`upload image ${i}`, (db) =>
-      db.all<typeof taskImages.$inferSelect>(sql`
-        INSERT INTO task_images (task_id, user_id, r2_key, filename, mime_type, size, sort_order)
-        SELECT ${taskId}, ${user.id}, ${r2Key}, ${file.name}, ${file.type}, ${file.size}, ${existingCount + i}
-        WHERE NOT EXISTS (SELECT 1 FROM task_images WHERE task_id = ${taskId} AND ${dedupe})
-        ON CONFLICT DO NOTHING
-        RETURNING *`)
-    )
+    let inserted: (typeof taskImages.$inferSelect)[]
+    try {
+      inserted = await query(`upload image ${i}`, (db) =>
+        db.all<typeof taskImages.$inferSelect>(sql`
+          INSERT INTO task_images (task_id, user_id, r2_key, filename, mime_type, size, sort_order)
+          SELECT ${taskId}, ${user.id}, ${r2Key}, ${file.name}, ${file.type}, ${file.size}, ${existingCount + i}
+          WHERE NOT EXISTS (SELECT 1 FROM task_images WHERE task_id = ${taskId} AND ${dedupe})
+          ON CONFLICT DO NOTHING
+          RETURNING *`)
+      )
+    } catch (e) {
+      // 插入（含 query 自带的一次重试）都失败：确认库里没有记录引用本对象才清理，避免残留；
+      // 回查也失败时无法确认插入是否其实已提交，宁可保留对象也不误删已入库的图片
+      const own = await findByKey(r2Key).catch(() => null)
+      if (own === undefined) await c.env.IMAGES_BUCKET.delete(r2Key).catch(() => {})
+      throw e
+    }
     let record = inserted[0]
     if (!record) {
       // 没插进去有两种情况，先查出已有记录再区分：
       // (1) query() 失败重试，而上一次插入其实已提交（响应丢失）→ 已有记录的 r2_key 就是本请求的，按成功处理
       // (2) 并发中落败 → 已有记录属于获胜方（r2_key 不同），此时才删除本请求独有的对象
       const existing = uploadPrefix ? await findByUpload(uploadPrefix) : await findByKey(r2Key)
-      if (!existing) throw new Error(`image record missing after conflict: ${r2Key}`)
+      if (!existing) {
+        // 跳过插入后、回查前，已有记录又被删除（如用户刚删掉获胜方那张图）：
+        // 本请求的对象没有任何记录引用，清理掉并返回 409，由客户端重试
+        await c.env.IMAGES_BUCKET.delete(r2Key)
+        return c.json({ error: '图片上传冲突，请重试' }, 409)
+      }
       if (existing.r2_key === r2Key) {
         record = existing
       } else {
