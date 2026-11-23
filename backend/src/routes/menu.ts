@@ -277,9 +277,9 @@ menuRoutes.post('/upload', adminMiddleware, async (c) => {
         ],
       },
       // direct=true：视觉识别走灰云直连，绕过橙云 ~100s 边缘超时（同占卜生图修复）
-      // 16000：整周菜单 JSON 本身就近 2000 token，再叠加密集表格 OCR 的推理开销，给足余量避免截断
-      // reasoning_effort=high：密集表格 OCR 的精度旋钮，默认档位下容易看串行列
-    ], { max_completion_tokens: 16000, direct: true, reasoning_effort: 'high' })
+      // 32000：整周菜单 JSON 本身就近 2000 token，叠加密集表格 OCR 在 xhigh 档（全局 AI_REASONING_EFFORT）下的推理开销
+      // 推理档位用全局配置；high 时实测已接近 170s，xhigh 若超出直连 nginx 的 180s 上限，可在此显式传 reasoning_effort: 'high' 回退
+    ], { max_completion_tokens: 32000, direct: true })
   } catch (e) {
     const detail = e instanceof AIError ? (e.detail || e.message) : String(e)
     console.error('menu recognize failed:', detail)

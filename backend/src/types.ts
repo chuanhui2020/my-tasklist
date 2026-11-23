@@ -9,6 +9,8 @@ export type Env = {
     AI_BASE_URL: string
     AI_IMAGE_BASE_URL: string
     AI_MODEL: string
+    /** 全局推理档位（low/medium/high/xhigh/max），callAI 未显式传 reasoning_effort 时使用 */
+    AI_REASONING_EFFORT?: string
     FORTUNE_IMAGE_QUEUE: Queue<FortuneImageJob>
   }
 }

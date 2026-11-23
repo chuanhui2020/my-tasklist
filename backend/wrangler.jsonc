@@ -42,6 +42,8 @@
     "AI_BASE_URL": "https://api.ch-tools.org",
     "AI_IMAGE_BASE_URL": "https://api-direct.ch-tools.org",
     "AI_MODEL": "gpt-6.2-sol",
+    // 全局推理档位：所有 callAI 调用默认使用（个别调用可显式覆盖）
+    "AI_REASONING_EFFORT": "xhigh",
   },
   "triggers": {
     "crons": ["*/5 * * * *"],
